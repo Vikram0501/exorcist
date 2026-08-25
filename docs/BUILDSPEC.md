@@ -83,9 +83,11 @@ Exorcist/
 └── src/
     ├── main.js         # Entry point: instantiates Game, wires start overlay
     ├── game.js         # Game class: scene, camera, renderer, render loop, HUD
-    ├── environment.js  # Placeholder level (ground, lighting, box placeholders)
+    ├── environment.js  # Legacy placeholder (kept as fallback)
     ├── player.js       # First-person controller (movement, gravity, collision)
-    └── input.js        # Keyboard set + pointer-lock mouse look state
+    ├── input.js        # Keyboard set + pointer-lock mouse look state
+    └── levels/
+        └── house.js    # Level 1 loader: merged geometry, colliders, lighting
 ```
 
 ## 5. Module Responsibilities
@@ -125,20 +127,14 @@ Stateless input aggregator:
 - Mouse look only accumulates while locked.
 
 ### `src/environment.js`
-Placeholder environment builder. Exports:
-- `createEnvironment(scene)` — adds a basic ground plane and lighting to the
-  scene. Will be replaced by per-mission level loaders as missions are built.
-- `environmentColliders` — array of `{ minX, maxX, minZ, maxZ, top }` AABBs
-  (aliased as `colliders` internally), consumed by the player.
+Legacy placeholder environment. Retained as a fallback — not used by the game
+by default. The active level loader is `src/levels/house.js`.
 
-Current contents: a flat ground plane, ambient + directional lighting, and a
-handful of simple box placeholders. As missions are developed, this module will
-be refactored into per-level environment loaders (e.g. `loadHouse.js`,
-`loadTrain.js`).
-
-To add a new solid obstacle: call `addBox` with a layout entry — collider
-is created automatically. To add non-solid decoration: use `new THREE.Mesh`
-directly and do NOT touch `colliders`.
+### `src/levels/house.js`
+Level 1 loader. Exports `loadHouse(scene)` which returns a collider array.
+Builds a two-floor haunted house (20m × 14m) with merged wall geometry,
+floor/ceiling planes, and interior point lights. Wall definitions are in the
+`GROUND_FLOOR` and `UPSTAIRS` arrays — edit those to change the layout.
 
 ### `src/player.js` — `class Player`
 First-person controller wrapping the camera. **The camera IS the player** — the

@@ -1,15 +1,15 @@
 import * as THREE from 'three'
 import { Input } from './input.js'
 import { Player } from './player.js'
-import { createEnvironment, environmentColliders } from './environment.js'
+import { loadHouse } from './levels/house.js'
 
 export class Game {
   constructor(container) {
     this.container = container
 
     this.scene = new THREE.Scene()
-    this.scene.background = new THREE.Color(0x87ceeb)
-    this.scene.fog = new THREE.Fog(0x87ceeb, 40, 120)
+    this.scene.background = new THREE.Color(0x1a1a2e)
+    this.scene.fog = new THREE.Fog(0x1a1a2e, 10, 50)
 
     this.camera = new THREE.PerspectiveCamera(
       75,
@@ -28,8 +28,7 @@ export class Game {
     this.input = new Input(this.renderer.domElement)
     this.player = new Player(this.camera, this.input)
 
-    this.environment = createEnvironment(this.scene)
-    this.colliders = environmentColliders
+    this.colliders = loadHouse(this.scene)
 
     this.clock = new THREE.Clock()
     this.fpsSamples = []
