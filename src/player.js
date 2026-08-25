@@ -15,7 +15,7 @@ export class Player {
     this.input = input
     this.velocity = new THREE.Vector3()
     this.position = camera.position
-    this.position.set(0, EYE_HEIGHT, 0)
+    this.position.set(3, EYE_HEIGHT, 3)
     this.isGrounded = true
   }
 
