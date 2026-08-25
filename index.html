@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Exorcist: The Last Rites</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      #app {
+        position: fixed;
+        inset: 0;
+      }
+      canvas {
+        display: block;
+      }
+      #hud {
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 10;
+        padding: 10px 14px;
+        color: #fff;
+        font-size: 13px;
+        line-height: 1.6;
+        background: rgba(0, 0, 0, 0.45);
+        border-radius: 0 0 8px 0;
+        pointer-events: none;
+        user-select: none;
+        font-variant-numeric: tabular-nums;
+      }
+      #overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        color: #fff;
+        background: rgba(10, 10, 20, 0.75);
+        backdrop-filter: blur(4px);
+        text-align: center;
+      }
+      #overlay h1 {
+        font-size: 32px;
+        letter-spacing: 1px;
+      }
+      #overlay p {
+        font-size: 15px;
+        color: #cbd5e1;
+        max-width: 420px;
+        line-height: 1.7;
+      }
+      #overlay kbd {
+        background: #334155;
+        padding: 2px 7px;
+        border-radius: 5px;
+        font-family: inherit;
+        font-size: 13px;
+        border-bottom: 2px solid #1e293b;
+      }
+      #playBtn {
+        font-size: 16px;
+        padding: 12px 28px;
+        border: none;
+        border-radius: 8px;
+        background: #22d3ee;
+        color: #083344;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.15s ease, background 0.15s ease;
+      }
+      #playBtn:hover {
+        background: #67e8f9;
+        transform: scale(1.04);
+      }
+      #overlay.hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="hud">
+      <div>pos: <span id="hudPos">0, 0, 0</span></div>
+      <div>fps: <span id="hudFps">0</span></div>
+    </div>
+
+    <div id="overlay">
+      <h1>Exorcist: The Last Rites</h1>
+      <p>
+        Click to start. Look around with the mouse.<br />
+        <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> move &nbsp;·&nbsp;
+        <kbd>Space</kbd> jump &nbsp;·&nbsp; <kbd>Shift</kbd> sprint &nbsp;·&nbsp;
+        <kbd>Esc</kbd> release mouse
+      </p>
+      <button id="playBtn">Start Game</button>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
