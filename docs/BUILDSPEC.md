@@ -74,8 +74,12 @@ Verification for agent sessions:
 Exorcist/
 ├── index.html          # HTML shell: #app canvas mount, #hud overlay, start screen
 ├── package.json        # Scripts + deps (three, vite)
-├── BUILDSPEC.md        # This file
 ├── dist/               # Build output (gitignored, generated)
+├── docs/
+│   ├── BUILDSPEC.md              # This file
+│   ├── level-1-haunted-house.md  # Level 1 design doc
+│   ├── level-2-undead-train.md   # Level 2 design doc
+│   └── level-3-phantom-highway.md# Level 3 design doc
 └── src/
     ├── main.js         # Entry point: instantiates Game, wires start overlay
     ├── game.js         # Game class: scene, camera, renderer, render loop, HUD
