@@ -9,7 +9,6 @@ export class Game {
 
     this.scene = new THREE.Scene()
     this.scene.background = new THREE.Color(0x1a1a2e)
-    this.scene.fog = new THREE.Fog(0x1a1a2e, 10, 50)
 
     this.camera = new THREE.PerspectiveCamera(
       75,
@@ -28,7 +27,23 @@ export class Game {
     this.input = new Input(this.renderer.domElement)
     this.player = new Player(this.camera, this.input)
 
-    this.colliders = loadHouse(this.scene)
+    this.colliders = []
+    this.loaded = false
+
+    loadHouse(this.scene)
+      .then(({ colliders, spawn, modelSize }) => {
+        this.colliders = colliders
+        this.player.position.set(spawn.x, 1.7, spawn.z)
+
+        const maxDim = Math.max(modelSize.x, modelSize.y, modelSize.z)
+        this.camera.far = Math.max(maxDim * 2, 300)
+        this.camera.updateProjectionMatrix()
+
+        this.loaded = true
+      })
+      .catch((err) => {
+        console.error('Level load failed:', err)
+      })
 
     this.clock = new THREE.Clock()
     this.fpsSamples = []
@@ -38,6 +53,10 @@ export class Game {
   }
 
   start() {
+    if (!this.loaded) {
+      console.warn('Model still loading...')
+      return
+    }
     this.started = true
     this.input.lock()
     this.animate()
@@ -65,6 +84,7 @@ export class Game {
       1
     )}, ${pos.z.toFixed(1)}`
     document.getElementById('hudFps').textContent = avg.toFixed(0)
+    document.getElementById('hudMode').textContent = this.player.flying ? 'FLY' : 'WALK'
   }
 
   onResize() {

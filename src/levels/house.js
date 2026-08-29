@@ -1,145 +1,105 @@
 import * as THREE from 'three'
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'
 
-const WALL_HEIGHT = 3
-const WALL_THICKNESS = 0.2
-const HOUSE_WIDTH = 20
-const HOUSE_DEPTH = 14
+const PLAYER_RADIUS = 0.35
 
-const wallMat = new THREE.MeshStandardMaterial({
-  color: 0xd4c4a8,
-  roughness: 0.9,
-  side: THREE.DoubleSide,
-})
+function extractColliders(model) {
+  const colliders = []
 
-const floorMat = new THREE.MeshStandardMaterial({
-  color: 0x8b7355,
-  roughness: 0.8,
-})
+  model.traverse((child) => {
+    if (!child.isMesh) return
 
-const ceilMat = new THREE.MeshStandardMaterial({
-  color: 0xf5f5dc,
-  roughness: 0.9,
-})
+    child.castShadow = true
+    child.receiveShadow = true
 
-// [x1, z1, x2, z2] — doorways are gaps between segments
-const GROUND_FLOOR = [
-  // south exterior (front door x=2–x=4)
-  [0, 0, 2, 0],
-  [4, 0, 20, 0],
-  // north exterior
-  [0, 14, 20, 14],
-  // west exterior
-  [0, 0, 0, 14],
-  // east exterior
-  [20, 0, 20, 14],
+    const box = new THREE.Box3().setFromObject(child)
+    const size = box.getSize(new THREE.Vector3())
 
-  // interior: entry/kitchen divider
-  [6, 0, 6, 7],
-  // interior: stairs/kitchen divider
-  [10, 0, 10, 7],
-  // interior: living/kitchen divider (door gap z=6–z=8)
-  [0, 7, 6, 7],
-  [8, 7, 20, 7],
-  // interior: kitchen/dining divider
-  [10, 7, 10, 14],
-]
+    if (size.x < 0.01 && size.z < 0.01) return
 
-const UPSTAIRS = [
-  // south wall
-  [0, 0, 20, 0],
-  // north wall
-  [0, 14, 20, 14],
-  // west wall
-  [0, 0, 0, 14],
-  // east wall
-  [20, 0, 20, 14],
-
-  // hallway/bedroom divider (door gap z=6–z=8)
-  [0, 7, 6, 7],
-  [8, 7, 12, 7],
-  // bedroom/bathroom divider
-  [12, 7, 12, 14],
-]
-
-function makeWallGeo(x1, z1, x2, z2, h) {
-  const len = Math.sqrt((x2 - x1) ** 2 + (z2 - z1) ** 2)
-  if (len < 0.001) return null
-
-  const geo = new THREE.PlaneGeometry(len, h)
-  const cx = (x1 + x2) / 2
-  const cz = (z1 + z2) / 2
-  const m = new THREE.Matrix4()
-
-  if (Math.abs(z2 - z1) < 0.001) {
-    m.makeTranslation(cx, h / 2, cz)
-  } else {
-    const rot = new THREE.Matrix4().makeRotationY(Math.PI / 2)
-    const trans = new THREE.Matrix4().makeTranslation(cx, h / 2, cz)
-    m.multiplyMatrices(trans, rot)
-  }
-
-  geo.applyMatrix4(m)
-  return geo
-}
-
-function addWalls(scene, walls, yOff, colliders) {
-  const geos = []
-
-  for (const [x1, z1, x2, z2] of walls) {
-    const geo = makeWallGeo(x1, z1, x2, z2, WALL_HEIGHT)
-    if (!geo) continue
-    geos.push(geo)
-
-    const xAligned = Math.abs(z2 - z1) < 0.001
-    const t = WALL_THICKNESS / 2
     colliders.push({
-      minX: Math.min(x1, x2) - (xAligned ? 0 : t),
-      maxX: Math.max(x1, x2) + (xAligned ? 0 : t),
-      minZ: Math.min(z1, z2) - (xAligned ? t : 0),
-      maxZ: Math.max(z1, z2) + (xAligned ? t : 0),
-      top: yOff + WALL_HEIGHT,
+      minX: box.min.x - PLAYER_RADIUS,
+      maxX: box.max.x + PLAYER_RADIUS,
+      minZ: box.min.z - PLAYER_RADIUS,
+      maxZ: box.max.z + PLAYER_RADIUS,
+      top: box.max.y,
+      floor: 0,
     })
-  }
+  })
 
-  if (!geos.length) return
-  const merged = mergeGeometries(geos)
-  const mesh = new THREE.Mesh(merged, wallMat)
-  mesh.position.y = yOff
-  mesh.receiveShadow = true
-  scene.add(mesh)
+  return colliders
 }
 
-function addPlane(scene, y, w, d, mat) {
-  const geo = new THREE.PlaneGeometry(w, d)
-  geo.rotateX(-Math.PI / 2)
-  const mesh = new THREE.Mesh(geo, mat)
-  mesh.position.y = y
-  mesh.receiveShadow = true
-  scene.add(mesh)
+function addLights(scene, size) {
+  const ambient = new THREE.AmbientLight(0xffffff, 0.5)
+  scene.add(ambient)
+
+  const half = Math.max(size.x, size.z) / 2 + 5
+  const dir = new THREE.DirectionalLight(0xffffff, 0.7)
+  dir.position.set(half, size.y + 10, half)
+  dir.castShadow = true
+  dir.shadow.mapSize.set(2048, 2048)
+  dir.shadow.camera.near = 0.5
+  dir.shadow.camera.far = size.y + size.x + 20
+  dir.shadow.camera.left = -half
+  dir.shadow.camera.right = half
+  dir.shadow.camera.top = half
+  dir.shadow.camera.bottom = -half
+  scene.add(dir)
 }
 
 export function loadHouse(scene) {
-  const colliders = []
+  return new Promise((resolve, reject) => {
+    const loader = new FBXLoader()
 
-  addWalls(scene, GROUND_FLOOR, 0, colliders)
-  addPlane(scene, 0, HOUSE_WIDTH, HOUSE_DEPTH, floorMat)
-  addPlane(scene, WALL_HEIGHT, HOUSE_WIDTH, HOUSE_DEPTH, ceilMat)
+    loader.load(
+      '/house.fbx',
+      (model) => {
+        const preBox = new THREE.Box3().setFromObject(model)
+        const preSize = preBox.getSize(new THREE.Vector3())
+        const preCenter = preBox.getCenter(new THREE.Vector3())
+        console.log('Raw model:', { min: preBox.min, max: preBox.max, size: preSize })
 
-  addWalls(scene, UPSTAIRS, WALL_HEIGHT, colliders)
-  addPlane(scene, WALL_HEIGHT * 2, HOUSE_WIDTH, HOUSE_DEPTH, ceilMat)
+        const maxDim = Math.max(preSize.x, preSize.y, preSize.z)
+        if (maxDim > 100) {
+          const s = 10 / maxDim
+          model.scale.setScalar(s)
+          console.log('Auto-scaled by', s)
+        }
 
-  const ambient = new THREE.AmbientLight(0xffffff, 0.3)
-  scene.add(ambient)
+        model.rotation.x = Math.PI / 2
+        model.updateMatrixWorld(true)
 
-  const hallLight = new THREE.PointLight(0xffeedd, 0.8, 15)
-  hallLight.position.set(3, WALL_HEIGHT - 0.5, 3)
-  hallLight.castShadow = true
-  scene.add(hallLight)
+        const box = new THREE.Box3().setFromObject(model)
+        const size = box.getSize(new THREE.Vector3())
+        const center = box.getCenter(new THREE.Vector3())
+        console.log('After scale:', { size, center })
 
-  const livingLight = new THREE.PointLight(0xffeedd, 0.6, 18)
-  livingLight.position.set(5, WALL_HEIGHT - 0.5, 10)
-  scene.add(livingLight)
+        model.position.x -= center.x
+        model.position.z -= center.z
+        model.position.y -= box.min.y
+        model.updateMatrixWorld(true)
 
-  return colliders
+        scene.add(model)
+
+        const colliders = extractColliders(model)
+        addLights(scene, size)
+
+        const finalBox = new THREE.Box3().setFromObject(model)
+        const finalCenter = finalBox.getCenter(new THREE.Vector3())
+        console.log('Final bounds:', { min: finalBox.min, max: finalBox.max, center: finalCenter })
+
+        resolve({
+          colliders,
+          spawn: new THREE.Vector3(0, 1.7, 0),
+          modelSize: size,
+        })
+      },
+      undefined,
+      (err) => {
+        console.error('Failed to load house.fbx:', err)
+        reject(err)
+      }
+    )
+  })
 }

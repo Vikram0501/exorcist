@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-const PLAYER_RADIUS = 0.5
+const PLAYER_RADIUS = 0.35
 const EYE_HEIGHT = 1.7
 const WALK_SPEED = 6
 const SPRINT_SPEED = 10
@@ -8,6 +8,7 @@ const ACCEL = 45
 const DAMPING = 10
 const GRAVITY = -20
 const JUMP_VELOCITY = 7.5
+const WALL_HEIGHT = 3
 
 export class Player {
   constructor(camera, input) {
@@ -15,17 +16,39 @@ export class Player {
     this.input = input
     this.velocity = new THREE.Vector3()
     this.position = camera.position
-    this.position.set(3, EYE_HEIGHT, 3)
+    this.position.set(20, EYE_HEIGHT, 25)
     this.isGrounded = true
+    this.flying = false
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyF') {
+        this.flying = !this.flying
+        this.velocity.y = 0
+      }
+    })
+  }
+
+  getCurrentFloor() {
+    const feetY = this.position.y - EYE_HEIGHT
+    if (feetY < WALL_HEIGHT - 0.5) return 0
+    return 1
+  }
+
+  getFloorColliders(colliders) {
+    const floor = this.getCurrentFloor()
+    return colliders.filter(c => c.floor === floor || c.floor === -1)
   }
 
   update(dt, colliders) {
     this.updateRotation()
     this.updateVelocity(dt)
     this.move(dt)
-    this.collide(colliders)
-    this.applyGravity(dt, colliders)
-    this.position.y = Math.max(this.position.y, EYE_HEIGHT)
+    if (!this.flying) {
+      const floorColliders = this.getFloorColliders(colliders)
+      this.collide(floorColliders)
+      this.applyGravity(dt, floorColliders)
+      this.position.y = Math.max(this.position.y, EYE_HEIGHT)
+    }
     this.camera.position.copy(this.position)
   }
 
@@ -58,9 +81,20 @@ export class Player {
     this.velocity.x += (targetVx - this.velocity.x) * blend
     this.velocity.z += (targetVz - this.velocity.z) * blend
 
-    if (this.input.isDown('Space') && this.isGrounded) {
-      this.velocity.y = JUMP_VELOCITY
-      this.isGrounded = false
+    if (this.flying) {
+      const flySpeed = sprinting ? SPRINT_SPEED : WALK_SPEED
+      if (this.input.isDown('Space')) {
+        this.velocity.y = flySpeed
+      } else if (this.input.isDown('KeyC')) {
+        this.velocity.y = -flySpeed
+      } else {
+        this.velocity.y = 0
+      }
+    } else {
+      if (this.input.isDown('Space') && this.isGrounded) {
+        this.velocity.y = JUMP_VELOCITY
+        this.isGrounded = false
+      }
     }
   }
 
@@ -81,7 +115,7 @@ export class Player {
       if (distSq < PLAYER_RADIUS * PLAYER_RADIUS) {
         if (distSq > 1e-8) {
           const dist = Math.sqrt(distSq)
-          const push = (PLAYER_RADIUS - dist) / dist
+          const push = Math.min((PLAYER_RADIUS - dist) / dist, 2)
           this.position.x += dx * push
           this.position.z += dz * push
         } else {

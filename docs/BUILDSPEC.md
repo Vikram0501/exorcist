@@ -17,8 +17,7 @@ different skills — investigation, evasion, and reflexes.
 - Runtime: modern web browser (desktop). Pointer Lock API is required.
 - Rendering: WebGL via `THREE.WebGLRenderer` with shadows.
 - No physics engine: collision is custom AABB + circle logic (see §7).
-- Developers provide complex 3D assets (models, textures). Code only needs to
-  place basic shapes (boxes, cylinders) for buildings and level geometry.
+- Level geometry is loaded from FBX models via `FBXLoader`.
 
 ## 1a. Game Design
 
@@ -80,14 +79,15 @@ Exorcist/
 │   ├── level-1-haunted-house.md  # Level 1 design doc
 │   ├── level-2-undead-train.md   # Level 2 design doc
 │   └── level-3-phantom-highway.md# Level 3 design doc
+├── public/
+│   └── house.fbx       # Level 1 FBX model (static asset)
 └── src/
     ├── main.js         # Entry point: instantiates Game, wires start overlay
     ├── game.js         # Game class: scene, camera, renderer, render loop, HUD
-    ├── environment.js  # Legacy placeholder (kept as fallback)
     ├── player.js       # First-person controller (movement, gravity, collision)
     ├── input.js        # Keyboard set + pointer-lock mouse look state
     └── levels/
-        └── house.js    # Level 1 loader: merged geometry, colliders, lighting
+        └── house.js    # Level 1 loader: FBX, colliders, lighting
 ```
 
 ## 5. Module Responsibilities
@@ -100,21 +100,25 @@ Exorcist/
 
 ### `src/game.js` — `class Game`
 Core runtime class. Owns:
-- `scene` — `THREE.Scene`, background and fog are set per-mission.
+- `scene` — `THREE.Scene`, background set to dark blue `0x1a1a2e`.
 - `camera` — `THREE.PerspectiveCamera(75, aspect, 0.1, 300)`.
 - `renderer` — antialiased, `setPixelRatio(min(devicePixelRatio, 2))`, shadows on
   with `PCFSoftShadowMap`.
 - `input` (`Input`), `player` (`Player`) — see below.
-- `environment` via `createEnvironment(this.scene)` (placeholder, see §5).
-- `colliders` — imported array from `environment.js`; passed to `player.update`.
+- `colliders` — populated asynchronously from `loadHouse()`.
+- `loaded` — boolean, `true` once the FBX model has finished loading.
 
 Key flow:
-- `start()` sets `started = true`, calls `input.lock()`, kicks off `animate()`.
+- Constructor kicks off async `loadHouse(this.scene)`. On resolve, sets
+  `colliders`, positions player at model center, sets `loaded = true`.
+- `start()` only runs if `loaded` is true. Sets `started = true`, calls
+  `input.lock()`, kicks off `animate()`.
 - `animate()` uses `requestAnimationFrame`; `dt = min(clock.getDelta(), 0.05)`
   clamps delta to avoid tunneling after tab switches.
 - `updateHud(dt)` maintains a 20-sample FPS ring buffer and writes position +
   FPS into `#hudPos` / `#hudFps`.
-- `onResize()` updates camera aspect + renderer size.
+- `onResize()` updates camera aspect + renderer size. Also adjusts camera far
+  plane based on model size.
 
 ### `src/input.js` — `class Input`
 Stateless input aggregator:
@@ -126,15 +130,17 @@ Stateless input aggregator:
 - `lock()` / `release()` — pointer lock entry/exit (release clears keys).
 - Mouse look only accumulates while locked.
 
-### `src/environment.js`
-Legacy placeholder environment. Retained as a fallback — not used by the game
-by default. The active level loader is `src/levels/house.js`.
-
 ### `src/levels/house.js`
-Level 1 loader. Exports `loadHouse(scene)` which returns a collider array.
-Builds a two-floor haunted house (20m × 14m) with merged wall geometry,
-floor/ceiling planes, and interior point lights. Wall definitions are in the
-`GROUND_FLOOR` and `UPSTAIRS` arrays — edit those to change the layout.
+Level 1 loader. Exports `loadHouse(scene)` which returns a Promise resolving to
+`{ colliders, spawn, modelSize }`.
+
+- Loads `public/house.fbx` via `FBXLoader`.
+- Auto-scales the model if its largest dimension exceeds 100 units.
+- Rotates +90° on X axis (FBX Z-up → Three.js Y-up).
+- Centers model at origin, snaps bottom to Y=0.
+- Traverses all meshes to enable `castShadow` / `receiveShadow`.
+- Extracts AABB colliders from each mesh's world-space bounding box.
+- Adds ambient + directional lighting with shadow map.
 
 ### `src/player.js` — `class Player`
 First-person controller wrapping the camera. **The camera IS the player** — the
@@ -142,7 +148,7 @@ player has no separate mesh.
 
 Tuning constants (top of file):
 ```
-PLAYER_RADIUS = 0.5     // circle radius used for XZ collision
+PLAYER_RADIUS = 0.35    // circle radius used for XZ collision
 EYE_HEIGHT    = 1.7     // camera height above ground
 WALK_SPEED    = 6
 SPRINT_SPEED  = 10
@@ -181,15 +187,15 @@ Element IDs that JS depends on — **do not rename without updating JS**:
 | `#playBtn`| `main.js`        | Start button                  |
 
 CSS lives in `<style>` in `index.html` (no separate stylesheet). Controls:
-**WASD** move, **mouse** look, **Space** jump, **Shift** sprint, **Esc** release.
+**WASD** move, **mouse** look, **Space** jump, **Shift** sprint, **F** toggle fly, **Esc** release.
 
 ## 7. Collision System (Important)
 
 There is **no physics library**. The player is modeled as:
 - A vertical line at `position` with eye height `EYE_HEIGHT` above the feet.
-- A horizontal circle of radius `PLAYER_RADIUS = 0.5` for XZ blocking.
+- A horizontal circle of radius `PLAYER_RADIUS = 0.35` for XZ blocking.
 
-Colliders are axis-aligned boxes `{ minX, maxX, minZ, maxZ, top }`.
+Colliders are axis-aligned boxes `{ minX, maxX, minZ, maxZ, top, floor }`.
 
 - `collide()`: for each collider, find nearest point on the box to the player
   center; if the distance is less than `PLAYER_RADIUS`, push the player out along
@@ -197,12 +203,16 @@ Colliders are axis-aligned boxes `{ minX, maxX, minZ, maxZ, top }`.
   toward the nearest face.
 - `applyGravity()`: the player lands when feet reach `y=0` OR when the swept
   feet position crosses a box's `top` while horizontally overlapping it.
+- `getFloorColliders()`: filters colliders by `floor` property (0 = ground floor,
+  1 = upper floor, -1 = all floors).
+
+Colliders are extracted from the FBX model at load time — each mesh's world-space
+bounding box becomes a collider. This gives approximate but functional wall/floor
+collision.
 
 **Limitations to be aware of:**
-- Colliders are never updated at runtime — they are static. Moving platforms
-  would require the player to recompute/refresh colliders each frame.
-- No floor collision for the decorative pads (they are at `y=0.2` but walkable
-  — intentional).
+- Colliders are never updated at runtime — they are static.
+- Collision is approximate (bounding boxes don't match intricate geometry).
 - No player-vs-player or projectile collision yet.
 - No sloped terrain; only axis-aligned boxes and a flat ground.
 
@@ -219,17 +229,13 @@ Colliders are axis-aligned boxes `{ minX, maxX, minZ, maxZ, top }`.
 - New gameplay entities (enemies, pickups) should follow the player pattern:
   constructor takes dependencies (scene/camera/input), an `update(dt, ...)`
   method, and no DOM coupling.
-- All scene construction goes through `environment.js` helpers or explicit
-  `new THREE.*` in the module that owns the entity.
+- Static assets (FBX, textures) go in `public/` for Vite static serving.
 
 ## 9. Adding Features — Quick Recipes
 
-**New collidable pillar:** add an entry to the `layout` array in
-`environment.js` (`{ x, z, w, h, d, color }`). Collider is created automatically.
-Avoid placing the player spawn (`0, 0`) inside a box.
-
-**New non-solid object:** create a `Mesh` in `environment.js` and `scene.add()`
-it. Do not touch `colliders`.
+**New FBX model:** place the `.fbx` file in `public/`, import `FBXLoader` from
+`three/addons/loaders/FBXLoader.js`, load with `loader.load('/file.fbx', ...)`.
+Traverse meshes to enable shadows. Extract colliders from bounding boxes.
 
 **New key binding:** add the code string to a check in `player.js`
 `updateVelocity()` (movement) or `updateRotation()` context (e.g. hold `ShiftRight`
@@ -237,13 +243,6 @@ already sprints). Add the key to the controls line in `index.html`.
 
 **HUD field:** add a `<span>` in `#hud` in `index.html`, then set
 `document.getElementById(...).textContent` inside `updateHud(dt)` in `game.js`.
-
-**Load a 3D model (GLTF):** install via `three` add-ons:
-```js
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-```
-Create the loader in `game.js` or a new module, load the asset from `/public/`,
-and cast/receive shadows on meshes with `traverse`.
 
 **FPS counter reset:** the HUD FPS is a 20-sample average; increase the sample
 window in `updateHud()` if you want smoother numbers.
@@ -258,8 +257,9 @@ window in `updateHud()` if you want smoother numbers.
   prevent collisions/graphics from tunneling on slow frames.
 - **Pointer lock:** `mousemove` events only fire while `isLocked`. The player
   cannot look around on the start screen by design.
+- **FBX coordinate system:** FBX files are often Z-up. The loader rotates models
+  +90° on X to convert to Three.js Y-up. If a model loads sideways or upside
+  down, adjust the rotation in `house.js`.
+- **Auto-scale:** Models with dimensions >100 units are auto-scaled down. This
+  handles FBX files exported in millimeters or inches.
 - **`dist/`** is build output. Rebuild with `npm run build`, never hand-edit.
-- The project is not a git repo and has no `.gitignore` yet. If git is
-  initialized, add one ignoring `node_modules/` and `dist/`.
-- If dependencies are added, run `npm install` again and re-run
-  `npm run build` to confirm the production bundle still resolves.
