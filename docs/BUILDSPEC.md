@@ -17,7 +17,7 @@ different skills — investigation, evasion, and reflexes.
 - Runtime: modern web browser (desktop). Pointer Lock API is required.
 - Rendering: WebGL via `THREE.WebGLRenderer` with shadows.
 - No physics engine: collision is custom AABB + circle logic (see §7).
-- Level geometry is loaded from FBX models via `FBXLoader`.
+- Level geometry is loaded from GLB models via `GLTFLoader`.
 
 ## 1a. Game Design
 
@@ -80,14 +80,15 @@ Exorcist/
 │   ├── level-2-undead-train.md   # Level 2 design doc
 │   └── level-3-phantom-highway.md# Level 3 design doc
 ├── public/
-│   └── house.fbx       # Level 1 FBX model (static asset)
+│   └── models/
+│       └── house_game.glb # Level 1 GLB environment model
 └── src/
     ├── main.js         # Entry point: instantiates Game, wires start overlay
     ├── game.js         # Game class: scene, camera, renderer, render loop, HUD
     ├── player.js       # First-person controller (movement, gravity, collision)
     ├── input.js        # Keyboard set + pointer-lock mouse look state
     └── levels/
-        └── house.js    # Level 1 loader: FBX, colliders, lighting
+        └── house.js    # Level 1 loader: GLB, colliders, lighting
 ```
 
 ## 5. Module Responsibilities
@@ -105,12 +106,13 @@ Core runtime class. Owns:
 - `renderer` — antialiased, `setPixelRatio(min(devicePixelRatio, 2))`, shadows on
   with `PCFSoftShadowMap`.
 - `input` (`Input`), `player` (`Player`) — see below.
-- `colliders` — populated asynchronously from `loadHouse()`.
-- `loaded` — boolean, `true` once the FBX model has finished loading.
+- `colliders`, `ramps`, `doors` — populated asynchronously from `loadHouse()`.
+- `loaded` — boolean, `true` once the GLB model has finished loading.
 
 Key flow:
-- Constructor kicks off async `loadHouse(this.scene)`. On resolve, sets
-  `colliders`, positions player at model center, sets `loaded = true`.
+- Constructor kicks off async `loadHouse(this.scene)`. On resolve, sets level
+  collision data, positions the player at the authored level spawn, and sets
+  `loaded = true`.
 - `start()` only runs if `loaded` is true. Sets `started = true`, calls
   `input.lock()`, kicks off `animate()`.
 - `animate()` uses `requestAnimationFrame`; `dt = min(clock.getDelta(), 0.05)`
@@ -124,6 +126,8 @@ Key flow:
 Stateless input aggregator:
 - `keys` — a `Set` of `e.code` strings (e.g. `'KeyW'`, `'ShiftLeft'`), updated
   by window `keydown`/`keyup`.
+- `pressed` — one-shot key presses consumed with `consumePressed(code)` for
+  actions such as door interaction.
 - `yaw`, `pitch` — accumulated look angles from `mousemove` (`movementX/Y`
   scaled by `0.002`). Pitch is clamped to `±(π/2 − 0.05)`.
 - `isLocked` — reflects `document.pointerLockElement === dom`.
@@ -132,14 +136,19 @@ Stateless input aggregator:
 
 ### `src/levels/house.js`
 Level 1 loader. Exports `loadHouse(scene)` which returns a Promise resolving to
-`{ colliders, spawn, modelSize }`.
+`{ colliders, doors, ramps, model, spawn, modelSize }`.
 
-- Loads `public/house.fbx` via `FBXLoader`.
-- Auto-scales the model if its largest dimension exceeds 100 units.
-- Rotates +90° on X axis (FBX Z-up → Three.js Y-up).
-- Centers model at origin, snaps bottom to Y=0.
-- Traverses all meshes to enable `castShadow` / `receiveShadow`.
-- Extracts AABB colliders from each mesh's world-space bounding box.
+- Loads `public/models/house_game.glb` via `GLTFLoader`.
+- Uses `gltf.scene` at its Blender-authored scale and +Y-up orientation.
+- Preserves all GLB hierarchy, including door hinge/object nodes.
+- Traverses meshes only to enable `castShadow` / `receiveShadow`.
+- Defines floor AABBs and one curved stair ramp separately from visual geometry.
+  Structural bounds are not expanded by the player radius.
+- Detects connected wall sections from every non-door GLB mesh using tall, thin
+  component dimensions, preserving door openings; set `SHOW_COLLIDERS` to
+  `true` to show wireframe debug bounds.
+- Returns named door nodes; `getDoorColliders()` recalculates their world-space
+  AABBs while the door is closed. `updateDoors()` animates their existing pivots.
 - Adds ambient + directional lighting with shadow map.
 
 ### `src/player.js` — `class Player`
@@ -165,9 +174,11 @@ Update pipeline (`update(dt, colliders)`), in order:
    (exponential smoothing via `1 − e^(−ACCEL·dt)`), handles jump impulse when
    grounded and Space pressed.
 3. `move(dt)` — integrates position from velocity.
-4. `collide(colliders)` — circle-vs-AABB XZ push-out (see §7).
-5. `applyGravity(dt, colliders)` — gravity integration, ground (y=0) landing,
-   and landing on top of pillars via swept test.
+4. `collide(colliders)` — circle-vs-AABB XZ push-out for wall and door bounds.
+5. `applyGravity(dt, colliders)` — gravity integration, floor landing, and
+   smooth support for the authored stair-ramp surface.
+6. All walls are tested for XZ collision; their `minY`/`maxY` bounds determine
+   whether they overlap the player's body at the current height.
 
 Direction helpers (both return horizontal, y=0 vectors):
 - `getForward()` → `(-sin(yaw), 0, -cos(yaw))`
@@ -183,11 +194,13 @@ Element IDs that JS depends on — **do not rename without updating JS**:
 | `#hud`    | `game.js`        | FPS / position readout        |
 | `#hudPos` | `game.js`        | Position text node            |
 | `#hudFps` | `game.js`        | FPS text node                 |
+| `#interactionPrompt` | `game.js` | Contextual door interaction text |
 | `#overlay`| `main.js`        | Start screen (`.hidden` class toggles) |
 | `#playBtn`| `main.js`        | Start button                  |
 
 CSS lives in `<style>` in `index.html` (no separate stylesheet). Controls:
-**WASD** move, **mouse** look, **Space** jump, **Shift** sprint, **F** toggle fly, **Esc** release.
+**WASD** move, **mouse** look, **E** interact with doors, **Space** jump,
+**Shift** sprint, **F** toggle fly, **Esc** release.
 
 ## 7. Collision System (Important)
 
@@ -195,26 +208,30 @@ There is **no physics library**. The player is modeled as:
 - A vertical line at `position` with eye height `EYE_HEIGHT` above the feet.
 - A horizontal circle of radius `PLAYER_RADIUS = 0.35` for XZ blocking.
 
-Colliders are axis-aligned boxes `{ minX, maxX, minZ, maxZ, top, floor }`.
+Collision data is authored separately from the GLB:
+- Walls and doors are vertical AABBs
+  `{ type, minX, maxX, minZ, maxZ, minY, maxY, floor }`.
+- Floors are horizontal AABBs `{ type: 'floor', minX, maxX, minZ, maxZ, top }`.
+- The staircase is one `ramp` with a curved XZ centerline, lower/upper heights,
+  and width. The player interpolates the surface height along that centerline.
 
-- `collide()`: for each collider, find nearest point on the box to the player
-  center; if the distance is less than `PLAYER_RADIUS`, push the player out along
-  the nearest axis. Handles the "center-inside-box" degenerate case by pushing
+- `collide()`: for wall/door bounds, find the nearest point on the box to the
+  player center; if the distance is less than `PLAYER_RADIUS`, push the player
+  out along the nearest axis. Handles the "center-inside-box" case by pushing
   toward the nearest face.
-- `applyGravity()`: the player lands when feet reach `y=0` OR when the swept
-  feet position crosses a box's `top` while horizontally overlapping it.
-- `getFloorColliders()`: filters colliders by `floor` property (0 = ground floor,
-  1 = upper floor, -1 = all floors).
+- `applyGravity()`: the player lands when its swept feet position crosses a
+  floor/ramp surface and stays grounded while walking within one step height.
 
-Colliders are extracted from the FBX model at load time — each mesh's world-space
-bounding box becomes a collider. This gives approximate but functional wall/floor
-collision.
+Door bounds are regenerated every frame from their named GLB nodes. Other
+colliders are static, intentional gameplay geometry rather than visual meshes.
+The camera raycasts the centre screen up to 2 metres; a hit is resolved through
+its parent chain to one of the four door controller nodes.
 
 **Limitations to be aware of:**
-- Colliders are never updated at runtime — they are static.
+- Door colliders follow their GLB nodes; structural walls, floors, and ramps are static.
 - Collision is approximate (bounding boxes don't match intricate geometry).
 - No player-vs-player or projectile collision yet.
-- No sloped terrain; only axis-aligned boxes and a flat ground.
+- Ramp support is limited to the authored house staircase path.
 
 ## 8. Conventions & Coding Rules
 
@@ -229,13 +246,14 @@ collision.
 - New gameplay entities (enemies, pickups) should follow the player pattern:
   constructor takes dependencies (scene/camera/input), an `update(dt, ...)`
   method, and no DOM coupling.
-- Static assets (FBX, textures) go in `public/` for Vite static serving.
+- Static assets (GLB, textures) go in `public/` for Vite static serving.
 
 ## 9. Adding Features — Quick Recipes
 
-**New FBX model:** place the `.fbx` file in `public/`, import `FBXLoader` from
-`three/addons/loaders/FBXLoader.js`, load with `loader.load('/file.fbx', ...)`.
-Traverse meshes to enable shadows. Extract colliders from bounding boxes.
+**New GLB model:** place the `.glb` file in `public/models/`, import `GLTFLoader`
+from `three/addons/loaders/GLTFLoader.js`, load with `loader.load('/models/file.glb',
+...)`. Traverse meshes to enable shadows and define intentional colliders
+separately from visual geometry.
 
 **New key binding:** add the code string to a check in `player.js`
 `updateVelocity()` (movement) or `updateRotation()` context (e.g. hold `ShiftRight`
@@ -257,9 +275,8 @@ window in `updateHud()` if you want smoother numbers.
   prevent collisions/graphics from tunneling on slow frames.
 - **Pointer lock:** `mousemove` events only fire while `isLocked`. The player
   cannot look around on the start screen by design.
-- **FBX coordinate system:** FBX files are often Z-up. The loader rotates models
-  +90° on X to convert to Three.js Y-up. If a model loads sideways or upside
-  down, adjust the rotation in `house.js`.
-- **Auto-scale:** Models with dimensions >100 units are auto-scaled down. This
-  handles FBX files exported in millimeters or inches.
+- **GLB hierarchy:** Do not flatten, merge, or clone away the environment scene.
+  Door nodes rely on their Blender-authored pivots and children.
+- **Collider size:** Structural bounds use real obstacle extents. Player radius
+  is applied only in `player.js`, never when authoring level bounds.
 - **`dist/`** is build output. Rebuild with `npm run build`, never hand-edit.
