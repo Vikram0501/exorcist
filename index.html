@@ -90,6 +90,24 @@
       #overlay.hidden {
         display: none;
       }
+      #interactionPrompt {
+        position: fixed;
+        top: 58%;
+        left: 50%;
+        z-index: 10;
+        padding: 7px 10px;
+        color: #fff;
+        font-size: 14px;
+        background: rgba(0, 0, 0, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        border-radius: 5px;
+        pointer-events: none;
+        user-select: none;
+        transform: translateX(-50%);
+      }
+      #interactionPrompt.hidden {
+        display: none;
+      }
     </style>
   </head>
   <body>
@@ -100,14 +118,15 @@
       <div>fps: <span id="hudFps">0</span></div>
       <div>mode: <span id="hudMode">WALK</span></div>
     </div>
+    <div id="interactionPrompt" class="hidden"></div>
 
     <div id="overlay">
       <h1>Exorcist: The Last Rites</h1>
       <p>
         Click to start. Look around with the mouse.<br />
         <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> move &nbsp;·&nbsp;
-        <kbd>Space</kbd> jump / fly up &nbsp;·&nbsp; <kbd>C</kbd> fly down &nbsp;·&nbsp;
-        <kbd>Shift</kbd> sprint &nbsp;·&nbsp; <kbd>F</kbd> toggle fly &nbsp;·&nbsp;
+         <kbd>Space</kbd> jump / fly up &nbsp;·&nbsp; <kbd>C</kbd> fly down &nbsp;·&nbsp;
+         <kbd>E</kbd> interact &nbsp;·&nbsp; <kbd>H</kbd> collider debug &nbsp;·&nbsp; <kbd>J</kbd> log walls &nbsp;·&nbsp; <kbd>Shift</kbd> sprint &nbsp;·&nbsp; <kbd>F</kbd> toggle fly &nbsp;·&nbsp;
         <kbd>Esc</kbd> release mouse
       </p>
       <button id="playBtn">Start Game</button>

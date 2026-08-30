@@ -8,7 +8,7 @@ const ACCEL = 45
 const DAMPING = 10
 const GRAVITY = -20
 const JUMP_VELOCITY = 7.5
-const WALL_HEIGHT = 3
+const STEP_HEIGHT = 0.5
 
 export class Player {
   constructor(camera, input) {
@@ -28,25 +28,14 @@ export class Player {
     })
   }
 
-  getCurrentFloor() {
-    const feetY = this.position.y - EYE_HEIGHT
-    if (feetY < WALL_HEIGHT - 0.5) return 0
-    return 1
-  }
-
-  getFloorColliders(colliders) {
-    const floor = this.getCurrentFloor()
-    return colliders.filter(c => c.floor === floor || c.floor === -1)
-  }
-
   update(dt, colliders) {
     this.updateRotation()
     this.updateVelocity(dt)
     this.move(dt)
     if (!this.flying) {
-      const floorColliders = this.getFloorColliders(colliders)
-      this.collide(floorColliders)
-      this.applyGravity(dt, floorColliders)
+      const walls = colliders.filter(c => c.type === 'wall' || c.type === 'door')
+      this.collide(walls)
+      this.applyGravity(dt, colliders)
       this.position.y = Math.max(this.position.y, EYE_HEIGHT)
     }
     this.camera.position.copy(this.position)
@@ -106,6 +95,14 @@ export class Player {
 
   collide(colliders) {
     for (const c of colliders) {
+      const playerBottom = this.position.y - EYE_HEIGHT
+      const playerTop = this.position.y + 0.1
+      if (
+        c.minY !== undefined &&
+        c.maxY !== undefined &&
+        (playerTop <= c.minY || playerBottom >= c.maxY)
+      ) continue
+
       const nearestX = clamp(this.position.x, c.minX, c.maxX)
       const nearestZ = clamp(this.position.z, c.minZ, c.maxZ)
       const dx = this.position.x - nearestX
@@ -134,38 +131,115 @@ export class Player {
   }
 
   applyGravity(dt, colliders) {
-    if (this.velocity.y <= 0 && this.isGrounded) {
+    const feetY = this.position.y - EYE_HEIGHT
+    const walkableSurface = this.getWalkableSurface(colliders, feetY)
+    if (
+      this.velocity.y <= 0 &&
+      this.isGrounded &&
+      walkableSurface !== null &&
+      Math.abs(walkableSurface.top - feetY) <= STEP_HEIGHT
+    ) {
+      this.setGroundedSurface(walkableSurface)
       this.velocity.y = 0
       return
     }
 
     this.velocity.y += GRAVITY * dt
-    const feetY = this.position.y - EYE_HEIGHT
-    if (feetY <= 0) {
-      this.position.y = EYE_HEIGHT
+    const nextFeetY = this.position.y - EYE_HEIGHT
+    const previousFeetY = nextFeetY - this.velocity.y * dt
+    const landingSurface = this.getLandingSurface(colliders, previousFeetY, nextFeetY)
+    if (landingSurface !== null) {
+      this.setGroundedSurface(landingSurface)
       this.velocity.y = 0
       this.isGrounded = true
       return
     }
 
-    for (const c of colliders) {
-      const overlapsXZ =
-        this.position.x > c.minX - PLAYER_RADIUS &&
-        this.position.x < c.maxX + PLAYER_RADIUS &&
-        this.position.z > c.minZ - PLAYER_RADIUS &&
-        this.position.z < c.maxZ + PLAYER_RADIUS
-      if (!overlapsXZ) continue
+    this.isGrounded = false
+  }
 
-      const prevFeetY = this.position.y - EYE_HEIGHT - this.velocity.y * dt
-      if (prevFeetY >= c.top && feetY <= c.top) {
-        this.position.y = c.top + EYE_HEIGHT
-        this.velocity.y = 0
-        this.isGrounded = true
-        return
-      }
+  getWalkableSurface(colliders, feetY) {
+    let surface = { top: 0, floor: 0 }
+    for (const c of colliders) {
+      const candidate = this.getColliderSurface(c)
+      if (candidate === null || Math.abs(candidate.top - feetY) > STEP_HEIGHT) continue
+      if (candidate.top > surface.top) surface = candidate
+    }
+    return surface
+  }
+
+  getLandingSurface(colliders, previousFeetY, feetY) {
+    const surfaces = []
+    if (previousFeetY >= 0 && feetY <= 0) surfaces.push({ top: 0, floor: 0 })
+    for (const c of colliders) {
+      const candidate = this.getColliderSurface(c)
+      if (candidate === null || previousFeetY < candidate.top || feetY > candidate.top) continue
+      surfaces.push(candidate)
+    }
+    return surfaces.length > 0
+      ? surfaces.reduce((highest, candidate) => candidate.top > highest.top ? candidate : highest)
+      : null
+  }
+
+  getColliderSurface(c) {
+    if (c.type === 'floor') {
+      return this.overlapsCollider(c) ? { top: c.top, floor: c.floor } : null
+    }
+    if (c.type === 'ramp') {
+      const top = this.getRampSurface(c)
+      return top === null ? null : { top, floor: -1 }
+    }
+    return null
+  }
+
+  setGroundedSurface(surface) {
+    this.position.y = surface.top + EYE_HEIGHT
+  }
+
+  overlapsCollider(c) {
+    return (
+      this.position.x > c.minX - PLAYER_RADIUS &&
+      this.position.x < c.maxX + PLAYER_RADIUS &&
+      this.position.z > c.minZ - PLAYER_RADIUS &&
+      this.position.z < c.maxZ + PLAYER_RADIUS
+    )
+  }
+
+  getRampSurface(ramp) {
+    let totalLength = 0
+    const segments = []
+    for (let i = 1; i < ramp.points.length; i++) {
+      const [startX, startZ] = ramp.points[i - 1]
+      const [endX, endZ] = ramp.points[i]
+      const length = Math.hypot(endX - startX, endZ - startZ)
+      segments.push({ startX, startZ, endX, endZ, length, totalLength })
+      totalLength += length
     }
 
-    this.isGrounded = false
+    for (const segment of segments) {
+      const dx = segment.endX - segment.startX
+      const dz = segment.endZ - segment.startZ
+      const t = Math.max(
+        0,
+        Math.min(
+          1,
+          ((this.position.x - segment.startX) * dx +
+            (this.position.z - segment.startZ) * dz) /
+            (segment.length * segment.length)
+        )
+      )
+      const nearestX = segment.startX + dx * t
+      const nearestZ = segment.startZ + dz * t
+      if (Math.hypot(this.position.x - nearestX, this.position.z - nearestZ) > ramp.width) continue
+
+      return THREE.MathUtils.lerp(
+        ramp.bottomY,
+        ramp.topY,
+        (segment.totalLength + segment.length * t) / totalLength
+      )
+    }
+
+    return null
   }
 
   getForward() {

@@ -2,11 +2,15 @@ export class Input {
   constructor(domElement) {
     this.dom = domElement
     this.keys = new Set()
+    this.pressed = new Set()
     this.yaw = 0
     this.pitch = 0
     this.isLocked = false
 
-    this.onKeyDown = (e) => this.keys.add(e.code)
+    this.onKeyDown = (e) => {
+      if (!this.keys.has(e.code)) this.pressed.add(e.code)
+      this.keys.add(e.code)
+    }
     this.onKeyUp = (e) => this.keys.delete(e.code)
     this.onMouseMove = (e) => {
       if (!this.isLocked) return
@@ -28,12 +32,17 @@ export class Input {
     return this.keys.has(code)
   }
 
+  consumePressed(code) {
+    return this.pressed.delete(code)
+  }
+
   lock() {
     this.dom.requestPointerLock()
   }
 
   release() {
     this.keys.clear()
+    this.pressed.clear()
     document.exitPointerLock()
   }
 }
