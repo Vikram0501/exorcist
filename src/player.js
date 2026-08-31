@@ -28,6 +28,16 @@ export class Player {
     })
   }
 
+  reset(spawn, yaw = 0) {
+    this.velocity.set(0, 0, 0)
+    this.position.copy(spawn)
+    this.isGrounded = true
+    this.flying = false
+    this.input.yaw = yaw
+    this.input.pitch = 0
+    this.updateRotation()
+  }
+
   update(dt, colliders) {
     this.updateRotation()
     this.updateVelocity(dt)
