@@ -2,8 +2,13 @@ import * as THREE from 'three'
 import { Input } from './input.js'
 import { Player } from './player.js'
 import { getDoorColliders, loadHouse, toggleDoor, updateDoors } from './levels/house.js'
+import { loadTrain } from './levels/train.js'
 
 const DOOR_INTERACTION_RANGE = 2
+const LEVELS = {
+  house: { load: loadHouse, yaw: 0 },
+  train: { load: loadTrain, yaw: -Math.PI / 2 },
+}
 
 export class Game {
   constructor(container) {
@@ -34,35 +39,20 @@ export class Game {
     this.ramps = []
     this.colliderHelpers = []
     this.model = null
+    this.currentLevel = null
+    this.levelRoot = null
+    this.levelLoadId = 0
     this.raycaster = new THREE.Raycaster()
     this.raycaster.far = DOOR_INTERACTION_RANGE
     this.interactionPrompt = document.getElementById('interactionPrompt')
     this.loaded = false
-
-    loadHouse(this.scene)
-      .then(({ colliders, colliderHelpers, doors, ramps, model, spawn, modelSize }) => {
-        this.colliders = colliders
-        this.colliderHelpers = colliderHelpers
-        this.doors = doors
-        this.ramps = ramps
-        this.model = model
-        this.player.position.set(spawn.x, 1.7, spawn.z)
-
-        const maxDim = Math.max(modelSize.x, modelSize.y, modelSize.z)
-        this.camera.far = Math.max(maxDim * 2, 300)
-        this.camera.updateProjectionMatrix()
-
-        this.loaded = true
-      })
-      .catch((err) => {
-        console.error('Level load failed:', err)
-      })
 
     this.clock = new THREE.Clock()
     this.fpsSamples = []
     this.started = false
 
     window.addEventListener('resize', () => this.onResize())
+    this.loadLevel('house')
   }
 
   start() {
@@ -80,20 +70,84 @@ export class Game {
     requestAnimationFrame(() => this.animate())
 
     const dt = Math.min(this.clock.getDelta(), 0.05)
-    updateDoors(this.doors, dt)
-    this.model.updateMatrixWorld(true)
-    const door = this.getLookedAtDoor()
-    if (this.input.consumePressed('KeyE') && door) toggleDoor(door)
-    if (this.input.consumePressed('KeyH')) {
-      this.colliderHelpers.forEach((helper) => { helper.visible = !helper.visible })
+    if (this.input.consumePressed('Digit1')) this.loadLevel('house')
+    if (this.input.consumePressed('Digit2')) this.loadLevel('train')
+
+    if (this.loaded) {
+      updateDoors(this.doors, dt)
+      this.model.updateMatrixWorld(true)
+      const door = this.getLookedAtDoor()
+      if (this.input.consumePressed('KeyE') && door) toggleDoor(door)
+      if (this.input.consumePressed('KeyH')) {
+        this.colliderHelpers.forEach((helper) => { helper.visible = !helper.visible })
+      }
+      if (this.input.consumePressed('KeyJ')) this.logNearbyWallColliders()
+      this.updateInteractionPrompt(door)
+      const doorColliders = getDoorColliders(this.doors)
+      this.player.update(dt, [...this.colliders, ...this.ramps, ...doorColliders])
     }
-    if (this.input.consumePressed('KeyJ')) this.logNearbyWallColliders()
-    this.updateInteractionPrompt(door)
-    const doorColliders = getDoorColliders(this.doors)
-    this.player.update(dt, [...this.colliders, ...this.ramps, ...doorColliders])
+
     this.renderer.render(this.scene, this.camera)
 
     this.updateHud(dt)
+  }
+
+  loadLevel(levelName) {
+    const level = LEVELS[levelName]
+    if (!level) {
+      console.warn(`Unknown level: ${levelName}`)
+      return
+    }
+    if (this.currentLevel === levelName) return
+
+    const loadId = ++this.levelLoadId
+    this.unloadCurrentLevel()
+    this.currentLevel = levelName
+    this.levelRoot = new THREE.Group()
+    this.scene.add(this.levelRoot)
+    console.log(`Loading level: ${levelName}`)
+
+    const levelRoot = this.levelRoot
+    level.load(levelRoot)
+      .then(({ colliders, colliderHelpers, doors, ramps, model, spawn, modelSize }) => {
+        if (loadId !== this.levelLoadId) {
+          disposeLevel(levelRoot)
+          return
+        }
+
+        this.colliders = colliders
+        this.colliderHelpers = colliderHelpers
+        this.doors = doors
+        this.ramps = ramps
+        this.model = model
+        this.player.reset(spawn, level.yaw)
+
+        const maxDim = Math.max(modelSize.x, modelSize.y, modelSize.z)
+        this.camera.far = Math.max(maxDim * 2, 300)
+        this.camera.updateProjectionMatrix()
+
+        this.loaded = true
+        console.log(`${levelName} loaded`)
+      })
+      .catch((err) => {
+        if (loadId !== this.levelLoadId) return
+        console.error('Level load failed:', err)
+        this.unloadCurrentLevel()
+        this.currentLevel = null
+      })
+  }
+
+  unloadCurrentLevel() {
+    if (this.levelRoot) disposeLevel(this.levelRoot)
+    this.levelRoot = null
+    this.colliders = []
+    this.colliderHelpers = []
+    this.doors = []
+    this.ramps = []
+    this.model = null
+    this.loaded = false
+    this.input.clear()
+    this.interactionPrompt.classList.add('hidden')
   }
 
   updateHud(dt) {
@@ -162,4 +216,25 @@ export class Game {
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(window.innerWidth, window.innerHeight)
   }
+}
+
+function disposeLevel(levelRoot) {
+  if (levelRoot.parent) levelRoot.parent.remove(levelRoot)
+
+  const geometries = new Set()
+  const materials = new Set()
+  levelRoot.traverse((object) => {
+    if (object.geometry) geometries.add(object.geometry)
+    if (Array.isArray(object.material)) object.material.forEach((material) => materials.add(material))
+    else if (object.material) materials.add(object.material)
+  })
+
+  geometries.forEach((geometry) => geometry.dispose())
+  materials.forEach((material) => {
+    Object.values(material).forEach((value) => {
+      if (value?.isTexture) value.dispose()
+    })
+    material.dispose()
+  })
+  levelRoot.clear()
 }

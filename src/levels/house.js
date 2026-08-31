@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { addLevelLights } from './lighting.js'
 
 const SHOW_COLLIDERS = false
 const WALL_SECTION_LENGTH = 0.25
@@ -404,24 +405,6 @@ export function getDoorColliders(doors) {
   })
 }
 
-function addLights(scene, size) {
-  const ambient = new THREE.AmbientLight(0xffffff, 0.5)
-  scene.add(ambient)
-
-  const half = Math.max(size.x, size.z) / 2 + 5
-  const dir = new THREE.DirectionalLight(0xffffff, 0.7)
-  dir.position.set(half, size.y + 10, half)
-  dir.castShadow = true
-  dir.shadow.mapSize.set(2048, 2048)
-  dir.shadow.camera.near = 0.5
-  dir.shadow.camera.far = size.y + size.x + 20
-  dir.shadow.camera.left = -half
-  dir.shadow.camera.right = half
-  dir.shadow.camera.top = half
-  dir.shadow.camera.bottom = -half
-  scene.add(dir)
-}
-
 export function loadHouse(scene) {
   return new Promise((resolve, reject) => {
     const loader = new GLTFLoader()
@@ -446,7 +429,7 @@ export function loadHouse(scene) {
         const walls = createWallColliders(model)
         const colliderHelpers = addColliderHelpers(scene, walls)
         const doors = findDoors(model)
-        addLights(scene, size)
+        addLevelLights(scene, size)
 
         resolve({
           colliders: [...createFloorColliders(), ...walls],

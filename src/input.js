@@ -36,13 +36,17 @@ export class Input {
     return this.pressed.delete(code)
   }
 
+  clear() {
+    this.keys.clear()
+    this.pressed.clear()
+  }
+
   lock() {
     this.dom.requestPointerLock()
   }
 
   release() {
-    this.keys.clear()
-    this.pressed.clear()
+    this.clear()
     document.exitPointerLock()
   }
 }
