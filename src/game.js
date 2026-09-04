@@ -12,7 +12,7 @@ import {
 import { loadTrain } from './levels/train.js'
 
 
-const DOOR_INTERACTION_RANGE = 2
+const DOOR_INTERACTION_RANGE = 3
 
 
 const LEVELS = {
@@ -609,41 +609,46 @@ export class Game {
 
 
     this.raycaster.setFromCamera(
-      new THREE.Vector2(),
+      new THREE.Vector2(0, 0),
       this.camera
     )
 
 
-    const [hit] =
+    const hits =
       this.raycaster.intersectObject(
         this.model,
         true
       )
 
 
-    if (!hit) return null
+    // Check every object hit by the ray,
+    // not only the first one.
+    for (const hit of hits) {
+
+      let object =
+        hit.object
 
 
-    let object =
-      hit.object
+      while (object) {
+
+        const door =
+          this.doors.find(
+            (door) =>
+              door.object === object
+          )
 
 
-    while (object) {
+        if (door) {
 
-      const door =
-        this.doors.find(
-          ({
-            object: controller,
-          }) =>
-            controller === object
-        )
+          return door
+
+        }
 
 
-      if (door) return door
+        object =
+          object.parent
+      }
 
-
-      object =
-        object.parent
     }
 
 

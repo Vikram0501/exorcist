@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { Capsule } from 'three/addons/math/Capsule.js'
 
 const PLAYER_RADIUS = 0.35
 const EYE_HEIGHT = 1.7
@@ -39,16 +40,295 @@ export class Player {
   }
 
   update(dt, colliders) {
+
     this.updateRotation()
+
+
     this.updateVelocity(dt)
-    this.move(dt)
-    if (!this.flying) {
-      const walls = colliders.filter(c => c.type === 'wall' || c.type === 'door')
-      this.collide(walls)
-      this.applyGravity(dt, colliders)
-      this.position.y = Math.max(this.position.y, EYE_HEIGHT)
+
+
+
+    // ============================================
+    // FLY MODE
+    // ============================================
+
+    if (this.flying) {
+
+      this.move(dt)
+
+      this.camera.position.copy(
+        this.position
+      )
+
+      return
     }
-    this.camera.position.copy(this.position)
+
+
+
+    // ============================================
+    // CHECK FOR OCTREE COLLISION
+    // ============================================
+
+    const octreeCollider =
+      colliders.find(
+        (collider) =>
+          collider.type === 'octree'
+      )
+
+
+
+    if (octreeCollider) {
+
+      // Gravity before movement.
+
+      this.velocity.y +=
+        GRAVITY * dt
+
+
+      // Move player.
+
+      this.move(dt)
+
+
+      // Resolve collision against actual
+      // House.glb triangle geometry.
+
+      this.collideWithOctree(
+        octreeCollider.world
+      )
+
+      const dynamicColliders =
+        colliders.filter(
+          (collider) =>
+            collider.type === 'door'
+        )
+
+
+      this.collide(
+        dynamicColliders
+      )
+
+    }
+
+
+    // ============================================
+    // OLD COLLISION SYSTEM
+    // ============================================
+
+    else {
+
+      this.move(dt)
+
+
+      const walls =
+        colliders.filter(
+          (c) =>
+            c.type === 'wall' ||
+            c.type === 'door'
+        )
+
+
+      this.collide(
+        walls
+      )
+
+
+      this.applyGravity(
+        dt,
+        colliders
+      )
+
+
+      this.position.y =
+        Math.max(
+          this.position.y,
+          EYE_HEIGHT
+        )
+
+    }
+
+
+
+    // ============================================
+    // CAMERA
+    // ============================================
+
+    this.camera.position.copy(
+      this.position
+    )
+
+  }
+
+  getCollisionCapsule() {
+
+    const feetY =
+      this.position.y -
+      EYE_HEIGHT
+
+
+    const start =
+      new THREE.Vector3(
+
+        this.position.x,
+
+        feetY +
+        PLAYER_RADIUS,
+
+        this.position.z
+
+      )
+
+
+    const end =
+      new THREE.Vector3(
+
+        this.position.x,
+
+        this.position.y -
+        PLAYER_RADIUS,
+
+        this.position.z
+
+      )
+
+
+    return new Capsule(
+      start,
+      end,
+      PLAYER_RADIUS
+    )
+
+  }
+
+
+
+  collideWithOctree(world) {
+
+    const capsule =
+      this.getCollisionCapsule()
+
+
+
+    const result =
+      world.capsuleIntersect(
+        capsule
+      )
+
+
+
+    let grounded =
+      false
+
+
+
+    // ============================================
+    // COLLISION FOUND
+    // ============================================
+
+    if (result) {
+
+      const normal =
+        result.normal
+
+
+
+      // ------------------------------------------
+      // FLOOR
+      // ------------------------------------------
+
+      if (
+        normal.y > 0.25 &&
+        this.velocity.y <= 0
+      ) {
+
+        grounded = true
+
+        this.velocity.y = 0
+
+      }
+
+
+      // ------------------------------------------
+      // WALL / CEILING
+      // ------------------------------------------
+
+      else {
+
+        const velocityIntoWall =
+          this.velocity.dot(
+            normal
+          )
+
+
+        if (
+          velocityIntoWall < 0
+        ) {
+
+          this.velocity.addScaledVector(
+
+            normal,
+
+            -velocityIntoWall
+
+          )
+
+        }
+
+      }
+
+
+
+      // ------------------------------------------
+      // PUSH PLAYER OUT OF COLLISION
+      // ------------------------------------------
+
+      this.position.addScaledVector(
+
+        normal,
+
+        result.depth
+
+      )
+
+    }
+
+
+
+    // ============================================
+    // WORLD GROUND
+    // ============================================
+
+    // Keep an invisible Y=0 ground outside the
+    // house as well, otherwise the player could
+    // fall forever when standing outside the model.
+
+    if (
+      this.position.y <
+      EYE_HEIGHT
+    ) {
+
+      this.position.y =
+        EYE_HEIGHT
+
+
+      if (
+        this.velocity.y < 0
+      ) {
+
+        this.velocity.y = 0
+
+      }
+
+
+      grounded = true
+
+    }
+
+
+
+    this.isGrounded =
+      grounded
+
   }
 
   updateRotation() {
@@ -235,7 +515,7 @@ export class Player {
           1,
           ((this.position.x - segment.startX) * dx +
             (this.position.z - segment.startZ) * dz) /
-            (segment.length * segment.length)
+          (segment.length * segment.length)
         )
       )
       const nearestX = segment.startX + dx * t

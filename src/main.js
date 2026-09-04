@@ -22,13 +22,10 @@ const playBtn =
 // LEVEL SELECT MENU
 // ============================================
 
-// Use the existing Play button as Level 1.
 playBtn.textContent =
   'LEVEL 1 — HOUSE'
 
 
-// Create Level 2 by copying the existing
-// button so it keeps the same CSS styling.
 const trainBtn =
   playBtn.cloneNode(true)
 
@@ -40,7 +37,6 @@ trainBtn.textContent =
 
 
 
-// Create Level 3.
 const level3Btn =
   playBtn.cloneNode(true)
 
@@ -55,19 +51,16 @@ level3Btn.disabled = true
 
 level3Btn.style.opacity = '0.45'
 
-level3Btn.style.cursor =
-  'not-allowed'
+level3Btn.style.cursor = 'not-allowed'
 
 
 
-// Put Level 2 after Level 1.
 playBtn.insertAdjacentElement(
   'afterend',
   trainBtn
 )
 
 
-// Put Level 3 after Level 2.
 trainBtn.insertAdjacentElement(
   'afterend',
   level3Btn
@@ -76,39 +69,155 @@ trainBtn.insertAdjacentElement(
 
 
 // ============================================
-// START LEVEL
+// ORIGINAL BUTTON TEXT
 // ============================================
 
-function startLevel(levelName) {
+const HOUSE_TEXT =
+  'LEVEL 1 — HOUSE'
 
-  overlay.classList.add(
-    'hidden'
-  )
+const TRAIN_TEXT =
+  'LEVEL 2 — TRAIN'
 
 
-  game.start(levelName)
+
+// ============================================
+// BUTTON STATE
+// ============================================
+
+function disableLevelButtons() {
+
+  playBtn.disabled = true
+
+  trainBtn.disabled = true
+
+}
+
+
+function enableLevelButtons() {
+
+  playBtn.disabled = false
+
+  trainBtn.disabled = false
+
+}
+
+
+function resetLevelButtons() {
+
+  playBtn.textContent =
+    HOUSE_TEXT
+
+  trainBtn.textContent =
+    TRAIN_TEXT
+
+
+  enableLevelButtons()
+
 }
 
 
 
 // ============================================
-// BUTTONS
+// START LEVEL
+// ============================================
+
+async function startLevel(
+  levelName,
+  button
+) {
+
+  disableLevelButtons()
+
+
+  button.textContent =
+    'LOADING...'
+
+
+  try {
+
+    // IMPORTANT:
+    //
+    // We do NOT hide the overlay yet.
+    //
+    // The player will only see the level
+    // after the GLB AND collision mesh
+    // are completely ready.
+
+    const loaded =
+      await game.start(levelName)
+
+
+    if (!loaded) {
+
+      throw new Error(
+        'Level failed to load'
+      )
+
+    }
+
+
+    // Model and collisions are now ready.
+
+    resetLevelButtons()
+
+
+    overlay.classList.add(
+      'hidden'
+    )
+
+  }
+
+  catch (err) {
+
+    console.error(
+      'Could not start level:',
+      err
+    )
+
+
+    button.textContent =
+      'FAILED — TRY AGAIN'
+
+
+    enableLevelButtons()
+
+  }
+
+}
+
+
+
+// ============================================
+// HOUSE
 // ============================================
 
 playBtn.addEventListener(
   'click',
   () => {
 
-    startLevel('house')
+    startLevel(
+      'house',
+      playBtn
+    )
+
   }
 )
 
+
+
+// ============================================
+// TRAIN
+// ============================================
 
 trainBtn.addEventListener(
   'click',
   () => {
 
-    startLevel('train')
+    startLevel(
+      'train',
+      trainBtn
+    )
+
   }
 )
 
@@ -130,9 +239,14 @@ window.addEventListener(
       game.input.release()
 
 
+      resetLevelButtons()
+
+
       overlay.classList.remove(
         'hidden'
       )
+
     }
+
   }
 )

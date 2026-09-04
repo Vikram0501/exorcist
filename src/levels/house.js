@@ -1,112 +1,523 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { Octree } from 'three/addons/math/Octree.js'
 import { addLevelLights } from './lighting.js'
 
-// The new house is very large in its original coordinate space.
-// Scale it down so it works properly with the existing player controller.
-const HOUSE_SCALE = 0.1
+const HOUSE_SCALE = 0.15
 const EYE_HEIGHT = 1.7
 const SPAWN_DISTANCE = 5
+const DOOR_SPEED = 12
 
-// Keep these exports so game.js can stay unchanged.
-// Door and collision support can be added later.
-export function updateDoors() {}
-
-export function toggleDoor() {}
-
-export function getDoorColliders() {
-  return []
+const DOOR_OPEN_ANGLES = {
+  Door_Front: Math.PI / 2,
+  Door_Back: Math.PI / 2,
 }
 
-export function loadHouse(level) {
-  return new Promise((resolve, reject) => {
-    const loader = new GLTFLoader()
 
-    loader.load(
-      '/models/House.glb',
+// =====================================================
+// UPDATE DOORS
+// =====================================================
 
-      (gltf) => {
-        const model = gltf.scene
+export function updateDoors(doors, dt) {
 
-        // Scale the new house down.
-        model.scale.setScalar(HOUSE_SCALE)
+  for (const door of doors) {
 
-        // Enable shadows on all meshes.
-        model.traverse((child) => {
-          if (!child.isMesh) return
+    door.object.rotation.y =
+      THREE.MathUtils.damp(
+        door.object.rotation.y,
+        door.targetRotation,
+        DOOR_SPEED,
+        dt
+      )
 
-          child.castShadow = true
-          child.receiveShadow = true
-        })
 
-        model.updateMatrixWorld(true)
+    const totalAngle =
+      Math.abs(
+        door.openRotation -
+        door.closedRotation
+      )
 
-        // Get the model bounds after scaling.
-        const initialBox = new THREE.Box3().setFromObject(model)
-        const initialCenter = initialBox.getCenter(new THREE.Vector3())
 
-        // Centre the house around world position 0,0,0.
-        model.position.x -= initialCenter.x
-        model.position.z -= initialCenter.z
-
-        // Put the lowest part of the house on ground level.
-        model.position.y -= initialBox.min.y
-
-        model.updateMatrixWorld(true)
-
-        // Get final bounds after positioning.
-        const box = new THREE.Box3().setFromObject(model)
-        const size = box.getSize(new THREE.Vector3())
-
-        // Add house to the level.
-        level.add(model)
-
-        // Add lighting based on the size of the house.
-        addLevelLights(level, size)
-
-        // Spawn the player just outside one end of the house.
-        const spawn = new THREE.Vector3(
+    door.openProgress =
+      totalAngle > 0
+        ? THREE.MathUtils.clamp(
+          Math.abs(
+            door.object.rotation.y -
+            door.closedRotation
+          ) / totalAngle,
           0,
-          EYE_HEIGHT,
-          box.max.z + SPAWN_DISTANCE
+          1
+        )
+        : 0
+  }
+}
+
+
+// =====================================================
+// TOGGLE DOOR
+// =====================================================
+
+export function toggleDoor(door) {
+
+  door.isOpen =
+    !door.isOpen
+
+
+  door.targetRotation =
+    door.isOpen
+      ? door.openRotation
+      : door.closedRotation
+}
+
+
+// =====================================================
+// DOOR COLLIDERS
+// =====================================================
+
+export function getDoorColliders(doors) {
+
+  return doors.flatMap(
+    (door) => {
+
+      // Once mostly open,
+      // stop blocking the player.
+
+      if (
+        door.openProgress > 0.82
+      ) {
+
+        return []
+      }
+
+
+      const box =
+        new THREE.Box3()
+          .setFromObject(
+            door.object
+          )
+
+
+      return [
+        {
+          type: 'door',
+
+          name: door.name,
+
+          minX: box.min.x,
+          maxX: box.max.x,
+
+          minZ: box.min.z,
+          maxZ: box.max.z,
+
+          minY: box.min.y,
+          maxY: box.max.y,
+        },
+      ]
+    }
+  )
+}
+
+
+// =====================================================
+// CREATE DOOR CONTROLLER
+// =====================================================
+
+function makeDoorController(
+  object
+) {
+
+  if (!object) {
+    return null
+  }
+
+
+  const closedRotation =
+    object.rotation.y
+
+
+  const openRotation =
+    closedRotation +
+    (
+      DOOR_OPEN_ANGLES[
+      object.name
+      ] ??
+      Math.PI / 2
+    )
+
+
+  return {
+
+    name:
+      object.name,
+
+    object,
+
+    closedRotation,
+
+    openRotation,
+
+    targetRotation:
+      closedRotation,
+
+    isOpen:
+      false,
+
+    openProgress:
+      0,
+  }
+}
+
+
+// =====================================================
+// LOAD HOUSE
+// =====================================================
+
+export function loadHouse(level) {
+
+  const loader =
+    new GLTFLoader()
+
+
+  return Promise.all([
+
+    loader.loadAsync(
+      '/models/House.glb'
+    ),
+
+    loader.loadAsync(
+      '/models/House_Collision.glb'
+    ),
+
+    loader.loadAsync(
+      '/models/House_Doors.glb'
+    ),
+
+  ]).then(
+    ([
+      visualGLTF,
+      collisionGLTF,
+      doorsGLTF,
+    ]) => {
+
+
+      const model =
+        visualGLTF.scene
+
+
+      const collisionModel =
+        collisionGLTF.scene
+
+
+      const doorModel =
+        doorsGLTF.scene
+
+
+
+      // =====================================================
+      // VISUAL HOUSE
+      // =====================================================
+
+      model.scale.setScalar(
+        HOUSE_SCALE
+      )
+
+
+      model.traverse(
+        (child) => {
+
+          if (!child.isMesh) {
+            return
+          }
+
+
+          child.castShadow =
+            false
+
+
+          child.receiveShadow =
+            true
+        }
+      )
+
+
+      model.updateMatrixWorld(
+        true
+      )
+
+
+
+      // =====================================================
+      // CENTRE HOUSE
+      // =====================================================
+
+      const initialBox =
+        new THREE.Box3()
+          .setFromObject(
+            model
+          )
+
+
+      const initialCenter =
+        initialBox.getCenter(
+          new THREE.Vector3()
         )
 
-        console.log('New House.glb loaded', {
-          bounds: {
-            min: box.min,
-            max: box.max,
-          },
+
+      model.position.x -=
+        initialCenter.x
+
+
+      model.position.z -=
+        initialCenter.z
+
+
+      model.position.y -=
+        initialBox.min.y
+
+
+      model.updateMatrixWorld(
+        true
+      )
+
+
+
+      // =====================================================
+      // REMOVE ORIGINAL BAKED DOORS
+      // =====================================================
+
+      // Both exterior doors were originally
+      // combined inside this mesh.
+
+      const bakedDoors =
+        model.getObjectByName(
+          'Material2.007'
+        )
+
+      if (bakedDoors) {
+
+        if (bakedDoors.parent) {
+
+          bakedDoors.parent.remove(
+            bakedDoors
+          )
+
+        }
+
+        console.log(
+          'Removed baked house doors'
+        )
+
+      }
+      else {
+
+        console.warn(
+          'Could not find baked doors'
+        )
+
+      }
+
+
+
+      // =====================================================
+      // ADD INTERACTIVE DOORS
+      // =====================================================
+
+      // House_Doors.glb uses the same original
+      // coordinate system as House.glb.
+      //
+      // Making it a child of the house automatically
+      // gives it the same scale and position.
+
+      model.add(
+        doorModel
+      )
+
+
+      doorModel.traverse(
+        (child) => {
+
+          if (!child.isMesh) {
+            return
+          }
+
+
+          child.castShadow =
+            true
+
+
+          child.receiveShadow =
+            true
+        }
+      )
+
+
+      model.updateMatrixWorld(
+        true
+      )
+
+
+
+      // =====================================================
+      // ADD HOUSE TO LEVEL
+      // =====================================================
+
+      level.add(
+        model
+      )
+
+
+
+      // =====================================================
+      // FINAL SIZE
+      // =====================================================
+
+      const box =
+        new THREE.Box3()
+          .setFromObject(
+            model
+          )
+
+
+      const size =
+        box.getSize(
+          new THREE.Vector3()
+        )
+
+
+
+      // =====================================================
+      // STATIC HOUSE COLLISION
+      // =====================================================
+
+      collisionModel.scale.setScalar(
+        HOUSE_SCALE
+      )
+
+
+      collisionModel.position.copy(
+        model.position
+      )
+
+
+      collisionModel.rotation.copy(
+        model.rotation
+      )
+
+
+      collisionModel.updateMatrixWorld(
+        true
+      )
+
+
+      const collisionWorld =
+        new Octree()
+
+
+      collisionWorld.fromGraphNode(
+        collisionModel
+      )
+
+
+
+      // =====================================================
+      // INTERACTIVE DOORS
+      // =====================================================
+
+      const doors = [
+
+        makeDoorController(
+          doorModel.getObjectByName(
+            'Door_Front'
+          )
+        ),
+
+        makeDoorController(
+          doorModel.getObjectByName(
+            'Door_Back'
+          )
+        ),
+
+      ].filter(Boolean)
+
+
+
+      console.log(
+        'Interactive house doors:',
+        doors.map(
+          (door) =>
+            door.name
+        )
+      )
+
+
+
+      // =====================================================
+      // LIGHTING
+      // =====================================================
+
+      addLevelLights(
+        level,
+        size
+      )
+
+
+
+      // =====================================================
+      // SPAWN
+      // =====================================================
+
+      const spawn =
+        new THREE.Vector3(
+
+          0,
+
+          EYE_HEIGHT,
+
+          box.max.z +
+          SPAWN_DISTANCE
+
+        )
+
+
+
+      console.log(
+        'House loaded',
+        {
           size,
           spawn,
-        })
+        }
+      )
 
-        resolve({
-          // No collision system for now.
-          colliders: [],
 
-          // No collider debug boxes.
-          colliderHelpers: [],
 
-          // No interactive doors for now.
-          doors: [],
+      // =====================================================
+      // DONE
+      // =====================================================
 
-          // No stair/ramp collision for now.
-          ramps: [],
+      return {
 
-          model,
+        colliders: [
+          {
+            type: 'octree',
+            world:
+              collisionWorld,
+          },
+        ],
 
-          spawn,
+        colliderHelpers: [],
 
-          modelSize: size,
-        })
-      },
+        doors,
 
-      undefined,
+        ramps: [],
 
-      (err) => {
-        console.error('Failed to load House.glb:', err)
-        reject(err)
+        model,
+
+        spawn,
+
+        modelSize:
+          size,
       }
-    )
-  })
+
+    }
+  )
 }
