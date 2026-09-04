@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { Capsule } from 'three/addons/math/Capsule.js'
 
 const PLAYER_RADIUS = 0.35
-const EYE_HEIGHT = 1.7
+const EYE_HEIGHT = 1
 const WALK_SPEED = 6
 const SPRINT_SPEED = 10
 const ACCEL = 45

@@ -89,6 +89,7 @@ export class Game {
     this.ramps = []
 
     this.colliderHelpers = []
+    this.lightHelpers = []
 
     this.model = null
 
@@ -252,6 +253,21 @@ export class Game {
       }
 
 
+      // Toggle light helpers.
+      if (
+        this.input.consumePressed('KeyL')
+      ) {
+
+        this.lightHelpers.forEach(
+          (helper) => {
+
+            helper.visible =
+              !helper.visible
+          }
+        )
+      }
+
+
       // Debug wall colliders.
       if (
         this.input.consumePressed('KeyJ')
@@ -366,6 +382,7 @@ export class Game {
         ({
           colliders,
           colliderHelpers,
+          lightHelpers,
           doors,
           ramps,
           model,
@@ -393,6 +410,9 @@ export class Game {
 
           this.colliderHelpers =
             colliderHelpers || []
+
+          this.lightHelpers =
+            lightHelpers || []
 
           this.doors =
             doors || []
@@ -491,6 +511,8 @@ export class Game {
     this.colliders = []
 
     this.colliderHelpers = []
+
+    this.lightHelpers = []
 
     this.doors = []
 

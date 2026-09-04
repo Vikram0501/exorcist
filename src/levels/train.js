@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import { addLevelLights } from './lighting.js'
+import { setupTrainLighting } from './trainLighting.js'
 
 // New train is very large in its original coordinates.
 // This brings it into roughly the same world scale as the new house.
@@ -52,7 +52,7 @@ export function loadTrain(level) {
         level.add(model)
 
         // Lighting.
-        addLevelLights(level, size)
+        const { lightHelpers } = setupTrainLighting(level, model, size)
 
         // Spawn outside one end of the train.
         const spawn = new THREE.Vector3(
@@ -75,6 +75,8 @@ export function loadTrain(level) {
           colliders: [],
 
           colliderHelpers: [],
+
+          lightHelpers,
 
           doors: [],
 

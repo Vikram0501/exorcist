@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { Octree } from 'three/addons/math/Octree.js'
-import { addLevelLights } from './lighting.js'
+import { setupHouseLighting } from './houseLighting.js'
 
 const HOUSE_SCALE = 0.15
 const EYE_HEIGHT = 1.7
@@ -455,10 +455,8 @@ export function loadHouse(level) {
       // LIGHTING
       // =====================================================
 
-      addLevelLights(
-        level,
-        size
-      )
+      const { lightHelpers } =
+        setupHouseLighting(level, model, size)
 
 
 
@@ -468,14 +466,9 @@ export function loadHouse(level) {
 
       const spawn =
         new THREE.Vector3(
-
           0,
-
-          EYE_HEIGHT,
-
-          box.max.z +
-          SPAWN_DISTANCE
-
+          4,
+          11
         )
 
 
@@ -505,6 +498,8 @@ export function loadHouse(level) {
         ],
 
         colliderHelpers: [],
+
+        lightHelpers,
 
         doors,
 
