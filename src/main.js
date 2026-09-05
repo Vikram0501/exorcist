@@ -44,14 +44,7 @@ const level3Btn =
 level3Btn.removeAttribute('id')
 
 level3Btn.textContent =
-  'LEVEL 3 — COMING SOON'
-
-
-level3Btn.disabled = true
-
-level3Btn.style.opacity = '0.45'
-
-level3Btn.style.cursor = 'not-allowed'
+  'LEVEL 3 — PHANTOM HIGHWAY'
 
 
 
@@ -78,6 +71,9 @@ const HOUSE_TEXT =
 const TRAIN_TEXT =
   'LEVEL 2 — TRAIN'
 
+const HIGHWAY_TEXT =
+  'LEVEL 3 — PHANTOM HIGHWAY'
+
 
 
 // ============================================
@@ -90,6 +86,8 @@ function disableLevelButtons() {
 
   trainBtn.disabled = true
 
+  level3Btn.disabled = true
+
 }
 
 
@@ -98,6 +96,8 @@ function enableLevelButtons() {
   playBtn.disabled = false
 
   trainBtn.disabled = false
+
+  level3Btn.disabled = false
 
 }
 
@@ -109,6 +109,10 @@ function resetLevelButtons() {
 
   trainBtn.textContent =
     TRAIN_TEXT
+
+  level3Btn.textContent =
+    HIGHWAY_TEXT
+
 
 
   enableLevelButtons()
@@ -216,6 +220,22 @@ trainBtn.addEventListener(
     startLevel(
       'train',
       trainBtn
+    )
+
+  }
+)
+
+// ============================================
+// HIGHWAY
+// ============================================
+
+level3Btn.addEventListener(
+  'click',
+  () => {
+
+    startLevel(
+      'highway',
+      level3Btn
     )
 
   }

@@ -2,6 +2,15 @@ import * as THREE from 'three'
 import { Input } from './input.js'
 import { Player } from './player.js'
 
+import { createHighwayLevel }
+    from "./levels/highway.js";
+
+import { HighwayCarController }
+  from './levels/highwayCar.js'
+
+import { HighwayRaceController }
+  from './levels/highwayRace.js'
+
 import {
   getDoorColliders,
   loadHouse,
@@ -23,6 +32,11 @@ const LEVELS = {
 
   train: {
     load: loadTrain,
+    yaw: 0,
+  },
+
+  highway: {
+    load: createHighwayLevel,
     yaw: 0,
   },
 }
@@ -98,6 +112,10 @@ export class Game {
     this.levelRoot = null
 
     this.levelLoadId = 0
+
+    this.highwayController = null
+
+    this.highwayRace = null
 
 
     // DOOR INTERACTION
@@ -205,98 +223,147 @@ export class Game {
       this.loadLevel('train')
     }
 
+    if (
+      this.input.consumePressed('Digit3')
+    ) {
+
+      this.loadLevel('highway')
+    }
+
 
 
     // ----------------------------------------
     // LEVEL UPDATE
     // ----------------------------------------
 
-    if (this.loaded) {
+// ----------------------------------------
+// LEVEL UPDATE
+// ----------------------------------------
 
-      updateDoors(
-        this.doors,
-        dt
-      )
+if (this.loaded) {
 
+  // ======================================
+  // LEVEL 3 - HIGHWAY
+  // ======================================
 
-      if (this.model) {
+  if (
+    this.currentLevel === 'highway'
+  ) {
 
-        this.model.updateMatrixWorld(true)
-      }
+    if (this.highwayController) {
 
+      this.highwayController.update(dt)
 
-      const door =
-        this.getLookedAtDoor()
-
-
-      if (
-        this.input.consumePressed('KeyE') &&
-        door
-      ) {
-
-        toggleDoor(door)
-      }
-
-
-      // Toggle collider helpers.
-      if (
-        this.input.consumePressed('KeyH')
-      ) {
-
-        this.colliderHelpers.forEach(
-          (helper) => {
-
-            helper.visible =
-              !helper.visible
-          }
-        )
-      }
-
-
-      // Toggle light helpers.
-      if (
-        this.input.consumePressed('KeyL')
-      ) {
-
-        this.lightHelpers.forEach(
-          (helper) => {
-
-            helper.visible =
-              !helper.visible
-          }
-        )
-      }
-
-
-      // Debug wall colliders.
-      if (
-        this.input.consumePressed('KeyJ')
-      ) {
-
-        this.logNearbyWallColliders()
-      }
-
-
-      this.updateInteractionPrompt(
-        door
-      )
-
-
-      const doorColliders =
-        getDoorColliders(
-          this.doors
-        )
-
-
-      this.player.update(
-        dt,
-        [
-          ...this.colliders,
-          ...this.ramps,
-          ...doorColliders,
-        ]
-      )
     }
+    if (this.highwayRace) {
+
+      this.highwayRace.update(dt)
+
+    }
+
+  }
+
+
+  // ======================================
+  // LEVEL 1 + LEVEL 2
+  // ======================================
+
+  else {
+
+    updateDoors(
+      this.doors,
+      dt
+    )
+
+
+    if (this.model) {
+
+      this.model.updateMatrixWorld(true)
+
+    }
+
+
+    const door =
+      this.getLookedAtDoor()
+
+
+    if (
+      this.input.consumePressed('KeyE') &&
+      door
+    ) {
+
+      toggleDoor(door)
+
+    }
+
+
+    // Toggle collider helpers
+    if (
+      this.input.consumePressed('KeyH')
+    ) {
+
+      this.colliderHelpers.forEach(
+        (helper) => {
+
+          helper.visible =
+            !helper.visible
+
+        }
+      )
+
+    }
+
+
+    // Toggle light helpers
+    if (
+      this.input.consumePressed('KeyL')
+    ) {
+
+      this.lightHelpers.forEach(
+        (helper) => {
+
+          helper.visible =
+            !helper.visible
+
+        }
+      )
+
+    }
+
+
+    // Debug wall colliders
+    if (
+      this.input.consumePressed('KeyJ')
+    ) {
+
+      this.logNearbyWallColliders()
+
+    }
+
+
+    this.updateInteractionPrompt(
+      door
+    )
+
+
+    const doorColliders =
+      getDoorColliders(
+        this.doors
+      )
+
+
+    this.player.update(
+      dt,
+      [
+        ...this.colliders,
+        ...this.ramps,
+        ...doorColliders,
+      ]
+    )
+
+  }
+
+}
 
 
 
@@ -379,16 +446,19 @@ export class Game {
       .load(levelRoot)
 
       .then(
-        ({
-          colliders,
-          colliderHelpers,
-          lightHelpers,
-          doors,
-          ramps,
-          model,
-          spawn,
-          modelSize,
-        }) => {
+          ({
+            colliders,
+            colliderHelpers,
+            lightHelpers,
+            doors,
+            ramps,
+            model,
+            spawn,
+            modelSize,
+            playerCar,
+            ghostCar,
+            finishZ,
+          }) => {
 
           // A newer level was selected
           // while this one was loading.
@@ -424,11 +494,42 @@ export class Game {
             model
 
 
-          // Put player at level spawn.
-          this.player.reset(
-            spawn,
-            level.yaw
-          )
+          // ======================================
+          // HIGHWAY
+          // ======================================
+
+          if (
+            levelName === 'highway'
+          ) {
+
+            this.highwayController =
+              new HighwayCarController(
+                playerCar,
+                this.camera
+              )
+
+            this.highwayRace =
+              new HighwayRaceController(
+                this.highwayController,
+                ghostCar,
+                finishZ
+              )
+
+          }
+
+
+          // ======================================
+          // HOUSE + TRAIN
+          // ======================================
+
+          else {
+
+            this.player.reset(
+              spawn,
+              level.yaw
+            )
+
+          }
 
 
           // Increase camera range for large models.
@@ -496,6 +597,24 @@ export class Game {
   // ============================================
 
   unloadCurrentLevel() {
+
+    if (
+      this.highwayRace
+    ) {
+
+      this.highwayRace.dispose()
+
+      this.highwayRace = null
+
+    }
+
+    if (this.highwayController) {
+
+      this.highwayController.dispose()
+
+      this.highwayController = null
+
+    }
 
     if (this.levelRoot) {
 
