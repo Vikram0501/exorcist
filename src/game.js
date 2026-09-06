@@ -578,7 +578,8 @@ if (this.loaded) {
                 ghostCar,
                 finishZ,
                 ghostName,
-                this.ghostNameUI
+                this.ghostNameUI,
+                this.scene
               )
 
             this.collectibles =
@@ -733,6 +734,8 @@ if (this.loaded) {
 
     this.levelRoot = null
 
+    this.scene.background =
+      new THREE.Color(0x1a1a2e)
 
     this.colliders = []
 
