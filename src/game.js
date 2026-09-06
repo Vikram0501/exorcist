@@ -8,6 +8,18 @@ import {
   removeGhostNameUI,
 } from "./levels/highway.js"
 
+import {
+  createCollectibles,
+  updateCollectibles,
+  disposeCollectibles,
+} from "./levels/highwayCollectibles.js"
+
+import {
+  createRoadSigns,
+  updateRoadSigns,
+  disposeRoadSigns,
+} from "./levels/highwaySigns.js"
+
 import { HighwayCarController }
   from './levels/highwayCar.js'
 
@@ -121,6 +133,12 @@ export class Game {
     this.highwayRace = null
 
     this.ghostNameUI = null
+
+    this.collectibles = []
+
+    this.roadSigns = []
+
+    this.roadSignTime = 0
 
 
     // DOOR INTERACTION
@@ -251,22 +269,57 @@ if (this.loaded) {
   // LEVEL 3 - HIGHWAY
   // ======================================
 
-  if (
-    this.currentLevel === 'highway'
-  ) {
+    if (
+      this.currentLevel === 'highway'
+    ) {
 
-    if (this.highwayController) {
+      if (this.highwayController) {
 
-      this.highwayController.update(dt)
+        this.highwayController.update(dt)
+
+      }
+      if (this.highwayRace) {
+
+        this.highwayRace.update(dt)
+
+      }
+
+      if (
+        this.collectibles.length > 0
+      ) {
+
+        const playerCar =
+          this.highwayController
+            ? this.highwayController.car
+            : null
+
+        if (playerCar) {
+
+          updateCollectibles(
+            this.collectibles,
+            playerCar,
+            this.ghostNameUI,
+            dt
+          )
+
+        }
+
+      }
+
+      if (
+        this.roadSigns.length > 0
+      ) {
+
+        this.roadSignTime += dt
+
+        updateRoadSigns(
+          this.roadSigns,
+          this.roadSignTime
+        )
+
+      }
 
     }
-    if (this.highwayRace) {
-
-      this.highwayRace.update(dt)
-
-    }
-
-  }
 
 
   // ======================================
@@ -528,6 +581,21 @@ if (this.loaded) {
                 this.ghostNameUI
               )
 
+            this.collectibles =
+              createCollectibles(
+                ghostName,
+                model,
+                this.ghostNameUI
+              )
+
+            this.roadSigns =
+              createRoadSigns(
+                ghostName,
+                model
+              )
+
+            this.roadSignTime = 0
+
           }
 
 
@@ -636,6 +704,22 @@ if (this.loaded) {
       )
 
       this.ghostNameUI = null
+
+    }
+
+    if (this.collectibles.length > 0) {
+
+      disposeCollectibles(
+        this.collectibles
+      )
+
+    }
+
+    if (this.roadSigns.length > 0) {
+
+      disposeRoadSigns(
+        this.roadSigns
+      )
 
     }
 
