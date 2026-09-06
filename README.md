@@ -24,7 +24,7 @@ Stripped of your title after a failed exorcism gone wrong, you must prove yourse
 - Collect glowing letters scattered across the road to spell out the ghost's full name
 - Read roadside clue signs that progressively reveal the ghost's identity
 - Survive a supernatural brake-cut sequence that disables your ability to slow down
-- Outpace the ghost across the finish line to complete the exorcism
+- Beat the ghost to the finish, then enter its full name to perform the exorcism
 - Focus: vehicle control, reflexes, risk/reward, final confrontation
 
 ## Controls
@@ -75,32 +75,39 @@ npm run preview
 
 ## Level 3 — Phantom Highway
 
-Level 3 is a procedurally generated highway race with no GLB model. All geometry (road, cars, barriers, finish line) is built from Three.js primitives.
+Level 3 is a procedurally generated highway race with no GLB model. All geometry (road, cars, barriers, finish line, signs, collectibles) is built from Three.js primitives. The level includes a post-race name puzzle and exorcism finale.
 
 ### Race
 
 - A 3-2-1-GO countdown starts the race; the player cannot move until "GO!"
 - The player and a ghost car race down a straight highway toward a finish line at z = -320
 - The ghost driver is competitive: it targets staying ~8 units ahead of the player, accelerating up to 38 units/s or braking down to 18 units/s as needed
-- The race ends when either the player or ghost crosses the finish line; a result message is displayed ("YOU RACED [NAME]" or "[NAME] WON")
-- Crossing the finish line stops both cars and displays the outcome
+- The car is confined to the road (x clamped to -5.5..5.5) and there are no obstacle collisions or health mechanics; the only failure states are losing the race or entering the wrong name in the finale puzzle
+- The race ends when either the player or ghost crosses the finish line
+
+### Finish-Order Logic
+
+- If the player crosses first: "YOU WON THE RACE" is displayed for 2.5 s, then the name puzzle appears
+- If the ghost crosses first: "[GHOST NAME] WON" is displayed for 2.5 s, then the game over screen appears
+- If both cross on the same frame, whichever car is further past the finish line (lower z) wins
 
 ### Ghost Identity
 
-- 10 possible ghost identities, randomly selected each race: MARA VOSS, ELIAS DREAD, ROSE HOLLOW, JACK FINN, LILY ASH, OWEN GRAVE, NORA SHADE, FELIX MOURN, IVY COBALT, OTIS WREN
-- The selected identity drives both the collectible letters and the road sign clues for that race
-- Each run presents a different ghost, encouraging replayability
+- 10 possible ghost identities, randomly selected each race via `pickRandomGhostName()` in `highway.js`: MARA VOSS, ELIAS DREAD, ROSE HOLLOW, JACK FINN, LILY ASH, OWEN GRAVE, NORA SHADE, FELIX MOURN, IVY COBALT, OTIS WREN
+- The selected identity drives all downstream systems: the collectible letters, the road sign clues, the ghost name HUD, and the final name puzzle
+- A new identity is selected each time Level 3 is loaded (including restarts)
 
 ### Collectible Letters
 
 - Each letter of the ghost's full name (first + last) is placed as a glowing pickup on the road
-- Letters spawn at 10 predefined positions along the highway, shuffled randomly
+- Positions are drawn from a pool of 10 predefined spots along the highway, shuffled randomly; the exact number of pickups matches the number of letters in the selected name (7–10 depending on the identity)
 - Positions are categorised by risk level:
   - **Safe** (z = -15, -48, -81): early in the race, easy to grab
   - **Medium** (z = -114, -147, -180): mid-race, requires steering away from the centre
   - **High** (z = -213, -246, -279, -312): late-race, near the finish, harder to reach
-- The HUD displays blank slots for each letter (e.g. `_ _ _ _ _ _ _ _ _ _`) and a counter ("LETTERS: 3/10")
+- The HUD displays blank slots for each letter (e.g. `_ _ _ _ _ _ _`) and a counter ("LETTERS: 3/7"), where the total varies by name length
 - Collecting a letter reveals it in green on the HUD; repeated letters are separate collectibles where applicable
+- Collected letters are displayed in the name puzzle as hints (revealed letters shown in green, unrevealed as `_`)
 
 ### Road Signs
 
@@ -121,6 +128,69 @@ Level 3 is a procedurally generated highway race with no GLB model. All geometry
 - **Aftermath phase** (4.0 s): "BRAKES FAILED - DON'T STOP NOW" is displayed; the ghost is restored 25 units ahead
 - During the cut phase, `W` continues to accelerate, `S` no longer brakes or reverses, `A`/`D` steering remains available
 - After the aftermath phase the message hides and normal racing resumes
+
+### Final Name Puzzle
+
+- Only appears after the player wins the race (ghost winning goes straight to game over)
+- After the 2.5 s result display, there is a 1.5 s pause before the puzzle UI appears
+- The puzzle shows: "YOU WON THE RACE." / "NOW END IT." / "ENTER THE DRIVER'S FULL NAME:"
+- Collected letters are displayed as hints (revealed letters in green, unrevealed as `_`)
+- The player types the ghost's full name in a text input and submits via button or Enter key
+- Answer validation is case-insensitive and whitespace-normalized (e.g. "mara voss", "Mara  Voss", and "MARA VOSS" all match)
+- Exactly one attempt is allowed; the UI shows "ONE ATTEMPT ONLY."
+- A correct answer triggers the exorcism sequence
+- A wrong answer immediately shows the game over screen ("WRONG NAME.") without revealing the correct name
+
+### Exorcism Sequence
+
+- Triggered by entering the correct ghost name in the puzzle
+- Both player and ghost cars are frozen
+- The ghost car flickers and fades over ~5 s, then disappears entirely
+- Floating cyan particles spawn and drift upward for ~8 s
+- The scene background transitions from dark to warm dawn over 5 s
+- The directional and ambient lighting shifts to warmer tones
+- An overlay fades in showing "THE LAST RIDE IS OVER." / "THE SPIRIT HAS BEEN EXORCISED."
+- After 9 s the state transitions to COMPLETE; the overlay persists until the player restarts with `3`
+
+### Game Over
+
+- Two triggers: ghost crosses the finish line first, or wrong name in the puzzle
+- The game over overlay shows "GAME OVER" with the appropriate message:
+  - Ghost won: "[GHOST NAME] REACHED THE FINISH FIRST." / "THE RACE WAS NEVER YOURS."
+  - Wrong name: "WRONG NAME." / "THE RACE WAS NEVER YOURS."
+- A hint reads "Press 3 to try again"
+- All cars are frozen; the name puzzle and ghost name HUD are hidden
+
+### State Machine
+
+The level progresses through these states:
+
+```
+RACING → FINISH_CHECK → NAME_PUZZLE → EXORCISM → COMPLETE
+                ↓                ↓
+            GAME_OVER         GAME_OVER
+        (ghost won race)   (wrong name)
+```
+
+- **RACING**: normal gameplay — countdown, ghost AI, collectibles, brake cut, finish detection
+- **FINISH_CHECK**: race result displayed for 2.5 s, then branches based on winner
+- **NAME_PUZZLE**: 1.5 s pause, then puzzle UI appears; awaits player input
+- **EXORCISM**: ghost dissolves with visual effects over 9 s
+- **COMPLETE**: exorcism finished; overlay persists
+- **GAME_OVER**: terminal state; press `3` to restart
+
+### Restart and Cleanup
+
+Restarting Level 3 (pressing `3`) fully tears down the current state:
+
+- Name puzzle DOM and Enter key listener are removed
+- Game over overlay is removed
+- Exorcism overlay and all particle elements are removed
+- Scene background and lighting are restored to original values
+- Highway race controller, car controller, keyboard listeners, ghost name UI, collectibles, road signs, and all Three.js objects are disposed
+- The `levelState` is reset to `RACING`
+- A new ghost identity is randomly selected for the fresh run
+- No stale DOM elements or event listeners remain after restart
 
 ## Project Structure
 
@@ -179,7 +249,7 @@ Level design documents live in `docs/`. Read `docs/BUILDSPEC.md` first if you pl
 - [x] Level 3 — randomized ghost identities and collectible name letters
 - [x] Level 3 — dynamic roadside clue signs
 - [x] Level 3 — brake-cut sequence
-- [ ] Level 3 — final exorcism / name-entry finale
+- [x] Level 3 — final name puzzle and exorcism finale
 - [ ] Investigation clues and puzzle items
 - [ ] Ambient sound and atmosphere
 - [ ] Enemy AI and combat
