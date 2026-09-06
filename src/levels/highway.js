@@ -1,6 +1,95 @@
 import * as THREE from 'three'
 
 
+const GHOST_NAMES = [
+  'MARA VOSS',
+  'ELIAS DREAD',
+  'ROSE HOLLOW',
+  'JACK FINN',
+  'LILY ASH',
+  'OWEN GRAVE',
+  'NORA SHADE',
+  'FELIX MOURN',
+  'IVY COBALT',
+  'OTIS WREN',
+]
+
+
+function pickRandomGhostName() {
+  const index = Math.floor(
+    Math.random() * GHOST_NAMES.length
+  )
+  return GHOST_NAMES[index]
+}
+
+
+function formatBlankSlots(name) {
+  const spaceIndex =
+    name.indexOf(' ')
+
+  const first =
+    name.substring(0, spaceIndex)
+
+  const last =
+    name.substring(spaceIndex + 1)
+
+  const firstSlots = first
+    .split('')
+    .map(() => '_')
+    .join(' ')
+
+  const lastSlots = last
+    .split('')
+    .map(() => '_')
+    .join(' ')
+
+  return {
+    first,
+    last,
+    display:
+      firstSlots + '    ' + lastSlots,
+  }
+}
+
+
+export function createGhostNameUI(name) {
+  const slots =
+    formatBlankSlots(name)
+
+  const el =
+    document.createElement('div')
+
+  el.style.position = 'fixed'
+  el.style.top = '12px'
+  el.style.left = '50%'
+  el.style.transform =
+    'translateX(-50%)'
+  el.style.zIndex = '100'
+  el.style.fontSize = '28px'
+  el.style.fontWeight = 'bold'
+  el.style.color = '#66ffff'
+  el.style.textShadow =
+    '0 0 12px #006666'
+  el.style.pointerEvents = 'none'
+  el.style.userSelect = 'none'
+  el.style.letterSpacing = '3px'
+  el.style.fontFamily = 'monospace'
+
+  el.textContent = slots.display
+
+  document.body.appendChild(el)
+
+  return el
+}
+
+
+export function removeGhostNameUI(el) {
+  if (el && el.parentNode) {
+    el.parentNode.removeChild(el)
+  }
+}
+
+
 export async function createHighwayLevel(levelRoot) {
 
   // ============================================
@@ -330,6 +419,14 @@ export async function createHighwayLevel(levelRoot) {
 
 
   // ============================================
+  // GHOST NAME
+  // ============================================
+
+  const ghostName =
+    pickRandomGhostName()
+
+
+  // ============================================
   // RETURN DATA EXPECTED BY game.js
   // ============================================
 
@@ -347,12 +444,13 @@ export async function createHighwayLevel(levelRoot) {
 
     model: highway,
 
-    // We need game.js to know about these cars
     playerCar: playerCar,
 
     ghostCar: ghostCar,
 
     finishZ: finishZ,
+
+    ghostName: ghostName,
 
     spawn:
         new THREE.Vector3(

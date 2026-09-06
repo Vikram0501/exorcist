@@ -1,6 +1,16 @@
+import { removeGhostNameUI }
+  from './highway.js'
+
+
 export class HighwayRaceController {
 
-  constructor(carController, ghostCar, finishZ) {
+  constructor(
+    carController,
+    ghostCar,
+    finishZ,
+    ghostName,
+    ghostNameUI
+  ) {
 
     this.carController =
       carController
@@ -10,6 +20,12 @@ export class HighwayRaceController {
 
     this.finishZ =
         finishZ
+
+    this.ghostName =
+      ghostName
+
+    this.ghostNameUI =
+      ghostNameUI
 
     this.raceFinished = false
 
@@ -448,20 +464,29 @@ export class HighwayRaceController {
             '60px'
 
 
+        if (this.ghostNameUI) {
+
+          this.ghostNameUI.style.display =
+            'none'
+
+        }
+
 
         if (
             winner === 'player'
         ) {
 
             this.countdownElement.textContent =
-            'YOU WON THE RACE'
+            'YOU RACED ' +
+            this.ghostName
 
         }
 
         else {
 
             this.countdownElement.textContent =
-            'THE GHOST WON'
+            this.ghostName +
+            ' WON'
 
         }
 
@@ -480,6 +505,10 @@ export class HighwayRaceController {
       this.countdownElement.remove()
 
     }
+
+    removeGhostNameUI(
+      this.ghostNameUI
+    )
 
   }
 
