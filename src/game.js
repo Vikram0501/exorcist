@@ -141,6 +141,56 @@ export class Game {
     this.roadSignTime = 0
 
 
+    // ============================================
+    // LEVEL 3 STATE MACHINE
+    // ============================================
+
+    this.levelState = 'RACING'
+
+    this.levelTimer = 0
+
+    this.pendingGhostName = null
+
+
+    // ============================================
+    // NAME PUZZLE ELEMENTS
+    // ============================================
+
+    this.namePuzzleEl = null
+
+    this.nameInput = null
+
+    this.nameErrorEl = null
+
+    this.onNameEntryKey = null
+
+
+    // ============================================
+    // GAME OVER ELEMENTS
+    // ============================================
+
+    this.gameOverEl = null
+
+
+    // ============================================
+    // EXORCISM ELEMENTS
+    // ============================================
+
+    this.exorcismEl = null
+
+    this.exorcismParticles = []
+
+    this.exorcismBgOriginal = null
+
+    this.exorcismAmbientOriginal = null
+
+    this.exorcismMoonOriginal = null
+
+    this.exorcismLightRef = null
+
+    this.ambientLightRef = null
+
+
     // DOOR INTERACTION
     this.raycaster = new THREE.Raycaster()
 
@@ -259,10 +309,6 @@ export class Game {
     // LEVEL UPDATE
     // ----------------------------------------
 
-// ----------------------------------------
-// LEVEL UPDATE
-// ----------------------------------------
-
 if (this.loaded) {
 
   // ======================================
@@ -273,38 +319,7 @@ if (this.loaded) {
       this.currentLevel === 'highway'
     ) {
 
-      if (this.highwayController) {
-
-        this.highwayController.update(dt)
-
-      }
-      if (this.highwayRace) {
-
-        this.highwayRace.update(dt)
-
-      }
-
-      if (
-        this.collectibles.length > 0
-      ) {
-
-        const playerCar =
-          this.highwayController
-            ? this.highwayController.car
-            : null
-
-        if (playerCar) {
-
-          updateCollectibles(
-            this.collectibles,
-            playerCar,
-            this.ghostNameUI,
-            dt
-          )
-
-        }
-
-      }
+      // Update road signs (always decorative)
 
       if (
         this.roadSigns.length > 0
@@ -316,6 +331,56 @@ if (this.loaded) {
           this.roadSigns,
           this.roadSignTime
         )
+
+      }
+
+
+      // State-dependent updates
+
+      if (
+        this.levelState === 'RACING'
+      ) {
+
+        if (this.highwayController) {
+
+          this.highwayController.update(dt)
+
+        }
+
+        if (this.highwayRace) {
+
+          this.highwayRace.update(dt)
+
+        }
+
+        if (
+          this.collectibles.length > 0
+        ) {
+
+          const playerCar =
+            this.highwayController
+              ? this.highwayController.car
+              : null
+
+          if (playerCar) {
+
+            updateCollectibles(
+              this.collectibles,
+              playerCar,
+              this.ghostNameUI,
+              dt
+            )
+
+          }
+
+        }
+
+      } else {
+
+        // FINISH_CHECK, NAME_PUZZLE,
+        // EXORCISM, GAME_OVER, COMPLETE
+
+        this.updateLevelState(dt)
 
       }
 
@@ -582,6 +647,57 @@ if (this.loaded) {
                 this.scene
               )
 
+            this.highwayRace.onFinish =
+              (winner, name) => {
+
+                this.levelState =
+                  'FINISH_CHECK'
+
+                this.levelTimer = 0
+
+                this.pendingGhostName =
+                  name
+
+                // Show race result
+
+                if (
+                  this.highwayRace
+                    .countdownElement
+                ) {
+
+                  this.highwayRace
+                    .countdownElement
+                    .style.display =
+                      'block'
+
+                  this.highwayRace
+                    .countdownElement
+                    .style.fontSize =
+                      '60px'
+
+                  if (
+                    winner === 'player'
+                  ) {
+
+                    this.highwayRace
+                      .countdownElement
+                      .textContent =
+                        'YOU WON THE RACE'
+
+                  } else {
+
+                    this.highwayRace
+                      .countdownElement
+                      .textContent =
+                        name +
+                        ' WON'
+
+                  }
+
+                }
+
+              }
+
             this.collectibles =
               createCollectibles(
                 ghostName,
@@ -679,6 +795,21 @@ if (this.loaded) {
   // ============================================
 
   unloadCurrentLevel() {
+
+    // Clean up finale state
+
+    this.hideNamePuzzle()
+
+    this.hideGameOver()
+
+    this.hideExorcismEffects()
+
+    this.levelState = 'RACING'
+
+    this.levelTimer = 0
+
+    this.pendingGhostName = null
+
 
     if (
       this.highwayRace
@@ -906,13 +1037,12 @@ if (this.loaded) {
     return null
   }
 
-
-
   updateInteractionPrompt(door) {
 
     if (!this.interactionPrompt) {
 
       return
+
     }
 
 
@@ -923,6 +1053,7 @@ if (this.loaded) {
         .add('hidden')
 
       return
+
     }
 
 
@@ -935,6 +1066,1281 @@ if (this.loaded) {
     this.interactionPrompt
       .classList
       .remove('hidden')
+  }
+
+
+
+  // ============================================
+  // LEVEL 3 — NAME PUZZLE
+  // ============================================
+
+  showNamePuzzle(ghostName) {
+
+    this.pendingGhostName = ghostName
+
+    this.levelState = 'NAME_PUZZLE'
+
+    this.levelTimer = 0
+
+
+    const el =
+      document.createElement('div')
+
+    el.style.position = 'fixed'
+
+    el.style.inset = '0'
+
+    el.style.zIndex = '150'
+
+    el.style.display = 'flex'
+
+    el.style.flexDirection = 'column'
+
+    el.style.alignItems = 'center'
+
+    el.style.justifyContent = 'center'
+
+    el.style.background =
+      'rgba(5, 5, 15, 0.92)'
+
+    el.style.fontFamily =
+      'monospace'
+
+
+    const title =
+      document.createElement('div')
+
+    title.textContent =
+      'YOU WON THE RACE.'
+
+    title.style.color = '#22ff22'
+
+    title.style.fontSize = '32px'
+
+    title.style.fontWeight = 'bold'
+
+    title.style.marginBottom = '8px'
+
+    title.style.textShadow =
+      '0 0 16px #006600'
+
+    el.appendChild(title)
+
+
+    const subtitle =
+      document.createElement('div')
+
+    subtitle.textContent =
+      'NOW END IT.'
+
+    subtitle.style.color = '#66ffff'
+
+    subtitle.style.fontSize = '20px'
+
+    subtitle.style.fontWeight = 'bold'
+
+    subtitle.style.marginBottom = '28px'
+
+    subtitle.style.textShadow =
+      '0 0 12px #006666'
+
+    el.appendChild(subtitle)
+
+
+    const instr =
+      document.createElement('div')
+
+    instr.textContent =
+      'ENTER THE DRIVER\'S FULL NAME:'
+
+    instr.style.color = '#999999'
+
+    instr.style.fontSize = '15px'
+
+    instr.style.marginBottom = '16px'
+
+    instr.style.letterSpacing = '1px'
+
+    el.appendChild(instr)
+
+
+    // Collected letter slots
+
+    if (
+      this.ghostNameUI &&
+      this.ghostNameUI._slots
+    ) {
+
+      const slotsRow =
+        document.createElement('div')
+
+      slotsRow.style.fontSize = '26px'
+
+      slotsRow.style.letterSpacing = '3px'
+
+      slotsRow.style.marginBottom = '24px'
+
+      slotsRow.style.textShadow =
+        '0 0 10px #006666'
+
+      const slots =
+        this.ghostNameUI._slots
+
+      const spaceIdx =
+        ghostName.indexOf(' ')
+
+      for (
+        let i = 0;
+        i < slots.length;
+        i++
+      ) {
+
+        const span =
+          document.createElement('span')
+
+        span.style.display =
+          'inline-block'
+
+        span.style.width = '1ch'
+
+        span.style.textAlign = 'center'
+
+        if (slots[i].revealed) {
+
+          span.textContent =
+            slots[i].letter
+
+          span.style.color = '#22ff22'
+
+        } else {
+
+          span.textContent = '_'
+
+          span.style.color = '#66ffff'
+
+        }
+
+        slotsRow.appendChild(span)
+
+
+        if (i === spaceIdx - 1) {
+
+          const gap =
+            document.createElement('span')
+
+          gap.textContent = '\u00A0\u00A0\u00A0\u00A0'
+
+          gap.style.display =
+            'inline-block'
+
+          gap.style.width = '4ch'
+
+          slotsRow.appendChild(gap)
+
+        }
+
+      }
+
+      el.appendChild(slotsRow)
+
+    }
+
+
+    // Input
+
+    const input =
+      document.createElement('input')
+
+    input.type = 'text'
+
+    input.placeholder =
+      'Type full name...'
+
+    input.style.width = '320px'
+
+    input.style.padding =
+      '12px 16px'
+
+    input.style.fontSize = '20px'
+
+    input.style.fontFamily =
+      'monospace'
+
+    input.style.textAlign = 'center'
+
+    input.style.background =
+      'rgba(0, 0, 0, 0.6)'
+
+    input.style.color = '#ffffff'
+
+    input.style.border =
+      '2px solid #444444'
+
+    input.style.borderRadius = '6px'
+
+    input.style.outline = 'none'
+
+    input.style.marginBottom = '16px'
+
+    input.style.letterSpacing = '2px'
+
+    el.appendChild(input)
+
+    this.nameInput = input
+
+
+    // Error message
+
+    const errEl =
+      document.createElement('div')
+
+    errEl.style.color = '#ff4444'
+
+    errEl.style.fontSize = '15px'
+
+    errEl.style.marginBottom = '12px'
+
+    errEl.style.minHeight = '20px'
+
+    errEl.style.textShadow =
+      '0 0 8px #660000'
+
+    el.appendChild(errEl)
+
+    this.nameErrorEl = errEl
+
+
+    // Submit button
+
+    const submitBtn =
+      document.createElement('button')
+
+    submitBtn.textContent =
+      'SUBMIT NAME'
+
+    submitBtn.style.padding =
+      '12px 36px'
+
+    submitBtn.style.fontSize = '16px'
+
+    submitBtn.style.fontFamily =
+      'monospace'
+
+    submitBtn.style.fontWeight =
+      'bold'
+
+    submitBtn.style.background =
+      '#22ff22'
+
+    submitBtn.style.color =
+      '#003300'
+
+    submitBtn.style.border = 'none'
+
+    submitBtn.style.borderRadius =
+      '6px'
+
+    submitBtn.style.cursor = 'pointer'
+
+    submitBtn.style.letterSpacing =
+      '1px'
+
+    submitBtn.style.marginBottom =
+      '18px'
+
+    submitBtn.addEventListener(
+      'click',
+      () => this.submitNamePuzzle()
+    )
+
+    el.appendChild(submitBtn)
+
+
+    // Attempt warning
+
+    const warn =
+      document.createElement('div')
+
+    warn.textContent =
+      'ONE ATTEMPT ONLY.'
+
+    warn.style.color = '#ff3333'
+
+    warn.style.fontSize = '13px'
+
+    warn.style.letterSpacing = '2px'
+
+    warn.style.textShadow =
+      '0 0 8px #660000'
+
+    el.appendChild(warn)
+
+
+    document.body.appendChild(el)
+
+    this.namePuzzleEl = el
+
+
+    // Keyboard Enter handler
+
+    this.onNameEntryKey = (e) => {
+
+      if (e.code === 'Enter') {
+
+        this.submitNamePuzzle()
+
+      }
+
+    }
+
+    window.addEventListener(
+      'keydown',
+      this.onNameEntryKey
+    )
+
+
+    // Focus input
+
+    setTimeout(() => {
+
+      if (this.nameInput) {
+
+        this.nameInput.focus()
+
+      }
+
+    }, 100)
+
+  }
+
+
+  hideNamePuzzle() {
+
+    if (this.onNameEntryKey) {
+
+      window.removeEventListener(
+        'keydown',
+        this.onNameEntryKey
+      )
+
+      this.onNameEntryKey = null
+
+    }
+
+    if (
+      this.namePuzzleEl &&
+      this.namePuzzleEl.parentNode
+    ) {
+
+      this.namePuzzleEl.parentNode
+        .removeChild(
+          this.namePuzzleEl
+        )
+
+    }
+
+    this.namePuzzleEl = null
+
+    this.nameInput = null
+
+    this.nameErrorEl = null
+
+  }
+
+
+  submitNamePuzzle() {
+
+    if (
+      this.levelState !== 'NAME_PUZZLE'
+    ) {
+
+      return
+
+    }
+
+    if (!this.nameInput) {
+
+      return
+
+    }
+
+    const raw =
+      this.nameInput.value || ''
+
+    const answer =
+      raw
+        .trim()
+        .replace(/\s+/g, ' ')
+        .toUpperCase()
+
+
+    const correct =
+      this.pendingGhostName
+
+
+    if (answer === correct) {
+
+      this.hideNamePuzzle()
+
+      this.startExorcism()
+
+    } else {
+
+      this.showGameOver(
+        this.pendingGhostName,
+        true
+      )
+
+    }
+
+  }
+
+
+  // ============================================
+  // LEVEL 3 — GAME OVER
+  // ============================================
+
+  showGameOver(
+    ghostName,
+    wrongName
+  ) {
+
+    this.levelState = 'GAME_OVER'
+
+    this.levelTimer = 0
+
+
+    // Freeze cars
+
+    if (this.highwayController) {
+
+      this.highwayController
+        .setDrivingEnabled(false)
+
+    }
+
+    if (this.highwayRace) {
+
+      this.highwayRace.ghostSpeed = 0
+
+    }
+
+
+    this.hideNamePuzzle()
+
+
+    // Hide ghost name UI
+
+    if (this.ghostNameUI) {
+
+      this.ghostNameUI.style.display =
+        'none'
+
+    }
+
+
+    const el =
+      document.createElement('div')
+
+    el.style.position = 'fixed'
+
+    el.style.inset = '0'
+
+    el.style.zIndex = '150'
+
+    el.style.display = 'flex'
+
+    el.style.flexDirection = 'column'
+
+    el.style.alignItems = 'center'
+
+    el.style.justifyContent = 'center'
+
+    el.style.background =
+      'rgba(15, 0, 0, 0.92)'
+
+    el.style.fontFamily =
+      'monospace'
+
+
+    const goTitle =
+      document.createElement('div')
+
+    goTitle.textContent =
+      'GAME OVER'
+
+    goTitle.style.color = '#ff3333'
+
+    goTitle.style.fontSize = '48px'
+
+    goTitle.style.fontWeight =
+      'bold'
+
+    goTitle.style.marginBottom =
+      '20px'
+
+    goTitle.style.textShadow =
+      '0 0 24px #660000'
+
+    el.appendChild(goTitle)
+
+
+    const goMsg =
+      document.createElement('div')
+
+    if (wrongName) {
+
+      goMsg.textContent =
+        'WRONG NAME.'
+
+    } else {
+
+      goMsg.textContent =
+        ghostName + ' REACHED THE FINISH FIRST.'
+
+    }
+
+    goMsg.style.color = '#cc2222'
+
+    goMsg.style.fontSize = '18px'
+
+    goMsg.style.marginBottom = '8px'
+
+    goMsg.style.textShadow =
+      '0 0 10px #440000'
+
+    el.appendChild(goMsg)
+
+
+    const goMsg2 =
+      document.createElement('div')
+
+    goMsg2.textContent =
+      'THE RACE WAS NEVER YOURS.'
+
+    goMsg2.style.color = '#aa1111'
+
+    goMsg2.style.fontSize = '16px'
+
+    goMsg2.style.marginBottom = '36px'
+
+    goMsg2.style.textShadow =
+      '0 0 8px #330000'
+
+    el.appendChild(goMsg2)
+
+
+    const goHint =
+      document.createElement('div')
+
+    goHint.textContent =
+      'Press 3 to try again'
+
+    goHint.style.color = '#666666'
+
+    goHint.style.fontSize = '14px'
+
+    goHint.style.letterSpacing = '1px'
+
+    el.appendChild(goHint)
+
+
+    document.body.appendChild(el)
+
+    this.gameOverEl = el
+
+  }
+
+
+  hideGameOver() {
+
+    if (
+      this.gameOverEl &&
+      this.gameOverEl.parentNode
+    ) {
+
+      this.gameOverEl.parentNode
+        .removeChild(
+          this.gameOverEl
+        )
+
+    }
+
+    this.gameOverEl = null
+
+  }
+
+
+  // ============================================
+  // LEVEL 3 — EXORCISM SEQUENCE
+  // ============================================
+
+  startExorcism() {
+
+    this.levelState = 'EXORCISM'
+
+    this.levelTimer = 0
+
+    this.exorcismParticles = []
+
+
+    // Freeze cars
+
+    if (this.highwayController) {
+
+      this.highwayController
+        .setDrivingEnabled(false)
+
+    }
+
+    if (this.highwayRace) {
+
+      this.highwayRace.ghostSpeed = 0
+
+    }
+
+
+    // Hide ghost name UI
+
+    if (this.ghostNameUI) {
+
+      this.ghostNameUI.style.display =
+        'none'
+
+    }
+
+
+    // Save original scene values
+
+    this.exorcismBgOriginal =
+      this.scene.background.clone()
+
+
+    // Find the directional light
+
+    if (this.levelRoot) {
+
+      this.levelRoot.traverse(
+        (child) => {
+
+          if (
+            child.isDirectionalLight
+          ) {
+
+            this.exorcismLightRef =
+              child
+
+            this.exorcismMoonOriginal =
+              child.color.clone()
+
+          }
+
+          if (
+            child.isAmbientLight
+          ) {
+
+            this.ambientLightRef =
+              child
+
+            this.exorcismAmbientOriginal =
+              child.color.clone()
+
+          }
+
+        }
+      )
+
+    }
+
+
+    // Create exorcism overlay
+
+    const el =
+      document.createElement('div')
+
+    el.style.position = 'fixed'
+
+    el.style.inset = '0'
+
+    el.style.zIndex = '140'
+
+    el.style.display = 'flex'
+
+    el.style.flexDirection = 'column'
+
+    el.style.alignItems = 'center'
+
+    el.style.justifyContent = 'center'
+
+    el.style.pointerEvents = 'none'
+
+    el.style.opacity = '0'
+
+    el.style.transition =
+      'opacity 2s ease'
+
+    el.style.fontFamily =
+      'monospace'
+
+
+    const mainText =
+      document.createElement('div')
+
+    mainText.textContent =
+      'THE LAST RIDE IS OVER.'
+
+    mainText.style.color = '#ffffff'
+
+    mainText.style.fontSize = '40px'
+
+    mainText.style.fontWeight =
+      'bold'
+
+    mainText.style.marginBottom =
+      '16px'
+
+    mainText.style.textShadow =
+      '0 0 30px #ffffff, 0 0 60px #66ffff'
+
+    el.appendChild(mainText)
+
+
+    const subText =
+      document.createElement('div')
+
+    subText.textContent =
+      'THE SPIRIT HAS BEEN EXORCISED.'
+
+    subText.style.color = '#66ffff'
+
+    subText.style.fontSize = '20px'
+
+    subText.style.fontWeight =
+      'bold'
+
+    subText.style.textShadow =
+      '0 0 20px #006666'
+
+    el.appendChild(subText)
+
+
+    document.body.appendChild(el)
+
+    this.exorcismEl = el
+
+
+    // Fade in after short delay
+
+    setTimeout(() => {
+
+      if (this.exorcismEl) {
+
+        this.exorcismEl.style.opacity =
+          '1'
+
+      }
+
+    }, 200)
+
+  }
+
+
+  updateExorcism(dt) {
+
+    this.levelTimer += dt
+
+    const t =
+      this.levelTimer
+
+
+    // Ghost car flickering
+
+    if (this.highwayRace) {
+
+      const gc =
+        this.highwayRace.ghostCar
+
+      if (gc) {
+
+        // Flicker visibility
+
+        if (t < 3) {
+
+          gc.visible =
+            Math.sin(t * 12) > -0.3
+
+        } else if (t < 5) {
+
+          gc.visible =
+            Math.sin(t * 20) > 0.0
+
+        } else {
+
+          gc.visible = false
+
+        }
+
+
+        // Fade transparency
+
+        const opacity =
+          t < 3
+            ? 0.6
+            : Math.max(
+                0,
+                0.6 - (t - 3) * 0.15
+              )
+
+        gc.traverse((child) => {
+
+          if (child.material) {
+
+            child.material.opacity =
+              opacity
+
+            child.material.transparent =
+              true
+
+          }
+
+        })
+
+      }
+
+    }
+
+
+    // Spawn particles
+
+    if (t > 0.5 && t < 8) {
+
+      const rate =
+        t < 3 ? 3 : 8
+
+      if (
+        Math.random() < rate * dt
+      ) {
+
+        this.spawnExorcismParticle()
+
+      }
+
+    }
+
+
+    // Update particles
+
+    this.updateExorcismParticles(
+      dt
+    )
+
+
+    // Scene background → warm dawn
+
+    if (t > 2 && t < 7) {
+
+      const p =
+        Math.min(
+          1,
+          (t - 2) / 5
+        )
+
+      const orig =
+        this.exorcismBgOriginal
+
+      const r =
+        orig.r +
+        (0.12 - orig.r) * p
+
+      const g =
+        orig.g +
+        (0.08 - orig.g) * p
+
+      const b =
+        orig.b +
+        (0.04 - orig.b) * p
+
+      this.scene.background =
+        new THREE.Color(r, g, b)
+
+    }
+
+
+    // Lighting → warmer
+
+    if (t > 3 && t < 8) {
+
+      const p =
+        Math.min(
+          1,
+          (t - 3) / 5
+        )
+
+      if (
+        this.exorcismLightRef
+      ) {
+
+        const orig =
+          this.exorcismMoonOriginal
+
+        this.exorcismLightRef.color.setRGB(
+          orig.r +
+            (1.0 - orig.r) * p,
+          orig.g +
+            (0.85 - orig.g) * p,
+          orig.b +
+            (0.6 - orig.b) * p
+        )
+
+        this.exorcismLightRef.intensity =
+          2 + p * 2
+
+      }
+
+      if (
+        this.ambientLightRef
+      ) {
+
+        const orig =
+          this.exorcismAmbientOriginal
+
+        this.ambientLightRef.color.setRGB(
+          orig.r +
+            (1.0 - orig.r) * p,
+          orig.g +
+            (0.9 - orig.g) * p,
+          orig.b +
+            (0.7 - orig.b) * p
+        )
+
+      }
+
+    }
+
+
+    // Complete
+
+    if (t >= 9) {
+
+      this.levelState = 'COMPLETE'
+
+    }
+
+  }
+
+
+  spawnExorcismParticle() {
+
+    const el =
+      document.createElement('div')
+
+    el.style.position = 'fixed'
+
+    el.style.width = '4px'
+
+    el.style.height = '4px'
+
+    el.style.borderRadius = '50%'
+
+    el.style.background = '#66ffff'
+
+    el.style.boxShadow =
+      '0 0 8px #66ffff'
+
+    el.style.pointerEvents = 'none'
+
+    el.style.zIndex = '145'
+
+    el.style.opacity = '0.8'
+
+
+    const startX =
+      Math.random() * window.innerWidth
+
+    const startY =
+      window.innerHeight * 0.5 +
+      (Math.random() - 0.5) *
+        200
+
+    el.style.left = startX + 'px'
+
+    el.style.top = startY + 'px'
+
+
+    document.body.appendChild(el)
+
+
+    this.exorcismParticles.push({
+      el: el,
+      x: startX,
+      y: startY,
+      vx:
+        (Math.random() - 0.5) * 40,
+      vy:
+        -30 - Math.random() * 80,
+      life: 0,
+      maxLife:
+        1.5 + Math.random() * 2,
+    })
+
+  }
+
+
+  updateExorcismParticles(dt) {
+
+    for (
+      let i =
+        this.exorcismParticles.length -
+        1;
+      i >= 0;
+      i--
+    ) {
+
+      const p =
+        this.exorcismParticles[i]
+
+      p.life += dt
+
+      p.x += p.vx * dt
+
+      p.y += p.vy * dt
+
+      p.x +=
+        Math.sin(
+          p.life * 4
+        ) *
+        30 *
+        dt
+
+
+      if (
+        p.life >= p.maxLife
+      ) {
+
+        if (p.el.parentNode) {
+
+          p.el.parentNode.removeChild(
+            p.el
+          )
+
+        }
+
+        this.exorcismParticles.splice(
+          i,
+          1
+        )
+
+      } else {
+
+        const progress =
+          p.life / p.maxLife
+
+        p.el.style.left =
+          p.x + 'px'
+
+        p.el.style.top =
+          p.y + 'px'
+
+        p.el.style.opacity =
+          (1 - progress) * 0.8
+
+      }
+
+    }
+
+  }
+
+
+  hideExorcismEffects() {
+
+    if (
+      this.exorcismEl &&
+      this.exorcismEl.parentNode
+    ) {
+
+      this.exorcismEl.parentNode
+        .removeChild(
+          this.exorcismEl
+        )
+
+    }
+
+    this.exorcismEl = null
+
+
+    for (
+      let i =
+        this.exorcismParticles.length -
+        1;
+      i >= 0;
+      i--
+    ) {
+
+      const p =
+        this.exorcismParticles[i]
+
+      if (p.el.parentNode) {
+
+        p.el.parentNode.removeChild(
+          p.el
+        )
+
+      }
+
+    }
+
+    this.exorcismParticles = []
+
+
+    // Restore scene background
+
+    if (this.exorcismBgOriginal) {
+
+      this.scene.background =
+        this.exorcismBgOriginal.clone()
+
+    }
+
+
+    // Restore lighting
+
+    if (
+      this.exorcismLightRef &&
+      this.exorcismMoonOriginal
+    ) {
+
+      this.exorcismLightRef.color.copy(
+        this.exorcismMoonOriginal
+      )
+
+      this.exorcismLightRef.intensity =
+        2
+
+    }
+
+    if (
+      this.ambientLightRef &&
+      this.exorcismAmbientOriginal
+    ) {
+
+      this.ambientLightRef.color.copy(
+        this.exorcismAmbientOriginal
+      )
+
+    }
+
+    this.exorcismBgOriginal = null
+
+    this.exorcismLightRef = null
+
+    this.exorcismMoonOriginal = null
+
+    this.ambientLightRef = null
+
+    this.exorcismAmbientOriginal =
+      null
+
+  }
+
+
+  // ============================================
+  // LEVEL 3 — STATE UPDATE
+  // ============================================
+
+  updateLevelState(dt) {
+
+    // ============================================
+    // FINISH_CHECK — show race result, then branch
+    // ============================================
+
+    if (
+      this.levelState === 'FINISH_CHECK'
+    ) {
+
+      this.levelTimer += dt
+
+
+      // After 2.5s transition based on winner
+
+      if (this.levelTimer >= 2.5) {
+
+        if (
+          this.highwayRace &&
+          this.highwayRace.winner ===
+            'player'
+        ) {
+
+          // Hide race result text
+
+          if (
+            this.highwayRace
+              .countdownElement
+          ) {
+
+            this.highwayRace
+              .countdownElement
+              .style.display = 'none'
+
+          }
+
+
+          // Move to name puzzle
+
+          this.levelState = 'NAME_PUZZLE'
+
+          this.levelTimer = 0
+
+        } else {
+
+          // Ghost won — game over
+
+          this.showGameOver(
+            this.pendingGhostName,
+            false
+          )
+
+        }
+
+      }
+
+    }
+
+
+    // ============================================
+    // NAME_PUZZLE — show puzzle after brief pause
+    // ============================================
+
+    if (
+      this.levelState === 'NAME_PUZZLE'
+    ) {
+
+      this.levelTimer += dt
+
+
+      // Show name puzzle UI after 1.5s
+
+      if (
+        this.levelTimer >= 1.5 &&
+        !this.namePuzzleEl
+      ) {
+
+        this.showNamePuzzle(
+          this.pendingGhostName
+        )
+
+      }
+
+    }
+
+
+    if (
+      this.levelState === 'EXORCISM'
+    ) {
+
+      this.updateExorcism(dt)
+
+    }
+
   }
 
 

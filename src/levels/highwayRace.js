@@ -87,6 +87,11 @@ export class HighwayRaceController {
       .setDrivingEnabled(false)
 
 
+    this.onFinish = null
+
+    this.frozen = false
+
+
     // ============================================
     // COUNTDOWN DISPLAY
     // ============================================
@@ -790,26 +795,6 @@ export class HighwayRaceController {
 
 
 
-        // ============================================
-        // SHOW RESULT
-        // ============================================
-
-        this.countdownElement.style.display =
-            'block'
-
-
-        this.countdownElement.style.fontSize =
-            '60px'
-
-
-        if (this.ghostNameUI) {
-
-          this.ghostNameUI.style.display =
-            'none'
-
-        }
-
-
         // Hide brake-cut UI
         this.brakeCutWarningEl.style.display =
             'none'
@@ -818,21 +803,25 @@ export class HighwayRaceController {
             'none'
 
 
+        // Hide ghost name UI on ghost win
         if (
-            winner === 'player'
+            winner === 'ghost' &&
+            this.ghostNameUI
         ) {
 
-            this.countdownElement.textContent =
-            'YOU RACED ' +
-            this.ghostName
+          this.ghostNameUI.style.display =
+            'none'
 
         }
 
-        else {
 
-            this.countdownElement.textContent =
-            this.ghostName +
-            ' WON'
+        // Notify game.js
+        if (this.onFinish) {
+
+            this.onFinish(
+                winner,
+                this.ghostName
+            )
 
         }
 
