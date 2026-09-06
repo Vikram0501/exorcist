@@ -33,27 +33,56 @@ function formatBlankSlots(name) {
   const last =
     name.substring(spaceIndex + 1)
 
-  const firstSlots = first
-    .split('')
-    .map(() => '_')
-    .join(' ')
+  const slots = []
 
-  const lastSlots = last
-    .split('')
-    .map(() => '_')
-    .join(' ')
+  for (let i = 0; i < first.length; i++) {
+    slots.push({
+      letter: first[i],
+      revealed: false,
+    })
+  }
+
+  for (let i = 0; i < last.length; i++) {
+    slots.push({
+      letter: last[i],
+      revealed: false,
+    })
+  }
 
   return {
     first,
     last,
-    display:
-      firstSlots + '    ' + lastSlots,
+    slots,
+  }
+}
+
+
+function renderSlotDisplay(
+  slotElements,
+  slots,
+  gapIndex
+) {
+  for (
+    let i = 0;
+    i < slotElements.length;
+    i++
+  ) {
+    const span = slotElements[i]
+    const slot = slots[i]
+
+    if (slot.revealed) {
+      span.textContent = slot.letter
+      span.style.color = '#22ff22'
+    } else {
+      span.textContent = '_'
+      span.style.color = '#66ffff'
+    }
   }
 }
 
 
 export function createGhostNameUI(name) {
-  const slots =
+  const { slots } =
     formatBlankSlots(name)
 
   const el =
@@ -65,19 +94,115 @@ export function createGhostNameUI(name) {
   el.style.transform =
     'translateX(-50%)'
   el.style.zIndex = '100'
-  el.style.fontSize = '28px'
   el.style.fontWeight = 'bold'
-  el.style.color = '#66ffff'
-  el.style.textShadow =
-    '0 0 12px #006666'
   el.style.pointerEvents = 'none'
   el.style.userSelect = 'none'
-  el.style.letterSpacing = '3px'
   el.style.fontFamily = 'monospace'
+  el.style.textAlign = 'center'
 
-  el.textContent = slots.display
+  const nameRow =
+    document.createElement('div')
+
+  nameRow.style.fontSize = '28px'
+  nameRow.style.letterSpacing = '3px'
+  nameRow.style.textShadow =
+    '0 0 12px #006666'
+
+  const spaceIndex =
+    name.indexOf(' ')
+  const firstLen = spaceIndex
+  const totalSlots = slots.length
+
+  const slotElements = []
+
+  for (let i = 0; i < totalSlots; i++) {
+    const span =
+      document.createElement('span')
+
+    span.textContent = '_'
+    span.style.color = '#66ffff'
+    span.style.display = 'inline-block'
+    span.style.width = '1ch'
+    span.style.textAlign = 'center'
+
+    nameRow.appendChild(span)
+    slotElements.push(span)
+
+    if (i === firstLen - 1) {
+      const gap =
+        document.createElement('span')
+
+      gap.textContent = '\u00A0\u00A0\u00A0\u00A0'
+      gap.style.display = 'inline-block'
+      gap.style.width = '4ch'
+
+      nameRow.appendChild(gap)
+    }
+  }
+
+  el.appendChild(nameRow)
+
+  const counterRow =
+    document.createElement('div')
+
+  counterRow.style.fontSize = '14px'
+  counterRow.style.marginTop = '4px'
+  counterRow.style.color = '#999999'
+  counterRow.style.letterSpacing = '1px'
+
+  const collected = 0
+  const total = slots.length
+
+  counterRow.textContent =
+    'LETTERS: ' +
+    collected +
+    '/' +
+    total
+
+  el.appendChild(counterRow)
 
   document.body.appendChild(el)
+
+  el._slots = slots
+  el._slotElements = slotElements
+  el._counterRow = counterRow
+  el._collected = 0
+  el._total = total
+
+  el.revealLetter = function (slotIndex) {
+    if (
+      slotIndex < 0 ||
+      slotIndex >= slots.length
+    ) {
+      return
+    }
+
+    if (slots[slotIndex].revealed) {
+      return
+    }
+
+    slots[slotIndex].revealed = true
+
+    this._collected++
+
+    renderSlotDisplay(
+      slotElements,
+      slots,
+      firstLen
+    )
+
+    counterRow.textContent =
+      'LETTERS: ' +
+      this._collected +
+      '/' +
+      this._total
+  }
+
+  renderSlotDisplay(
+    slotElements,
+    slots,
+    firstLen
+  )
 
   return el
 }
