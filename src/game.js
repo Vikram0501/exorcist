@@ -2,8 +2,11 @@ import * as THREE from 'three'
 import { Input } from './input.js'
 import { Player } from './player.js'
 
-import { createHighwayLevel }
-    from "./levels/highway.js";
+import {
+  createHighwayLevel,
+  createGhostNameUI,
+  removeGhostNameUI,
+} from "./levels/highway.js"
 
 import { HighwayCarController }
   from './levels/highwayCar.js'
@@ -116,6 +119,8 @@ export class Game {
     this.highwayController = null
 
     this.highwayRace = null
+
+    this.ghostNameUI = null
 
 
     // DOOR INTERACTION
@@ -458,6 +463,7 @@ if (this.loaded) {
             playerCar,
             ghostCar,
             finishZ,
+            ghostName,
           }) => {
 
           // A newer level was selected
@@ -502,6 +508,11 @@ if (this.loaded) {
             levelName === 'highway'
           ) {
 
+            this.ghostNameUI =
+              createGhostNameUI(
+                ghostName
+              )
+
             this.highwayController =
               new HighwayCarController(
                 playerCar,
@@ -512,7 +523,9 @@ if (this.loaded) {
               new HighwayRaceController(
                 this.highwayController,
                 ghostCar,
-                finishZ
+                finishZ,
+                ghostName,
+                this.ghostNameUI
               )
 
           }
@@ -613,6 +626,16 @@ if (this.loaded) {
       this.highwayController.dispose()
 
       this.highwayController = null
+
+    }
+
+    if (this.ghostNameUI) {
+
+      removeGhostNameUI(
+        this.ghostNameUI
+      )
+
+      this.ghostNameUI = null
 
     }
 
