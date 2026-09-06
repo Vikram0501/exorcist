@@ -1,3 +1,4 @@
+import * as THREE from 'three'
 import { removeGhostNameUI }
   from './highway.js'
 
@@ -9,7 +10,8 @@ export class HighwayRaceController {
     ghostCar,
     finishZ,
     ghostName,
-    ghostNameUI
+    ghostNameUI,
+    scene
   ) {
 
     this.carController =
@@ -26,6 +28,9 @@ export class HighwayRaceController {
 
     this.ghostNameUI =
       ghostNameUI
+
+    this.scene =
+      scene
 
     this.raceFinished = false
 
@@ -57,6 +62,24 @@ export class HighwayRaceController {
     // We want the ghost to usually stay
     // about 8 units ahead of the player
     this.ghostTargetLead = 8
+
+
+    // ============================================
+    // BRAKE CUT SEQUENCE
+    // ============================================
+
+    this.brakeCutTriggered = false
+
+    this.brakeCutPhase = 'none'
+
+    this.brakeCutTimer = 0
+
+    this.brakeCutTriggerZ = -192
+
+    this.brakeCutWarningZ = -172
+
+    this.brakeCutGhostSavedPos =
+      new THREE.Vector3()
 
 
     // Make sure car cannot move initially
@@ -108,6 +131,116 @@ export class HighwayRaceController {
 
     document.body.appendChild(
       this.countdownElement
+    )
+
+
+    // ============================================
+    // BRAKE CUT WARNING
+    // ============================================
+
+    this.brakeCutWarningEl =
+      document.createElement('div')
+
+    this.brakeCutWarningEl.style.position =
+      'fixed'
+
+    this.brakeCutWarningEl.style.left =
+      '50%'
+
+    this.brakeCutWarningEl.style.bottom =
+      '80px'
+
+    this.brakeCutWarningEl.style.transform =
+      'translateX(-50%)'
+
+    this.brakeCutWarningEl.style.zIndex =
+      '100'
+
+    this.brakeCutWarningEl.style.fontSize =
+      '28px'
+
+    this.brakeCutWarningEl.style.fontWeight =
+      'bold'
+
+    this.brakeCutWarningEl.style.color =
+      '#ff3333'
+
+    this.brakeCutWarningEl.style.textShadow =
+      '0 0 12px #660000'
+
+    this.brakeCutWarningEl.style.pointerEvents =
+      'none'
+
+    this.brakeCutWarningEl.style.fontFamily =
+      'monospace'
+
+    this.brakeCutWarningEl.style.letterSpacing =
+      '2px'
+
+    this.brakeCutWarningEl.style.display =
+      'none'
+
+    this.brakeCutWarningEl.textContent =
+      'BRAKE FAILURE IMMINENT'
+
+
+    document.body.appendChild(
+      this.brakeCutWarningEl
+    )
+
+
+    // ============================================
+    // BRAKE CUT AFTERMATH
+    // ============================================
+
+    this.brakeCutAftermathEl =
+      document.createElement('div')
+
+    this.brakeCutAftermathEl.style.position =
+      'fixed'
+
+    this.brakeCutAftermathEl.style.left =
+      '50%'
+
+    this.brakeCutAftermathEl.style.bottom =
+      '80px'
+
+    this.brakeCutAftermathEl.style.transform =
+      'translateX(-50%)'
+
+    this.brakeCutAftermathEl.style.zIndex =
+      '100'
+
+    this.brakeCutAftermathEl.style.fontSize =
+      '28px'
+
+    this.brakeCutAftermathEl.style.fontWeight =
+      'bold'
+
+    this.brakeCutAftermathEl.style.color =
+      '#ff3333'
+
+    this.brakeCutAftermathEl.style.textShadow =
+      '0 0 12px #660000'
+
+    this.brakeCutAftermathEl.style.pointerEvents =
+      'none'
+
+    this.brakeCutAftermathEl.style.fontFamily =
+      'monospace'
+
+    this.brakeCutAftermathEl.style.letterSpacing =
+      '2px'
+
+    this.brakeCutAftermathEl.style.display =
+      'none'
+
+    this.brakeCutAftermathEl.textContent =
+      'BRAKES FAILED - DON\'T STOP NOW'
+
+
+    document.body.appendChild(
+      this.brakeCutAftermathEl
     )
 
   }
@@ -193,6 +326,21 @@ export class HighwayRaceController {
 
 
     // ============================================
+    // BRAKE CUT PHASE
+    // ============================================
+
+    if (
+        this.raceStarted &&
+        !this.raceFinished
+    ) {
+
+        this.updateBrakeCut(dt)
+
+    }
+
+
+
+    // ============================================
     // GHOST RACING
     // ============================================
 
@@ -209,7 +357,197 @@ export class HighwayRaceController {
 
     }
 
+    updateBrakeCut(dt) {
+
+        const playerCar =
+            this.carController.car
+
+        const playerZ =
+            playerCar.position.z
+
+
+        // ============================================
+        // TRIGGER WARNING
+        // ============================================
+
+        if (
+            !this.brakeCutTriggered &&
+            playerZ <= this.brakeCutWarningZ
+        ) {
+
+            this.brakeCutTriggered = true
+
+            this.brakeCutPhase = 'warning'
+
+            this.brakeCutTimer = 0
+
+            this.brakeCutWarningEl.style.display =
+                'block'
+
+        }
+
+
+        // ============================================
+        // PHASE: WARNING
+        // ============================================
+
+        if (this.brakeCutPhase === 'warning') {
+
+            this.brakeCutTimer += dt
+
+
+            // Flicker the warning text
+            const flicker =
+                Math.sin(
+                    this.brakeCutTimer * 12
+                ) > 0
+
+            this.brakeCutWarningEl.style.opacity =
+                flicker ? '1' : '0.3'
+
+
+            if (
+                this.brakeCutTimer >= 1.5
+            ) {
+
+                this.brakeCutPhase = 'cut'
+
+                this.brakeCutTimer = 0
+
+                this.brakeCutWarningEl.style.display =
+                    'none'
+
+
+                // Disable brakes
+                this.carController
+                    .brakesWorking = false
+
+
+                // Save ghost position and
+                // teleport near player
+                this.brakeCutGhostSavedPos
+                    .copy(
+                        this.ghostCar.position
+                    )
+
+                this.ghostCar.position.set(
+                    playerCar.position.x,
+                    playerCar.position.y,
+                    playerCar.position.z + 3
+                )
+
+                this.ghostCar.visible = true
+
+            }
+
+        }
+
+
+        // ============================================
+        // PHASE: CUT
+        // ============================================
+
+        if (this.brakeCutPhase === 'cut') {
+
+            this.brakeCutTimer += dt
+
+
+            // Ghost drives through the player
+            this.ghostCar.position.z -=
+                18 * dt
+
+
+            // Brief screen flicker
+            if (
+                this.brakeCutTimer < 0.5
+            ) {
+
+                const flickerOn =
+                    Math.sin(
+                        this.brakeCutTimer * 30
+                    ) > 0
+
+                this.scene.background =
+                    new THREE.Color(
+                        flickerOn
+                            ? 0x2a0a0a
+                            : 0x1a1a2e
+                    )
+
+            } else {
+
+                this.scene.background =
+                    new THREE.Color(0x1a1a2e)
+
+            }
+
+
+            if (
+                this.brakeCutTimer >= 1.0
+            ) {
+
+                this.brakeCutPhase =
+                    'aftermath'
+
+                this.brakeCutTimer = 0
+
+
+                // Restore ghost ahead
+                this.ghostCar.position.set(
+                    this.brakeCutGhostSavedPos.x,
+                    this.brakeCutGhostSavedPos.y,
+                    this.brakeCutGhostSavedPos.z -
+                        25
+                )
+
+                this.ghostCar.visible = true
+
+
+                // Show aftermath message
+                this.brakeCutAftermathEl
+                    .style.display = 'block'
+
+            }
+
+        }
+
+
+        // ============================================
+        // PHASE: AFTERMATH
+        // ============================================
+
+        if (
+            this.brakeCutPhase === 'aftermath'
+        ) {
+
+            this.brakeCutTimer += dt
+
+
+            if (
+                this.brakeCutTimer >= 4.0
+            ) {
+
+                this.brakeCutPhase = 'done'
+
+                this.brakeCutAftermathEl
+                    .style.display = 'none'
+
+            }
+
+        }
+
+    }
+
     updateGhost(dt) {
+
+        // Skip normal ghost movement
+        // during the cut phase
+        if (
+            this.brakeCutPhase === 'cut'
+        ) {
+            return
+        }
+
 
         // ============================================
         // PLAYER / GHOST POSITIONS
@@ -472,6 +810,14 @@ export class HighwayRaceController {
         }
 
 
+        // Hide brake-cut UI
+        this.brakeCutWarningEl.style.display =
+            'none'
+
+        this.brakeCutAftermathEl.style.display =
+            'none'
+
+
         if (
             winner === 'player'
         ) {
@@ -503,6 +849,18 @@ export class HighwayRaceController {
     if (this.countdownElement) {
 
       this.countdownElement.remove()
+
+    }
+
+    if (this.brakeCutWarningEl) {
+
+      this.brakeCutWarningEl.remove()
+
+    }
+
+    if (this.brakeCutAftermathEl) {
+
+      this.brakeCutAftermathEl.remove()
 
     }
 

@@ -25,6 +25,8 @@ export class HighwayCarController {
 
     this.canDrive = false;
 
+    this.brakesWorking = true;
+
 
     this.onKeyDown = (event) => {
 
@@ -88,8 +90,8 @@ export class HighwayCarController {
     }
 
 
-    // S = brake
-    if (this.keys['KeyS']) {
+    // S = brake (only if brakes are working)
+    if (this.keys['KeyS'] && this.brakesWorking) {
 
       this.speed -=
         this.braking * dt
@@ -182,6 +184,12 @@ export class HighwayCarController {
     if (!enabled) {
 
         this.speed = 0
+
+    }
+
+    if (enabled) {
+
+        this.brakesWorking = true
 
     }
 
