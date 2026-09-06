@@ -14,6 +14,12 @@ import {
   disposeCollectibles,
 } from "./levels/highwayCollectibles.js"
 
+import {
+  createRoadSigns,
+  updateRoadSigns,
+  disposeRoadSigns,
+} from "./levels/highwaySigns.js"
+
 import { HighwayCarController }
   from './levels/highwayCar.js'
 
@@ -129,6 +135,10 @@ export class Game {
     this.ghostNameUI = null
 
     this.collectibles = []
+
+    this.roadSigns = []
+
+    this.roadSignTime = 0
 
 
     // DOOR INTERACTION
@@ -293,6 +303,19 @@ if (this.loaded) {
           )
 
         }
+
+      }
+
+      if (
+        this.roadSigns.length > 0
+      ) {
+
+        this.roadSignTime += dt
+
+        updateRoadSigns(
+          this.roadSigns,
+          this.roadSignTime
+        )
 
       }
 
@@ -565,6 +588,14 @@ if (this.loaded) {
                 this.ghostNameUI
               )
 
+            this.roadSigns =
+              createRoadSigns(
+                ghostName,
+                model
+              )
+
+            this.roadSignTime = 0
+
           }
 
 
@@ -680,6 +711,14 @@ if (this.loaded) {
 
       disposeCollectibles(
         this.collectibles
+      )
+
+    }
+
+    if (this.roadSigns.length > 0) {
+
+      disposeRoadSigns(
+        this.roadSigns
       )
 
     }
