@@ -415,7 +415,7 @@ if (this.loaded) {
       door
     ) {
 
-      toggleDoor(door)
+      toggleDoor(door, this.player.position)
 
     }
 
@@ -577,6 +577,7 @@ if (this.loaded) {
             ramps,
             model,
             spawn,
+            spawnYaw,
             modelSize,
             playerCar,
             ghostCar,
@@ -724,7 +725,7 @@ if (this.loaded) {
 
             this.player.reset(
               spawn,
-              level.yaw
+              spawnYaw ?? level.yaw
             )
 
           }

@@ -80,22 +80,33 @@ export class Player {
     if (octreeCollider) {
 
       // Gravity before movement.
-
       this.velocity.y +=
         GRAVITY * dt
 
 
-      // Move player.
+      // -------------------------------------------------
+      // COLLISION SUB-STEPS
+      // -------------------------------------------------
+      // Thin floors, stair treads and door thresholds can be skipped if a
+      // whole frame of movement is applied at once. Split fast movement into
+      // short steps, resolving the triangle Octree after every step.
 
-      this.move(dt)
+      const travelDistance =
+        this.velocity.length() * dt
 
-
-      // Resolve collision against actual
-      // House.glb triangle geometry.
-
-      this.collideWithOctree(
-        octreeCollider.world
+      const substeps = Math.max(
+        1,
+        Math.min(
+          8,
+          Math.ceil(
+            travelDistance / 0.12
+          )
+        )
       )
+
+      const subDt = dt / substeps
+      const wasGrounded = this.isGrounded
+      let groundedThisFrame = false
 
       const dynamicColliders =
         colliders.filter(
@@ -104,10 +115,47 @@ export class Player {
         )
 
 
-      this.collide(
-        dynamicColliders
-      )
+      for (
+        let step = 0;
+        step < substeps;
+        step++
+      ) {
 
+        this.move(subDt)
+
+        const grounded =
+          this.collideWithOctree(
+            octreeCollider.world,
+            5
+          )
+
+        groundedThisFrame =
+          groundedThisFrame || grounded
+
+        this.collide(
+          dynamicColliders
+        )
+      }
+
+
+      // When walking down small stair steps, keep the capsule attached to the
+      // surface instead of alternating between grounded/falling every frame.
+      if (
+        !groundedThisFrame &&
+        wasGrounded &&
+        this.velocity.y <= 0
+      ) {
+
+        groundedThisFrame =
+          this.snapToOctreeGround(
+            octreeCollider.world,
+            0.18
+          )
+      }
+
+
+      this.isGrounded =
+        groundedThisFrame
     }
 
 
@@ -202,40 +250,41 @@ export class Player {
 
 
 
-  collideWithOctree(world) {
+  collideWithOctree(
+    world,
+    maxIterations = 4
+  ) {
 
-    const capsule =
-      this.getCollisionCapsule()
-
-
-
-    const result =
-      world.capsuleIntersect(
-        capsule
-      )
+    let grounded = false
 
 
+    // Resolve more than one penetration. Corners and staircase edges commonly
+    // touch several triangles simultaneously; a single Octree response leaves
+    // part of the capsule embedded and causes the "janky" shove/fall-through
+    // behaviour seen with the previous solver.
+    for (
+      let iteration = 0;
+      iteration < maxIterations;
+      iteration++
+    ) {
 
-    let grounded =
-      false
+      const capsule =
+        this.getCollisionCapsule()
 
+      const result =
+        world.capsuleIntersect(
+          capsule
+        )
 
-
-    // ============================================
-    // COLLISION FOUND
-    // ============================================
-
-    if (result) {
+      if (!result) {
+        break
+      }
 
       const normal =
         result.normal
 
 
-
-      // ------------------------------------------
-      // FLOOR
-      // ------------------------------------------
-
+      // Floor / stair tread.
       if (
         normal.y > 0.25 &&
         this.velocity.y <= 0
@@ -243,65 +292,38 @@ export class Player {
 
         grounded = true
 
-        this.velocity.y = 0
-
-      }
-
-
-      // ------------------------------------------
-      // WALL / CEILING
-      // ------------------------------------------
-
-      else {
-
-        const velocityIntoWall =
-          this.velocity.dot(
-            normal
-          )
-
-
-        if (
-          velocityIntoWall < 0
-        ) {
-
-          this.velocity.addScaledVector(
-
-            normal,
-
-            -velocityIntoWall
-
-          )
-
+        if (this.velocity.y < 0) {
+          this.velocity.y = 0
         }
-
       }
 
 
+      // Remove only the component of velocity travelling into the collision
+      // plane. Tangential movement remains, so the player slides smoothly
+      // along walls and rails instead of sticking to them.
+      const velocityIntoSurface =
+        this.velocity.dot(
+          normal
+        )
 
-      // ------------------------------------------
-      // PUSH PLAYER OUT OF COLLISION
-      // ------------------------------------------
+      if (velocityIntoSurface < 0) {
+        this.velocity.addScaledVector(
+          normal,
+          -velocityIntoSurface
+        )
+      }
+
 
       this.position.addScaledVector(
-
         normal,
-
-        result.depth
-
+        result.depth + 0.0001
       )
-
     }
 
 
-
-    // ============================================
-    // WORLD GROUND
-    // ============================================
-
-    // Keep an invisible Y=0 ground outside the
-    // house as well, otherwise the player could
-    // fall forever when standing outside the model.
-
+    // Keep an invisible outdoor ground plane as a final fail-safe. This does
+    // not replace the house collision; it only prevents an accidental endless
+    // fall if the player walks beyond the model bounds.
     if (
       this.position.y <
       EYE_HEIGHT
@@ -310,25 +332,72 @@ export class Player {
       this.position.y =
         EYE_HEIGHT
 
-
       if (
         this.velocity.y < 0
       ) {
-
         this.velocity.y = 0
-
       }
 
-
       grounded = true
-
     }
 
 
+    return grounded
+  }
 
-    this.isGrounded =
-      grounded
 
+  snapToOctreeGround(
+    world,
+    snapDistance
+  ) {
+
+    const originalY =
+      this.position.y
+
+    this.position.y -=
+      snapDistance
+
+    const capsule =
+      this.getCollisionCapsule()
+
+    const result =
+      world.capsuleIntersect(
+        capsule
+      )
+
+    this.position.y =
+      originalY
+
+
+    if (
+      !result ||
+      result.normal.y <= 0.25
+    ) {
+      return false
+    }
+
+
+    // Re-apply the lowered test position and let the normal collision solver
+    // push the capsule precisely onto the stair/floor surface.
+    this.position.y -=
+      snapDistance
+
+    const grounded =
+      this.collideWithOctree(
+        world,
+        5
+      )
+
+    if (grounded) {
+      this.velocity.y = 0
+      return true
+    }
+
+
+    this.position.y =
+      originalY
+
+    return false
   }
 
   updateRotation() {
