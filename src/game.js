@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { Input } from './input.js'
 import { Player } from './player.js'
+import { HauntedHouseAudio } from './hauntedHouseAudio.js'
 
 import {
   createHighwayLevel,
@@ -110,6 +111,8 @@ export class Game {
       this.camera,
       this.input
     )
+
+    this.houseAudio = new HauntedHouseAudio()
 
 
     // LEVEL DATA
@@ -236,6 +239,9 @@ export class Game {
   start(levelName = 'house') {
 
     this.started = true
+
+    // A click is required by browsers before Web Audio may play.
+    this.houseAudio.unlock()
 
 
     // Lock mouse immediately from the button click.
@@ -429,6 +435,10 @@ if (this.loaded) {
 
       toggleDoor(door, this.player.position)
 
+      if (this.currentLevel === 'house') {
+        this.houseAudio.playDoor(door.isOpen)
+      }
+
     }
 
 
@@ -495,6 +505,10 @@ if (this.loaded) {
         ...doorColliders,
       ]
     )
+
+    if (this.currentLevel === 'house') {
+      this.houseAudio.update(this.player)
+    }
 
   }
 
@@ -768,6 +782,11 @@ if (this.loaded) {
 
           this.loaded = true
 
+          this.houseAudio.setHouseActive(
+            levelName === 'house',
+            levelName === 'house' ? model : null,
+          )
+
 
           console.log(
             `${levelName} loaded`
@@ -812,6 +831,8 @@ if (this.loaded) {
   // ============================================
 
   unloadCurrentLevel() {
+
+    this.houseAudio.setHouseActive(false)
 
     // Clean up finale state
 
