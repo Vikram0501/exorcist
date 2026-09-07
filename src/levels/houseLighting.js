@@ -10,6 +10,8 @@ const HOUSE_INTERIOR_LIGHTS = [
   { type: 'point', name: 'lamp_upstairs', position: { x: 0.9, y: 7.4, z: -2.4 }, color: 0xffcc88, intensity: 0.18, distance: 3, decay: 1.8 },
   { type: 'point', name: 'kitchen_lamp_1', position: { x: 0.0, y: 4.7, z: -1.5 }, color: 0xffaa44, intensity: 0.12, distance: 2.5, decay: 2 },
   { type: 'point', name: 'kitchen_lamp_2', position: { x: 0.0, y: 4.7, z: -2.5 }, color: 0xffaa44, intensity: 0.12, distance: 2.5, decay: 2 },
+  { type: 'point', name: 'outside_lamp_front', position: { x: 1.0, y: 8.5, z: 6.8 }, color: 0xffaa44, intensity: 0.12, distance: 2.5, decay: 2 },
+  { type: 'point', name: 'outside_lamp_back', position: { x: 1.0, y: 8.5, z: -4.4 }, color: 0xffaa44, intensity: 0.12, distance: 2.5, decay: 2 },
   //{ type: 'spot', name: 'moonbeam_window_1', position: { x: 1.1, y: 7.6, z: -3.7 }, target: { x: 1.1, y: 6.3, z: -2.1 }, color: 0x6688cc, intensity: 0.4, angle: 0.35, penumbra: 0.5, distance: 2 },
   //{ type: 'spot', name: 'moonbeam_window_2', position: { x: 5.5, y: 5, z: -6 }, target: { x: 4, y: 0.5, z: -3 }, color: 0x6688cc, intensity: 0.4, angle: 0.35, penumbra: 0.5, distance: 15 },
   //{ type: 'spot', name: 'moonbeam_window_3', position: { x: 0, y: 6, z: 6 }, target: { x: 0, y: 1, z: 3 }, color: 0x6688cc, intensity: 0.3, angle: 0.4, penumbra: 0.6, distance: 12 },

@@ -140,6 +140,8 @@ export class Game {
 
     this.roadSignTime = 0
 
+    this.trainTerrain = null
+
 
     // ============================================
     // LEVEL 3 STATE MACHINE
@@ -406,6 +408,16 @@ if (this.loaded) {
     }
 
 
+    if (
+      this.currentLevel === 'train' &&
+      this.trainTerrain
+    ) {
+
+      this.trainTerrain.update(dt)
+
+    }
+
+
     const door =
       this.getLookedAtDoor()
 
@@ -583,6 +595,7 @@ if (this.loaded) {
             ghostCar,
             finishZ,
             ghostName,
+            trainTerrain,
           }) => {
 
           // A newer level was selected
@@ -617,6 +630,9 @@ if (this.loaded) {
 
           this.model =
             model
+
+          this.trainTerrain =
+            trainTerrain || null
 
 
           // ======================================
@@ -856,6 +872,14 @@ if (this.loaded) {
 
     }
 
+    if (this.trainTerrain) {
+
+      this.trainTerrain.dispose()
+
+      this.trainTerrain = null
+
+    }
+
     if (this.levelRoot) {
 
       disposeLevel(
@@ -880,6 +904,8 @@ if (this.loaded) {
     this.ramps = []
 
     this.model = null
+
+    this.trainTerrain = null
 
     this.loaded = false
 

@@ -6,7 +6,7 @@ export function addLevelLights(level, size) {
 
   const half = Math.max(size.x, size.z) / 2 + 5
   const moon = new THREE.DirectionalLight(0x88aaff, 0.3)
-  moon.position.set(half, size.y + 20, -half * 0.5)
+  moon.position.set(-half, size.y + 20, half * 0.5)
   moon.castShadow = true
   moon.shadow.mapSize.set(2048, 2048)
   moon.shadow.camera.near = 0.5
