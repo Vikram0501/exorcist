@@ -27,6 +27,12 @@ import { HighwayCarController }
 import { HighwayRaceController }
   from './levels/highwayRace.js'
 
+import { HighwayEnvironmentManager }
+  from './levels/highwayEnvironment.js'
+
+import { GLTFLoader }
+  from 'three/addons/loaders/GLTFLoader.js'
+
 import {
   getDoorColliders,
   loadHouse,
@@ -135,6 +141,10 @@ export class Game {
 
     this.highwayRace = null
 
+    this.highwayEnvironment = null
+
+    this.treeTemplates = null
+
     this.ghostNameUI = null
 
     this.collectibles = []
@@ -228,6 +238,8 @@ export class Game {
       'resize',
       () => this.onResize()
     )
+
+    this.loadTreeAssets()
   }
 
 
@@ -263,6 +275,97 @@ export class Game {
     return this.loadLevel(levelName)
   }
 
+
+
+  // ============================================
+  // TREE ASSET LOADING
+  // ============================================
+
+  async loadTreeAssets() {
+
+    try {
+
+      const loader = new GLTFLoader()
+
+      const gltf =
+        await loader.loadAsync(
+          '/models/deadtrees.glb'
+        )
+
+      this.treeTemplates =
+        this.prepareTreeTemplates(
+          gltf.scene
+        )
+
+      console.log(
+        'Loaded',
+        this.treeTemplates.length,
+        'tree variations from GLB'
+      )
+
+    } catch (err) {
+
+      console.warn(
+        'Failed to load deadtrees.glb, using fallback:',
+        err
+      )
+
+      this.treeTemplates = []
+
+    }
+  }
+
+
+  prepareTreeTemplates(root) {
+
+    const templates = []
+
+    root.traverse((child) => {
+
+      if (!child.isMesh) return
+
+      const geo =
+        child.geometry.clone()
+
+      const m = new THREE.Matrix4()
+      m.compose(
+        new THREE.Vector3(0, 0, 0),
+        child.quaternion,
+        child.scale
+      )
+      geo.applyMatrix4(m)
+
+      geo.computeBoundingBox()
+      const box = geo.boundingBox
+
+      const cx =
+        (box.max.x + box.min.x) / 2
+      const cz =
+        (box.max.z + box.min.z) / 2
+      geo.translate(-cx, 0, -cz)
+      geo.translate(0, -box.min.y, 0)
+
+      const mat =
+        child.material.clone()
+      mat.roughness = 0.9
+      mat.metalness = 0.1
+
+      const mesh =
+        new THREE.Mesh(geo, mat)
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+
+      const height =
+        box.max.y - box.min.y
+
+      templates.push({
+        mesh,
+        height,
+      })
+    })
+
+    return templates
+  }
 
 
   // ============================================
@@ -389,6 +492,101 @@ if (this.loaded) {
         // EXORCISM, GAME_OVER, COMPLETE
 
         this.updateLevelState(dt)
+
+      }
+
+
+      // ============================================
+      // ENVIRONMENT UPDATE
+      // ============================================
+
+      if (
+        this.highwayEnvironment &&
+        this.highwayController
+      ) {
+
+        const playerPos =
+          this.highwayController.car.position
+
+        this.highwayEnvironment.update(
+          dt,
+          playerPos
+        )
+
+
+        // ============================================
+        // GHOST VISUAL ENHANCEMENT
+        // ============================================
+
+        if (
+          this.highwayRace &&
+          this.highwayRace.ghostCar
+        ) {
+
+          const gc =
+            this.highwayRace.ghostCar
+
+          const time =
+            performance.now() * 0.001
+
+          const dist =
+            gc.position.distanceTo(
+              playerPos
+            )
+
+          const fogFade =
+            dist < 40
+              ? 1
+              : Math.max(
+                  0,
+                  1 - (dist - 40) / 60
+                )
+
+          const flicker =
+            0.5 +
+            0.5 *
+              Math.abs(
+                Math.sin(
+                  time * 3.7
+                )
+              ) *
+              0.3
+
+          const disturbance =
+            this.highwayEnvironment
+              .getDisturbance()
+
+          let disturbanceMod = 1
+
+          if (
+            disturbance ===
+              'ghostFlicker'
+          ) {
+            disturbanceMod =
+              0.3 +
+              0.7 *
+                Math.abs(
+                  Math.sin(
+                    time * 12
+                  )
+                )
+          }
+
+          gc.traverse((child) => {
+            if (
+              child.material &&
+              child.material.opacity !==
+                undefined
+            ) {
+              child.material.opacity =
+                0.5 *
+                fogFade *
+                flicker *
+                disturbanceMod
+            }
+          })
+
+        }
 
       }
 
@@ -610,6 +808,7 @@ if (this.loaded) {
             finishZ,
             ghostName,
             trainTerrain,
+            moonLight,
           }) => {
 
           // A newer level was selected
@@ -744,6 +943,21 @@ if (this.loaded) {
 
             this.roadSignTime = 0
 
+
+            // ============================================
+            // ENVIRONMENT
+            // ============================================
+
+            this.highwayEnvironment =
+              new HighwayEnvironmentManager({
+                scene: this.scene,
+                highwayGroup: model,
+                playerCar: playerCar,
+                moonLight: moonLight,
+                treeTemplates:
+                  this.treeTemplates,
+              })
+
           }
 
 
@@ -864,6 +1078,14 @@ if (this.loaded) {
       this.highwayController.dispose()
 
       this.highwayController = null
+
+    }
+
+    if (this.highwayEnvironment) {
+
+      this.highwayEnvironment.dispose()
+
+      this.highwayEnvironment = null
 
     }
 
@@ -2010,6 +2232,29 @@ if (this.loaded) {
 
       this.scene.background =
         new THREE.Color(r, g, b)
+
+
+      // Transition fog with background
+
+      if (
+        this.highwayEnvironment
+      ) {
+
+        this.highwayEnvironment
+          .setFogColor(
+            new THREE.Color(
+              r * 0.7,
+              g * 0.7,
+              b * 0.8
+            )
+          )
+
+        this.highwayEnvironment
+          .setFogDensity(
+            0.008 * (1 - p * 0.5)
+          )
+
+      }
 
     }
 
