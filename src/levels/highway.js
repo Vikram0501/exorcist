@@ -234,8 +234,8 @@ export async function createHighwayLevel(levelRoot) {
 
   const ambientLight =
     new THREE.AmbientLight(
-      0xffffff,
-      1.2
+      0x111122,
+      0.4
     )
 
   highway.add(ambientLight)
@@ -243,19 +243,21 @@ export async function createHighwayLevel(levelRoot) {
 
   const moonLight =
     new THREE.DirectionalLight(
-      0xffffff,
-      2
+      0x5577aa,
+      1.8
     )
 
   moonLight.position.set(
-    10,
-    20,
-    10
+    -30,
+    35,
+    -90
   )
 
   moonLight.castShadow = true
 
   highway.add(moonLight)
+
+  highway.add(moonLight.target)
 
 
   // ============================================
@@ -272,8 +274,9 @@ export async function createHighwayLevel(levelRoot) {
 
   const roadMaterial =
     new THREE.MeshStandardMaterial({
-      color: 0x222222,
-      roughness: 0.9,
+      color: 0x181818,
+      roughness: 0.65,
+      metalness: 0.15,
     })
 
 
@@ -555,7 +558,7 @@ export async function createHighwayLevel(levelRoot) {
   // RETURN DATA EXPECTED BY game.js
   // ============================================
 
-  return {
+    return {
 
     colliders: [],
 
@@ -590,6 +593,10 @@ export async function createHighwayLevel(levelRoot) {
         5,
         400
         ),
+
+    moonLight: moonLight,
+
+    ambientLight: ambientLight,
     }
 }
 
@@ -674,15 +681,16 @@ function createGhostCar() {
   const ghostMaterial =
     new THREE.MeshStandardMaterial({
 
-      color: 0x66ffff,
+      color: 0x44dddd,
 
       transparent: true,
 
-      opacity: 0.6,
+      opacity: 0.5,
 
-      emissive: 0x116666,
+      emissive: 0x228888,
 
-      emissiveIntensity: 1,
+      emissiveIntensity: 1.5,
+
     })
 
 
