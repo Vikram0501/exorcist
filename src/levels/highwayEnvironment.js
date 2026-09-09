@@ -16,29 +16,29 @@ const HEADLIGHT_ANGLE = Math.PI / 6
 const HEADLIGHT_PENUMBRA = 0.4
 const HEADLIGHT_DECAY = 1.0
 
-const TREE_COUNT = 900
+const TREE_COUNT = 2000
 const TREE_VARIATION_COUNT = 5
-const LARGE_TREE_COUNT = 12
-const BRANCH_COUNT = 300
-const BUSH_COUNT = 200
-const SILHOUETTE_COUNT = 18
+const LARGE_TREE_COUNT = 24
+const BRANCH_COUNT = 700
+const BUSH_COUNT = 500
+const SILHOUETTE_COUNT = 36
 const MIST_LAYER_COUNT = 3
-const MIST_INSTANCES_PER_LAYER = 40
+const MIST_INSTANCES_PER_LAYER = 80
 const TOTAL_MIST_INSTANCES =
   MIST_LAYER_COUNT * MIST_INSTANCES_PER_LAYER
-const GUARDRAIL_COUNT = 50
-const MILE_MARKER_COUNT = 18
-const ABANDONED_CAR_COUNT = 6
-const DEBRIS_COUNT = 30
+const GUARDRAIL_COUNT = 100
+const MILE_MARKER_COUNT = 40
+const ABANDONED_CAR_COUNT = 12
+const DEBRIS_COUNT = 60
 
 const ROAD_WIDTH = 14
-const ROAD_LENGTH = 400
-const ROAD_CENTER_Z = -195
-const ROAD_MAX_Z = 5
-const ROAD_MIN_Z = -395
+const ROAD_LENGTH = 950
+const ROAD_CENTER_Z = -465
+const ROAD_MAX_Z = 10
+const ROAD_MIN_Z = -940
 
 const HORROR_BUILD_START_Z = -80
-const HORROR_BUILD_END_Z = -300
+const HORROR_BUILD_END_Z = -800
 
 const TREE_MIN_SCALE = 0.8
 const TREE_MAX_SCALE = 1.5
@@ -339,6 +339,8 @@ export class HighwayEnvironmentManager {
     playerCar,
     moonLight,
     treeTemplates,
+    roadPath,
+    arcLengths,
   }) {
 
     this.scene = scene
@@ -347,6 +349,8 @@ export class HighwayEnvironmentManager {
     this.moonLight = moonLight
 
     this.treeTemplates = treeTemplates || []
+    this.roadPath = roadPath || []
+    this.arcLengths = arcLengths || []
 
     this.group = new THREE.Group()
     this.group.name = 'highwayEnvironment'
@@ -390,6 +394,106 @@ export class HighwayEnvironmentManager {
     this.setupRoadsideClutter()
     this.setupDebris()
     this.setupShadowFollowing()
+  }
+
+
+  // ============================================
+  // PATH HELPERS
+  // ============================================
+
+  getPathSample(distance) {
+    const points = this.roadPath
+    const arcLengths = this.arcLengths
+    if (
+      !points ||
+      !points.length ||
+      !arcLengths
+    ) {
+      return new THREE.Vector3(0, 0, -465)
+    }
+
+    const totalLength =
+      arcLengths[arcLengths.length - 1]
+
+    if (distance <= 0) {
+      return points[0].clone()
+    }
+
+    if (distance >= totalLength) {
+      return points[
+        points.length - 1
+      ].clone()
+    }
+
+    let segIndex = 0
+    for (
+      let i = 0;
+      i < arcLengths.length - 1;
+      i++
+    ) {
+      if (
+        distance >= arcLengths[i] &&
+        distance < arcLengths[i + 1]
+      ) {
+        segIndex = i
+        break
+      }
+    }
+
+    const segLength =
+      arcLengths[segIndex + 1] -
+      arcLengths[segIndex]
+    const t =
+      segLength > 0
+        ? (distance - arcLengths[segIndex]) /
+          segLength
+        : 0
+
+    const p0 = points[segIndex]
+    const p1 = points[segIndex + 1]
+
+    return new THREE.Vector3(
+      p0.x + (p1.x - p0.x) * t,
+      0,
+      p0.z + (p1.z - p0.z) * t
+    )
+  }
+
+
+  distanceToRoadCenter(x, z) {
+    if (
+      !this.roadPath ||
+      !this.roadPath.length ||
+      !this.arcLengths
+    ) {
+      return 999
+    }
+
+    const totalLength =
+      this.arcLengths[
+        this.arcLengths.length - 1
+      ]
+    const step = 5
+
+    let minDist = Infinity
+
+    for (
+      let d = 0;
+      d <= totalLength;
+      d += step
+    ) {
+      const sample = this.getPathSample(d)
+      const dx = x - sample.x
+      const dz = z - sample.z
+      const dist = Math.sqrt(
+        dx * dx + dz * dz
+      )
+      if (dist < minDist) {
+        minDist = dist
+      }
+    }
+
+    return minDist
   }
 
 
@@ -684,6 +788,44 @@ export class HighwayEnvironmentManager {
         hash(i * 6.6) *
           (ROAD_LENGTH + 20)
 
+      const roadDist =
+        this.distanceToRoadCenter(x, z)
+
+      const minRoadDist =
+        ROAD_WIDTH * 0.5 + 3
+
+      if (roadDist < minRoadDist) {
+        dummy.position.set(0, -1000, 0)
+        dummy.rotation.set(0, 0, 0)
+        dummy.scale.setScalar(0)
+        dummy.updateMatrix()
+
+        const mesh =
+          this.treeVariationMeshes[vi]
+        mesh.setMatrixAt(
+          localIdx,
+          dummy.matrix
+        )
+
+        this.treePlacementData.push({
+          variationIdx: vi,
+          instanceIdx: localIdx,
+          base: {
+            x: 0, z: -1000, rotY: 0,
+            leanX: 0,
+            leanZ: 0,
+            scale: 0,
+          },
+          sway: {
+            phase: 0,
+            speed: 0,
+            amplitude: 0,
+          },
+        })
+
+        continue
+      }
+
       const rotY =
         hash(i * 9.9) * Math.PI * 2
 
@@ -823,6 +965,38 @@ export class HighwayEnvironmentManager {
         ROAD_MAX_Z + 5 -
         hash(i * 6.6) *
           (ROAD_LENGTH + 20)
+
+      const roadDist =
+        this.distanceToRoadCenter(x, z)
+
+      const minRoadDist =
+        ROAD_WIDTH * 0.5 + 3
+
+      if (roadDist < minRoadDist) {
+        dummy.position.set(0, -1000, 0)
+        dummy.rotation.set(0, 0, 0)
+        dummy.scale.set(0, 0, 0)
+        dummy.updateMatrix()
+
+        trunkMesh.setMatrixAt(
+          i, dummy.matrix
+        )
+
+        this.treeBaseMatrices.push({
+          x: 0, z: -1000,
+          height: 0,
+          widthScale: 0,
+          rotY: 0, leanX: 0, leanZ: 0,
+        })
+
+        this.treeSwayData.push({
+          phase: 0,
+          speed: 0,
+          amplitude: 0,
+        })
+
+        continue
+      }
 
       const baseHeight =
         hashRange(i * 7.7, 3, 9)
@@ -1004,6 +1178,24 @@ export class HighwayEnvironmentManager {
         hash(i * 13.3) *
           (ROAD_LENGTH + 10)
 
+      const roadDist =
+        this.distanceToRoadCenter(x, z)
+
+      const minRoadDist =
+        ROAD_WIDTH * 0.5 + 2
+
+      if (roadDist < minRoadDist) {
+        dummy.position.set(0, -1000, 0)
+        dummy.rotation.set(0, 0, 0)
+        dummy.scale.setScalar(0)
+        dummy.updateMatrix()
+
+        bushMesh.setMatrixAt(
+          i, dummy.matrix
+        )
+        continue
+      }
+
       const scale =
         hashRange(i * 14.4, 0.4, 1.8)
 
@@ -1066,6 +1258,24 @@ export class HighwayEnvironmentManager {
       const z =
         ROAD_MAX_Z + 2 -
         hash(i * 70.3) * (ROAD_LENGTH + 10)
+
+      const roadDist =
+        this.distanceToRoadCenter(x, z)
+
+      const minRoadDist =
+        ROAD_WIDTH * 0.5 + 2
+
+      if (roadDist < minRoadDist) {
+        dummy.position.set(0, -1000, 0)
+        dummy.rotation.set(0, 0, 0)
+        dummy.scale.setScalar(0)
+        dummy.updateMatrix()
+
+        branchMesh.setMatrixAt(
+          i, dummy.matrix
+        )
+        continue
+      }
 
       const branchLen =
         hashRange(i * 70.4, 1.5, 4)
@@ -1465,6 +1675,12 @@ export class HighwayEnvironmentManager {
       { x: 12, z: -220, rotY: -0.1, s: 0.95 },
       { x: -13, z: -280, rotY: 0.3, s: 0.88 },
       { x: 14, z: -340, rotY: -0.35, s: 0.92 },
+      { x: -12, z: -420, rotY: 0.2, s: 0.87 },
+      { x: 15, z: -500, rotY: -0.3, s: 0.93 },
+      { x: -14, z: -580, rotY: 0.25, s: 0.9 },
+      { x: 11, z: -660, rotY: -0.2, s: 0.86 },
+      { x: -13, z: -740, rotY: 0.35, s: 0.91 },
+      { x: 14, z: -820, rotY: -0.15, s: 0.88 },
     ]
 
     for (
