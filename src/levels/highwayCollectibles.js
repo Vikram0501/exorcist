@@ -4,18 +4,76 @@ import * as THREE from 'three'
 const PICKUP_RADIUS = 2.5
 
 
-const SPAWN_SPOTS = [
-  { z: -15, risk: 'safe' },
-  { z: -48, risk: 'safe' },
-  { z: -81, risk: 'safe' },
-  { z: -114, risk: 'medium' },
-  { z: -147, risk: 'medium' },
-  { z: -180, risk: 'medium' },
-  { z: -213, risk: 'high' },
-  { z: -246, risk: 'high' },
-  { z: -279, risk: 'high' },
-  { z: -312, risk: 'high' },
-]
+const ROAD_HALF_WIDTH = 6.5
+
+
+function getPositionOnRoad(
+  roadPath,
+  arcLengths,
+  distance
+) {
+  const totalLength =
+    arcLengths[arcLengths.length - 1]
+
+  if (distance <= 0) {
+    return {
+      position: roadPath[0].clone(),
+      angle: 0,
+    }
+  }
+
+  if (distance >= totalLength) {
+    const last = roadPath.length - 1
+    return {
+      position: roadPath[last].clone(),
+      angle: 0,
+    }
+  }
+
+  let segIndex = 0
+  for (
+    let i = 0;
+    i < arcLengths.length - 1;
+    i++
+  ) {
+    if (
+      distance >= arcLengths[i] &&
+      distance < arcLengths[i + 1]
+    ) {
+      segIndex = i
+      break
+    }
+  }
+
+  const segLength =
+    arcLengths[segIndex + 1] -
+    arcLengths[segIndex]
+  const t =
+    segLength > 0
+      ? (distance - arcLengths[segIndex]) /
+        segLength
+      : 0
+
+  const p0 = roadPath[segIndex]
+  const p1 = roadPath[segIndex + 1]
+
+  const position = new THREE.Vector3(
+    p0.x + (p1.x - p0.x) * t,
+    0,
+    p0.z + (p1.z - p0.z) * t
+  )
+
+  const dx = p1.x - p0.x
+  const dz = p1.z - p0.z
+  const len = Math.sqrt(dx * dx + dz * dz)
+
+  const angle =
+    len > 0.001
+      ? Math.atan2(dx, dz)
+      : 0
+
+  return { position, angle }
+}
 
 
 function shuffleArray(arr) {
@@ -239,7 +297,10 @@ class LetterPickup {
 export function createCollectibles(
   ghostName,
   highway,
-  ghostNameUI
+  ghostNameUI,
+  roadPath,
+  arcLengths,
+  totalRoadLength
 ) {
   const spaceIndex =
     ghostName.indexOf(' ')
@@ -280,30 +341,66 @@ export function createCollectibles(
     })
   }
 
-  const shuffledSpots =
-    shuffleArray(SPAWN_SPOTS)
+  const numLetters = letters.length
+
+  const safeEnd = totalRoadLength * 0.25
+
+  const mediumEnd =
+    totalRoadLength * 0.5
 
   const collectibles = []
 
   for (
     let i = 0;
-    i < letters.length;
+    i < numLetters;
     i++
   ) {
-    const spot =
-      shuffledSpots[
-        i % shuffledSpots.length
-      ]
+    const segmentStart =
+      (i / numLetters) *
+      totalRoadLength
 
-    const xOffset =
-      (Math.random() - 0.5) * 6
+    const segmentEnd =
+      ((i + 1) / numLetters) *
+      totalRoadLength
+
+    const distance =
+      segmentStart +
+      Math.random() *
+        (segmentEnd - segmentStart)
+
+    const roadSample =
+      getPositionOnRoad(
+        roadPath,
+        arcLengths,
+        distance
+      )
+
+    const dir = roadSample.angle
+
+    const perpX = -Math.cos(dir)
+    const perpZ = Math.sin(dir)
+
+    const lateralOffset =
+      (Math.random() - 0.5) *
+      ROAD_HALF_WIDTH *
+      1.6
 
     const position =
       new THREE.Vector3(
-        xOffset,
+        roadSample.position.x +
+          perpX * lateralOffset,
         0.2,
-        spot.z
+        roadSample.position.z +
+          perpZ * lateralOffset
       )
+
+    let risk = 'high'
+
+    if (distance < safeEnd) {
+      risk = 'safe'
+    } else if (distance < mediumEnd) {
+      risk = 'medium'
+    }
 
     const pickup =
       new LetterPickup(
@@ -313,7 +410,7 @@ export function createCollectibles(
         highway
       )
 
-    pickup.risk = spot.risk
+    pickup.risk = risk
 
     collectibles.push(pickup)
   }

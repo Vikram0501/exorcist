@@ -1,6 +1,8 @@
 import * as THREE from 'three'
 import { removeGhostNameUI }
   from './highway.js'
+import { checkPlayerObstacleCollision }
+  from './highwayObstacles.js'
 
 
 export class HighwayRaceController {
@@ -11,7 +13,10 @@ export class HighwayRaceController {
     finishZ,
     ghostName,
     ghostNameUI,
-    scene
+    scene,
+    roadPath,
+    arcLengths,
+    totalRoadLength
   ) {
 
     this.carController =
@@ -31,6 +36,12 @@ export class HighwayRaceController {
 
     this.scene =
       scene
+
+    this.roadPath = roadPath
+    this.arcLengths = arcLengths
+    this.totalRoadLength = totalRoadLength
+
+    this.obstacles = null
 
     this.raceFinished = false
 
@@ -63,6 +74,12 @@ export class HighwayRaceController {
     // about 8 units ahead of the player
     this.ghostTargetLead = 8
 
+    // Ghost path progress
+    this.ghostPathProgress = 0
+
+    // Finish distance along path
+    this.finishDistance = totalRoadLength - 60
+
 
     // ============================================
     // BRAKE CUT SEQUENCE
@@ -74,9 +91,9 @@ export class HighwayRaceController {
 
     this.brakeCutTimer = 0
 
-    this.brakeCutTriggerZ = -192
+    this.brakeCutTriggerProgress = 250
 
-    this.brakeCutWarningZ = -172
+    this.brakeCutWarningProgress = 230
 
     this.brakeCutGhostSavedPos =
       new THREE.Vector3()
@@ -364,11 +381,8 @@ export class HighwayRaceController {
 
     updateBrakeCut(dt) {
 
-        const playerCar =
-            this.carController.car
-
-        const playerZ =
-            playerCar.position.z
+        const playerProgress =
+            this.carController.pathProgress
 
 
         // ============================================
@@ -377,7 +391,7 @@ export class HighwayRaceController {
 
         if (
             !this.brakeCutTriggered &&
-            playerZ <= this.brakeCutWarningZ
+            playerProgress >= this.brakeCutWarningProgress
         ) {
 
             this.brakeCutTriggered = true
@@ -427,22 +441,6 @@ export class HighwayRaceController {
                 this.carController
                     .brakesWorking = false
 
-
-                // Save ghost position and
-                // teleport near player
-                this.brakeCutGhostSavedPos
-                    .copy(
-                        this.ghostCar.position
-                    )
-
-                this.ghostCar.position.set(
-                    playerCar.position.x,
-                    playerCar.position.y,
-                    playerCar.position.z + 3
-                )
-
-                this.ghostCar.visible = true
-
             }
 
         }
@@ -455,11 +453,6 @@ export class HighwayRaceController {
         if (this.brakeCutPhase === 'cut') {
 
             this.brakeCutTimer += dt
-
-
-            // Ghost drives through the player
-            this.ghostCar.position.z -=
-                18 * dt
 
 
             // Brief screen flicker
@@ -495,17 +488,6 @@ export class HighwayRaceController {
                     'aftermath'
 
                 this.brakeCutTimer = 0
-
-
-                // Restore ghost ahead
-                this.ghostCar.position.set(
-                    this.brakeCutGhostSavedPos.x,
-                    this.brakeCutGhostSavedPos.y,
-                    this.brakeCutGhostSavedPos.z -
-                        25
-                )
-
-                this.ghostCar.visible = true
 
 
                 // Show aftermath message
@@ -545,56 +527,31 @@ export class HighwayRaceController {
 
     updateGhost(dt) {
 
-        // Skip normal ghost movement
-        // during the cut phase
-        if (
-            this.brakeCutPhase === 'cut'
-        ) {
-            return
-        }
-
 
         // ============================================
-        // PLAYER / GHOST POSITIONS
+        // PLAYER / GHOST PATH POSITIONS
         // ============================================
 
-        const playerCar =
-            this.carController.car
+        const playerProgress =
+            this.carController.pathProgress
 
 
-        const playerZ =
-            playerCar.position.z
-
-
-        const ghostZ =
-            this.ghostCar.position.z
-
+        const ghostProgress =
+            this.ghostPathProgress
 
 
         // ============================================
         // HOW FAR AHEAD IS THE GHOST?
         // ============================================
 
-        // Example:
-        //
-        // player = -20
-        // ghost  = -30
-        //
-        // lead = 10
-        //
-        // So the ghost is 10 units ahead.
-
         const ghostLead =
-            playerZ - ghostZ
+            playerProgress - ghostProgress
 
 
 
         // ============================================
         // CALCULATE DESIRED SPEED
         // ============================================
-
-        // We want the ghost to stay roughly
-        // ghostTargetLead units ahead.
 
         const difference =
             this.ghostTargetLead -
@@ -605,9 +562,6 @@ export class HighwayRaceController {
             this.ghostCruiseSpeed +
             difference * 0.8
 
-
-
-        // Do not let desired speed become ridiculous.
 
         desiredSpeed =
             Math.max(
@@ -662,28 +616,173 @@ export class HighwayRaceController {
 
 
         // ============================================
-        // MOVE GHOST
+        // MOVE GHOST ALONG PATH
         // ============================================
 
-        this.ghostCar.position.z -=
+        const oldGhostProgress =
+            this.ghostPathProgress
+
+        this.ghostPathProgress +=
             this.ghostSpeed * dt
+
+
+        // Check obstacle collision for ghost
+        // Ghost drives at lateral offset -2
+        if (
+            this.obstacles &&
+            this.obstacles.length > 0
+        ) {
+            const ghostHit =
+                checkPlayerObstacleCollision(
+                    this.obstacles,
+                    oldGhostProgress,
+                    this.ghostPathProgress,
+                    -2
+                )
+
+            if (ghostHit) {
+                this.ghostPathProgress =
+                    ghostHit.progress - 2.5
+                this.ghostSpeed =
+                    Math.min(
+                        this.ghostSpeed,
+                        5
+                    )
+            }
+        }
+
+
+        // Update ghost world position
+
+        if (
+            this.roadPath &&
+            this.arcLengths
+        ) {
+
+            const totalLength =
+                this.arcLengths[
+                    this.arcLengths.length - 1
+                ]
+
+            const clamped =
+                Math.min(
+                    this.ghostPathProgress,
+                    totalLength
+                )
+
+            this.ghostPathProgress = clamped
+
+            const sample =
+                this.getGhostSample(clamped)
+
+            const perpX =
+                -Math.cos(sample.angle)
+            const perpZ =
+                Math.sin(sample.angle)
+
+            this.ghostCar.position.set(
+                sample.position.x +
+                    perpX * -2,
+                0.2,
+                sample.position.z +
+                    perpZ * -2
+            )
+
+            this.ghostCar.rotation.y =
+                sample.angle
 
         }
 
+        }
+
+
+    getGhostSample(distance) {
+
+        const points = this.roadPath
+        const arcLengths = this.arcLengths
+        const totalLength =
+            arcLengths[arcLengths.length - 1]
+
+        if (distance <= 0) {
+            return {
+                position: points[0].clone(),
+                angle: 0,
+            }
+        }
+
+        if (distance >= totalLength) {
+            const last = points.length - 1
+            return {
+                position:
+                    points[last].clone(),
+                angle: 0,
+            }
+        }
+
+        let segIndex = 0
+        for (
+            let i = 0;
+            i < arcLengths.length - 1;
+            i++
+        ) {
+            if (
+                distance >= arcLengths[i] &&
+                distance < arcLengths[i + 1]
+            ) {
+                segIndex = i
+                break
+            }
+        }
+
+        const segLength =
+            arcLengths[segIndex + 1] -
+            arcLengths[segIndex]
+        const t =
+            segLength > 0
+                ? (distance -
+                    arcLengths[segIndex]) /
+                    segLength
+                : 0
+
+        const p0 = points[segIndex]
+        const p1 = points[segIndex + 1]
+
+        const position =
+            new THREE.Vector3(
+                p0.x + (p1.x - p0.x) * t,
+                0,
+                p0.z + (p1.z - p0.z) * t
+            )
+
+        const dx = p1.x - p0.x
+        const dz = p1.z - p0.z
+        const len = Math.sqrt(
+            dx * dx + dz * dz
+        )
+
+        const angle =
+            len > 0.001
+                ? Math.atan2(dx, dz)
+                : 0
+
+        return { position, angle }
+
+    }
+
     checkFinish() {
 
-        const playerCar =
-            this.carController.car
+        const playerProgress =
+            this.carController.pathProgress
 
 
         const playerFinished =
-            playerCar.position.z <=
-            this.finishZ
+            playerProgress >=
+            this.finishDistance
 
 
         const ghostFinished =
-            this.ghostCar.position.z <=
-            this.finishZ
+            this.ghostPathProgress >=
+            this.finishDistance
 
 
 
@@ -709,11 +808,9 @@ export class HighwayRaceController {
             ghostFinished
         ) {
 
-            // Smaller Z means farther down the road.
-
             if (
-            playerCar.position.z <
-            this.ghostCar.position.z
+            playerProgress >
+            this.ghostPathProgress
             ) {
 
             this.finishRace(

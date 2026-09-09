@@ -10,6 +10,11 @@ const SIGN_POSITIONS = [
   { z: -240, side: 'right', tier: 'late' },
   { z: -270, side: 'left', tier: 'late' },
   { z: -300, side: 'right', tier: 'late' },
+  { z: -400, side: 'left', tier: 'late' },
+  { z: -500, side: 'right', tier: 'late' },
+  { z: -600, side: 'left', tier: 'late' },
+  { z: -700, side: 'right', tier: 'late' },
+  { z: -800, side: 'left', tier: 'late' },
 ]
 
 

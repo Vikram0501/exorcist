@@ -1,4 +1,6 @@
 import * as THREE from 'three'
+import { createObstacles }
+  from './highwayObstacles.js'
 
 
 const GHOST_NAMES = [
@@ -215,16 +217,283 @@ export function removeGhostNameUI(el) {
 }
 
 
-export async function createHighwayLevel(levelRoot) {
+// ============================================
+// ROAD PATH SYSTEM
+// ============================================
 
-  // ============================================
-  // HIGHWAY GROUP
-  // ============================================
+const ROAD_PATH_POINTS = [
+  new THREE.Vector3(0, 0, 10),
+  new THREE.Vector3(0, 0, -50),
+  new THREE.Vector3(0, 0, -130),
+  new THREE.Vector3(0, 0, -190),
+  new THREE.Vector3(6, 0, -260),
+  new THREE.Vector3(12, 0, -330),
+  new THREE.Vector3(8, 0, -400),
+  new THREE.Vector3(0, 0, -460),
+  new THREE.Vector3(-8, 0, -530),
+  new THREE.Vector3(-14, 0, -600),
+  new THREE.Vector3(-8, 0, -670),
+  new THREE.Vector3(0, 0, -730),
+  new THREE.Vector3(0, 0, -800),
+  new THREE.Vector3(0, 0, -870),
+  new THREE.Vector3(0, 0, -940),
+]
 
+const CURVED_SEGMENT_LENGTH = 18
+const STRAIGHT_SEGMENT_LENGTH = 20
+const ROAD_WIDTH = 14
+
+
+function buildArcLengthTable(points) {
+  const arcLengths = [0]
+  for (let i = 1; i < points.length; i++) {
+    const dx =
+      points[i].x - points[i - 1].x
+    const dz =
+      points[i].z - points[i - 1].z
+    arcLengths.push(
+      arcLengths[i - 1] +
+        Math.sqrt(dx * dx + dz * dz)
+    )
+  }
+  return arcLengths
+}
+
+
+function getDirectionAtPoint(
+  points,
+  index
+) {
+  const p0 =
+    points[Math.max(0, index - 1)]
+  const p1 = points[index]
+  const p2 =
+    points[
+      Math.min(points.length - 1, index + 1)
+    ]
+
+  const dx = p2.x - p0.x
+  const dz = p2.z - p0.z
+  const len = Math.sqrt(dx * dx + dz * dz)
+
+  if (len < 0.001) {
+    return new THREE.Vector2(0, -1)
+  }
+
+  return new THREE.Vector2(
+    dx / len,
+    dz / len
+  )
+}
+
+
+function getPositionAlongPath(
+  points,
+  arcLengths,
+  distance
+) {
+  const totalLength =
+    arcLengths[arcLengths.length - 1]
+
+  if (distance <= 0) {
+    const dir = getDirectionAtPoint(
+      points,
+      0
+    )
+    return {
+      position: points[0].clone(),
+      direction: dir.clone(),
+      angle: Math.atan2(dir.x, dir.y),
+    }
+  }
+
+  if (distance >= totalLength) {
+    const last = points.length - 1
+    const dir = getDirectionAtPoint(
+      points,
+      last
+    )
+    return {
+      position: points[last].clone(),
+      direction: dir.clone(),
+      angle: Math.atan2(dir.x, dir.y),
+    }
+  }
+
+  let segIndex = 0
+  for (
+    let i = 0;
+    i < arcLengths.length - 1;
+    i++
+  ) {
+    if (
+      distance >= arcLengths[i] &&
+      distance < arcLengths[i + 1]
+    ) {
+      segIndex = i
+      break
+    }
+  }
+
+  const segLength =
+    arcLengths[segIndex + 1] -
+    arcLengths[segIndex]
+  const t =
+    segLength > 0
+      ? (distance - arcLengths[segIndex]) /
+        segLength
+      : 0
+
+  const p0 = points[segIndex]
+  const p1 = points[segIndex + 1]
+
+  const position = new THREE.Vector3(
+    p0.x + (p1.x - p0.x) * t,
+    0,
+    p0.z + (p1.z - p0.z) * t
+  )
+
+  const dir = getDirectionAtPoint(
+    points,
+    segIndex
+  )
+
+  const dir1 = getDirectionAtPoint(
+    points,
+    segIndex + 1
+  )
+
+  const blendedDir = new THREE.Vector2(
+    dir.x + (dir1.x - dir.x) * t,
+    dir.y + (dir1.y - dir.y) * t
+  )
+  const blendLen = Math.sqrt(
+    blendedDir.x * blendedDir.x +
+      blendedDir.y * blendedDir.y
+  )
+  if (blendLen > 0.001) {
+    blendedDir.x /= blendLen
+    blendedDir.y /= blendLen
+  }
+
+  return {
+    position,
+    direction: blendedDir,
+    angle: Math.atan2(
+      blendedDir.x,
+      blendedDir.y
+    ),
+  }
+}
+
+
+function createRoadMesh(
+  points,
+  arcLengths,
+  roadWidth,
+  material
+) {
+  const halfWidth = roadWidth * 0.5
+  const sampleStep = 2
+  const totalLength =
+    arcLengths[arcLengths.length - 1]
+
+  const vertices = []
+  const indices = []
+  const uvs = []
+
+  let sampleCount = 0
+
+  for (
+    let d = 0;
+    d <= totalLength;
+    d += sampleStep
+  ) {
+    const sample = getPositionAlongPath(
+      points,
+      arcLengths,
+      d
+    )
+
+    const dir = sample.direction
+    const perpX = -dir.y
+    const perpZ = dir.x
+
+    const leftX =
+      sample.position.x + perpX * halfWidth
+    const leftZ =
+      sample.position.z + perpZ * halfWidth
+    const rightX =
+      sample.position.x - perpX * halfWidth
+    const rightZ =
+      sample.position.z - perpZ * halfWidth
+
+    vertices.push(
+      leftX,
+      0.05,
+      leftZ,
+      rightX,
+      0.05,
+      rightZ
+    )
+
+    const v = d / totalLength
+    uvs.push(0, v, 1, v)
+
+    if (sampleCount > 0) {
+      const base =
+        (sampleCount - 1) * 2
+      indices.push(
+        base,
+        base + 2,
+        base + 1,
+        base + 1,
+        base + 2,
+        base + 3
+      )
+    }
+
+    sampleCount++
+  }
+
+  const geometry =
+    new THREE.BufferGeometry()
+
+  geometry.setAttribute(
+    'position',
+    new THREE.Float32BufferAttribute(
+      vertices,
+      3
+    )
+  )
+
+  geometry.setAttribute(
+    'uv',
+    new THREE.Float32BufferAttribute(uvs, 2)
+  )
+
+  geometry.setIndex(indices)
+  geometry.computeVertexNormals()
+
+  const mesh = new THREE.Mesh(
+    geometry,
+    material
+  )
+  mesh.receiveShadow = true
+
+  return mesh
+}
+
+
+// ============================================
+// CREATE HIGHWAY LEVEL
+// ============================================
+
+export async function createHighwayLevel(
+  levelRoot
+) {
   const highway = new THREE.Group()
-
   highway.name = 'highwayLevel'
-
   levelRoot.add(highway)
 
 
@@ -233,44 +502,35 @@ export async function createHighwayLevel(levelRoot) {
   // ============================================
 
   const ambientLight =
-    new THREE.AmbientLight(
-      0x111122,
-      0.4
-    )
-
+    new THREE.AmbientLight(0x111122, 0.4)
   highway.add(ambientLight)
-
 
   const moonLight =
     new THREE.DirectionalLight(
       0x5577aa,
       1.8
     )
-
-  moonLight.position.set(
-    -30,
-    35,
-    -90
-  )
-
+  moonLight.position.set(-30, 35, -90)
   moonLight.castShadow = true
-
   highway.add(moonLight)
-
   highway.add(moonLight.target)
 
 
   // ============================================
-  // ROAD
+  // ROAD PATH
   // ============================================
 
-  const roadGeometry =
-    new THREE.BoxGeometry(
-      14,
-      0.2,
-      400
-    )
+  const roadPathPoints = ROAD_PATH_POINTS
+  const arcLengths = buildArcLengthTable(
+    roadPathPoints
+  )
+  const totalRoadLength =
+    arcLengths[arcLengths.length - 1]
 
+
+  // ============================================
+  // BUILD CONTINUOUS ROAD SURFACE
+  // ============================================
 
   const roadMaterial =
     new THREE.MeshStandardMaterial({
@@ -279,118 +539,143 @@ export async function createHighwayLevel(levelRoot) {
       metalness: 0.15,
     })
 
-
-  const road =
-    new THREE.Mesh(
-      roadGeometry,
-      roadMaterial
-    )
-
-
-  road.position.set(
-    0,
-    0,
-    -195
-  )
-
-  road.receiveShadow = true
-
-  highway.add(road)
-
-
-  // ============================================
-  // CENTRE ROAD LINES
-  // ============================================
-
   const lineMaterial =
     new THREE.MeshBasicMaterial({
       color: 0xffffff,
     })
-
-
-  for (
-    let z = 0;
-    z > -390;
-    z -= 12
-  ) {
-
-    const line =
-      new THREE.Mesh(
-        new THREE.BoxGeometry(
-          0.15,
-          0.03,
-          5
-        ),
-        lineMaterial
-      )
-
-
-    line.position.set(
-      0,
-      0.12,
-      z
-    )
-
-
-    highway.add(line)
-  }
-
-
-  // ============================================
-  // BARRIERS
-  // ============================================
 
   const barrierMaterial =
     new THREE.MeshStandardMaterial({
       color: 0x777777,
     })
 
+  const roadMesh = createRoadMesh(
+    roadPathPoints,
+    arcLengths,
+    ROAD_WIDTH,
+    roadMaterial
+  )
+  highway.add(roadMesh)
 
-  const leftBarrier =
-    new THREE.Mesh(
+
+  // ============================================
+  // CONTINUOUS CENTER LINES
+  // ============================================
+
+  const lineSampleStep = 6
+  for (
+    let d = 0;
+    d < totalRoadLength;
+    d += lineSampleStep
+  ) {
+    const sample = getPositionAlongPath(
+      roadPathPoints,
+      arcLengths,
+      d
+    )
+
+    const line = new THREE.Mesh(
+      new THREE.BoxGeometry(
+        0.15,
+        0.03,
+        4
+      ),
+      lineMaterial
+    )
+
+    line.position.copy(sample.position)
+    line.position.y = 0.12
+    line.rotation.y = sample.angle
+    highway.add(line)
+  }
+
+
+  // ============================================
+  // CONTINUOUS BARRIERS
+  // ============================================
+
+  const barrierSampleStep = 10
+  const barrierOffset =
+    ROAD_WIDTH * 0.5 + 0.2
+
+  for (
+    let d = 0;
+    d < totalRoadLength;
+    d += barrierSampleStep
+  ) {
+    const sample = getPositionAlongPath(
+      roadPathPoints,
+      arcLengths,
+      d
+    )
+
+    const dir = sample.direction
+    const perpX = -dir.y
+    const perpZ = dir.x
+
+    const leftBarrier = new THREE.Mesh(
       new THREE.BoxGeometry(
         0.4,
         1,
-        400
+        barrierSampleStep
       ),
       barrierMaterial
     )
+    leftBarrier.position.set(
+      sample.position.x +
+        perpX * barrierOffset,
+      0.5,
+      sample.position.z +
+        perpZ * barrierOffset
+    )
+    leftBarrier.rotation.y = sample.angle
+    highway.add(leftBarrier)
+
+    const rightBarrier = new THREE.Mesh(
+      new THREE.BoxGeometry(
+        0.4,
+        1,
+        barrierSampleStep
+      ),
+      barrierMaterial
+    )
+    rightBarrier.position.set(
+      sample.position.x -
+        perpX * barrierOffset,
+      0.5,
+      sample.position.z -
+        perpZ * barrierOffset
+    )
+    rightBarrier.rotation.y = sample.angle
+    highway.add(rightBarrier)
+  }
 
 
-  leftBarrier.position.set(
-    -7,
-    0.5,
-    -195
-  )
+  // ============================================
+  // TOTAL ARC LENGTH
+  // ============================================
 
-
-  highway.add(leftBarrier)
-
-
-  const rightBarrier =
-    leftBarrier.clone()
-
-
-  rightBarrier.position.x = 7
-
-
-  highway.add(rightBarrier)
+  const finishDistance =
+    totalRoadLength - 60
 
 
   // ============================================
   // PLAYER CAR
   // ============================================
 
-  const playerCar =
-    createPlayerCar()
+  const playerCar = createPlayerCar()
 
-
-  playerCar.position.set(
-    2,
-    0.2,
+  const startSample = getPositionAlongPath(
+    roadPathPoints,
+    arcLengths,
     0
   )
 
+  playerCar.position.set(
+    startSample.position.x + 2,
+    0.2,
+    startSample.position.z
+  )
 
   highway.add(playerCar)
 
@@ -399,16 +684,13 @@ export async function createHighwayLevel(levelRoot) {
   // GHOST CAR
   // ============================================
 
-  const ghostCar =
-    createGhostCar()
-
+  const ghostCar = createGhostCar()
 
   ghostCar.position.set(
-    -2,
+    startSample.position.x - 2,
     0.2,
-    0
+    startSample.position.z
   )
-
 
   highway.add(ghostCar)
 
@@ -417,10 +699,17 @@ export async function createHighwayLevel(levelRoot) {
   // STARTING LINE
   // ============================================
 
+  const startLineSample =
+    getPositionAlongPath(
+      roadPathPoints,
+      arcLengths,
+      3
+    )
+
   const startLine =
     new THREE.Mesh(
       new THREE.BoxGeometry(
-        14,
+        ROAD_WIDTH,
         0.03,
         0.6
       ),
@@ -429,121 +718,113 @@ export async function createHighwayLevel(levelRoot) {
       })
     )
 
-
-  startLine.position.set(
-    0,
-    0.13,
-    3
+  startLine.position.copy(
+    startLineSample.position
   )
-
+  startLine.position.y = 0.13
+  startLine.rotation.y =
+    startLineSample.angle
 
   highway.add(startLine)
+
 
   // ============================================
   // FINISH LINE
   // ============================================
 
-    const finishZ = -320
+  const finishSample =
+    getPositionAlongPath(
+      roadPathPoints,
+      arcLengths,
+      finishDistance
+    )
 
+  const finishZ = finishSample.position.z
 
-    const finishLine =
-    new THREE.Group()
+  const finishLine = new THREE.Group()
 
-
-    // White line across road
-
-    const finishStrip =
+  const finishStrip =
     new THREE.Mesh(
-        new THREE.BoxGeometry(
-        14,
+      new THREE.BoxGeometry(
+        ROAD_WIDTH,
         0.04,
         1
-        ),
-
-        new THREE.MeshBasicMaterial({
+      ),
+      new THREE.MeshBasicMaterial({
         color: 0xffffff,
-        })
+      })
     )
 
+  finishStrip.position.copy(
+    finishSample.position
+  )
+  finishStrip.position.y = 0.14
+  finishStrip.rotation.y =
+    finishSample.angle
 
-    finishStrip.position.set(
-    0,
-    0.14,
-    finishZ
-    )
+  finishLine.add(finishStrip)
 
+  const perpXf =
+    -Math.cos(finishSample.angle)
+  const perpZf =
+    Math.sin(finishSample.angle)
 
-    finishLine.add(finishStrip)
-
-
-
-    // Left finish post
-
-    const leftPost =
+  const leftPost =
     new THREE.Mesh(
-        new THREE.BoxGeometry(
+      new THREE.BoxGeometry(
         0.4,
         5,
         0.4
-        ),
-
-        new THREE.MeshStandardMaterial({
+      ),
+      new THREE.MeshStandardMaterial({
         color: 0xffffff,
-        })
+      })
     )
 
-
-    leftPost.position.set(
-    -6.5,
+  leftPost.position.set(
+    finishSample.position.x +
+      perpXf * 6.5,
     2.5,
-    finishZ
-    )
+    finishSample.position.z +
+      perpZf * 6.5
+  )
 
+  finishLine.add(leftPost)
 
-    finishLine.add(leftPost)
-
-
-
-    // Right finish post
-
-    const rightPost =
+  const rightPost =
     leftPost.clone()
 
+  rightPost.position.set(
+    finishSample.position.x -
+      perpXf * 6.5,
+    2.5,
+    finishSample.position.z -
+      perpZf * 6.5
+  )
 
-    rightPost.position.x = 6.5
+  finishLine.add(rightPost)
 
-
-    finishLine.add(rightPost)
-
-
-
-    // Top bar
-
-    const topBar =
+  const topBar =
     new THREE.Mesh(
-        new THREE.BoxGeometry(
+      new THREE.BoxGeometry(
         13.4,
         0.5,
         0.5
-        ),
-
-        new THREE.MeshStandardMaterial({
+      ),
+      new THREE.MeshStandardMaterial({
         color: 0xffffff,
-        })
+      })
     )
 
-
-    topBar.position.set(
-    0,
+  topBar.position.set(
+    finishSample.position.x,
     5,
-    finishZ
-    )
+    finishSample.position.z
+  )
 
+  finishLine.add(topBar)
 
-    finishLine.add(topBar)
-
-
-    highway.add(finishLine)
+  highway.add(finishLine)
 
 
   // ============================================
@@ -555,11 +836,23 @@ export async function createHighwayLevel(levelRoot) {
 
 
   // ============================================
+  // ROAD OBSTACLES
+  // ============================================
+
+  const obstacles =
+    createObstacles(
+      roadPathPoints,
+      arcLengths,
+      totalRoadLength,
+      highway
+    )
+
+
+  // ============================================
   // RETURN DATA EXPECTED BY game.js
   // ============================================
 
-    return {
-
+  return {
     colliders: [],
 
     colliderHelpers: [],
@@ -580,26 +873,31 @@ export async function createHighwayLevel(levelRoot) {
 
     ghostName: ghostName,
 
-    spawn:
-        new THREE.Vector3(
-        0,
-        2,
-        8
-        ),
+    spawn: new THREE.Vector3(
+      startSample.position.x,
+      2,
+      startSample.position.z + 8
+    ),
 
-    modelSize:
-        new THREE.Vector3(
-        14,
-        5,
-        400
-        ),
+    modelSize: new THREE.Vector3(
+      50,
+      5,
+      totalRoadLength
+    ),
 
     moonLight: moonLight,
 
     ambientLight: ambientLight,
-    }
-}
 
+    roadPath: roadPathPoints,
+
+    arcLengths: arcLengths,
+
+    totalRoadLength: totalRoadLength,
+
+    obstacles: obstacles,
+  }
+}
 
 
 // ============================================
@@ -607,12 +905,7 @@ export async function createHighwayLevel(levelRoot) {
 // ============================================
 
 function createPlayerCar() {
-
-  const car =
-    new THREE.Group()
-
-
-  // Body
+  const car = new THREE.Group()
 
   const body =
     new THREE.Mesh(
@@ -621,21 +914,14 @@ function createPlayerCar() {
         0.6,
         4
       ),
-
       new THREE.MeshStandardMaterial({
         color: 0xaa0000,
       })
     )
 
-
   body.position.y = 0.6
-
   body.castShadow = true
-
   car.add(body)
-
-
-  // Roof
 
   const roof =
     new THREE.Mesh(
@@ -644,28 +930,17 @@ function createPlayerCar() {
         0.5,
         1.8
       ),
-
       new THREE.MeshStandardMaterial({
         color: 0x660000,
       })
     )
 
-
-  roof.position.set(
-    0,
-    1.05,
-    0
-  )
-
-
+  roof.position.set(0, 1.05, 0)
   roof.castShadow = true
-
   car.add(roof)
-
 
   return car
 }
-
 
 
 // ============================================
@@ -673,26 +948,16 @@ function createPlayerCar() {
 // ============================================
 
 function createGhostCar() {
-
-  const ghostCar =
-    new THREE.Group()
-
+  const ghostCar = new THREE.Group()
 
   const ghostMaterial =
     new THREE.MeshStandardMaterial({
-
       color: 0x44dddd,
-
       transparent: true,
-
       opacity: 0.5,
-
       emissive: 0x228888,
-
       emissiveIntensity: 1.5,
-
     })
-
 
   const body =
     new THREE.Mesh(
@@ -704,11 +969,8 @@ function createGhostCar() {
       ghostMaterial
     )
 
-
   body.position.y = 0.6
-
   ghostCar.add(body)
-
 
   const roof =
     new THREE.Mesh(
@@ -717,20 +979,11 @@ function createGhostCar() {
         0.5,
         1.8
       ),
-
       ghostMaterial.clone()
     )
 
-
-  roof.position.set(
-    0,
-    1.05,
-    0
-  )
-
-
+  roof.position.set(0, 1.05, 0)
   ghostCar.add(roof)
-
 
   return ghostCar
 }

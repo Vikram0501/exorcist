@@ -16,6 +16,10 @@ import {
 } from "./levels/highwayCollectibles.js"
 
 import {
+  disposeObstacles,
+} from "./levels/highwayObstacles.js"
+
+import {
   createRoadSigns,
   updateRoadSigns,
   disposeRoadSigns,
@@ -152,6 +156,8 @@ export class Game {
     this.roadSigns = []
 
     this.roadSignTime = 0
+
+    this.obstacles = null
 
     this.trainTerrain = null
 
@@ -809,6 +815,10 @@ if (this.loaded) {
             ghostName,
             trainTerrain,
             moonLight,
+            roadPath,
+            arcLengths,
+            totalRoadLength,
+            obstacles,
           }) => {
 
           // A newer level was selected
@@ -856,7 +866,17 @@ if (this.loaded) {
             levelName === 'highway'
           ) {
 
-            this.ghostNameUI =
+            // Store level data for highway controllers
+          this.levelData = {
+            roadPath,
+            arcLengths,
+            totalRoadLength,
+          }
+
+          this.obstacles = obstacles
+
+
+          this.ghostNameUI =
               createGhostNameUI(
                 ghostName
               )
@@ -864,8 +884,13 @@ if (this.loaded) {
             this.highwayController =
               new HighwayCarController(
                 playerCar,
-                this.camera
+                this.camera,
+                this.levelData.roadPath,
+                this.levelData.arcLengths
               )
+
+            this.highwayController.obstacles =
+              obstacles
 
             this.highwayRace =
               new HighwayRaceController(
@@ -874,8 +899,14 @@ if (this.loaded) {
                 finishZ,
                 ghostName,
                 this.ghostNameUI,
-                this.scene
+                this.scene,
+                this.levelData.roadPath,
+                this.levelData.arcLengths,
+                this.levelData.totalRoadLength
               )
+
+            this.highwayRace.obstacles =
+              obstacles
 
             this.highwayRace.onFinish =
               (winner, name) => {
@@ -932,7 +963,10 @@ if (this.loaded) {
               createCollectibles(
                 ghostName,
                 model,
-                this.ghostNameUI
+                this.ghostNameUI,
+                this.levelData.roadPath,
+                this.levelData.arcLengths,
+                this.levelData.totalRoadLength
               )
 
             this.roadSigns =
@@ -956,6 +990,10 @@ if (this.loaded) {
                 moonLight: moonLight,
                 treeTemplates:
                   this.treeTemplates,
+                roadPath:
+                  this.levelData.roadPath,
+                arcLengths:
+                  this.levelData.arcLengths,
               })
 
           }
@@ -1115,6 +1153,16 @@ if (this.loaded) {
 
     }
 
+    if (this.obstacles) {
+
+      disposeObstacles(
+        this.obstacles
+      )
+
+      this.obstacles = null
+
+    }
+
     if (this.trainTerrain) {
 
       this.trainTerrain.dispose()
@@ -1147,6 +1195,8 @@ if (this.loaded) {
     this.ramps = []
 
     this.model = null
+
+    this.levelData = null
 
     this.trainTerrain = null
 
