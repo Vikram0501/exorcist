@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { checkPlayerObstacleCollision }
-  from './highwayObstacles.js'
+  from './obstacles.js'
 
 
 export class HighwayCarController {

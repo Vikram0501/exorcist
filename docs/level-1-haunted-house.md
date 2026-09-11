@@ -19,7 +19,7 @@ child meshes remain independently movable.
 
 ## Technical Notes
 
-- Loader: `src/levels/house.js` — exports `loadHouse(scene)` (returns a Promise)
+- Loader: `src/levels/house/index.js` — exports `loadHouse(scene)` (returns a Promise)
 - GLB model loaded via `GLTFLoader` from `three/addons/loaders/GLTFLoader.js`
 - Model loaded from `/models/house_game.glb` using `gltf.scene`
 - Blender-authored scale and +Y-up orientation are preserved

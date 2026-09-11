@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { createObstacles }
-  from './highwayObstacles.js'
+  from './obstacles.js'
 
 
 const GHOST_NAMES = [

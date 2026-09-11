@@ -65,7 +65,7 @@ Run these from the project root (`C:\Users\subra\Exorcist`).
 Verification for agent sessions:
 - **Always** run `npm run build` after code changes to confirm modules transform.
 - Smoke-test the dev server: start `npm run dev`, GET `/`, `/src/main.js`,
-  `/src/game.js`, expect HTTP 200. (Do this if rendering/imports change.)
+  `/src/core/game.js`, expect HTTP 200. (Do this if rendering/imports change.)
 
 ## 4. File Structure
 
@@ -99,7 +99,7 @@ Exorcist/
 - Listens for `Escape`: if pointer is locked it calls `input.release()` and
   shows the overlay again so the player can resume.
 
-### `src/game.js` — `class Game`
+### `src/core/game.js` — `class Game`
 Core runtime class. Owns:
 - `scene` — `THREE.Scene`, background set to dark blue `0x1a1a2e`.
 - `camera` — `THREE.PerspectiveCamera(75, aspect, 0.1, 300)`.
@@ -122,7 +122,7 @@ Key flow:
 - `onResize()` updates camera aspect + renderer size. Also adjusts camera far
   plane based on model size.
 
-### `src/input.js` — `class Input`
+### `src/core/input.js` — `class Input`
 Stateless input aggregator:
 - `keys` — a `Set` of `e.code` strings (e.g. `'KeyW'`, `'ShiftLeft'`), updated
   by window `keydown`/`keyup`.
@@ -134,7 +134,7 @@ Stateless input aggregator:
 - `lock()` / `release()` — pointer lock entry/exit (release clears keys).
 - Mouse look only accumulates while locked.
 
-### `src/levels/house.js`
+### `src/levels/house/index.js`
 Level 1 loader. Exports `loadHouse(scene)` which returns a Promise resolving to
 `{ colliders, doors, ramps, model, spawn, modelSize }`.
 
@@ -151,7 +151,7 @@ Level 1 loader. Exports `loadHouse(scene)` which returns a Promise resolving to
   AABBs while the door is closed. `updateDoors()` animates their existing pivots.
 - Adds ambient + directional lighting with shadow map.
 
-### `src/player.js` — `class Player`
+### `src/core/player.js` — `class Player`
 First-person controller wrapping the camera. **The camera IS the player** — the
 player has no separate mesh.
 

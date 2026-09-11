@@ -26,7 +26,7 @@ finishes.
 
 ### Name List
 
-Names are stored in `GHOST_NAMES` in `src/levels/highway.js`.
+Names are stored in `GHOST_NAMES` in `src/levels/highway/index.js`.
 
 ### State
 

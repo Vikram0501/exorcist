@@ -155,6 +155,37 @@ Exorcist/
         └── lighting.js        # Shared ambient + directional lighting
 ```
 
+The current source layout groups code by responsibility and by level:
+
+```
+src/
+├── main.js
+├── audio/
+│   └── hauntedHouseAudio.js
+├── core/
+│   ├── game.js
+│   ├── input.js
+│   └── player.js
+└── levels/
+    ├── house/
+    │   ├── index.js
+    │   └── lighting.js
+    ├── train/
+    │   ├── index.js
+    │   ├── lighting.js
+    │   └── terrain.js
+    ├── highway/
+    │   ├── index.js
+    │   ├── car.js
+    │   ├── collectibles.js
+    │   ├── environment.js
+    │   ├── obstacles.js
+    │   ├── race.js
+    │   └── signs.js
+    └── shared/
+        └── lighting.js
+```
+
 ## Development
 
 The game has no physics library. Collision is handled with custom AABB and circle logic — the player is a vertical line with a horizontal circle of radius 0.35 for XZ push-out. Collision data is authored separately from the GLB geometry.
@@ -165,7 +196,7 @@ Level design documents live in `docs/`. Read `docs/BUILDSPEC.md` first if you pl
 
 1. Place the `.glb` model in `public/models/`
 2. Create a loader in `src/levels/` following the pattern in `house.js`
-3. Register it in the `LEVELS` object in `src/game.js`
+3. Register it in the `LEVELS` object in `src/core/game.js`
 4. Add floor, wall, and door colliders as needed
 5. Switch levels at runtime with `1`/`2` keys
 
