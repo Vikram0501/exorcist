@@ -3,9 +3,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { Octree } from 'three/addons/math/Octree.js'
 import { setupHouseLighting } from './houseLighting.js'
 
-// Cleaned version of House(6).glb.
-// Duplicate combined geometry and the duplicate barn-door overlay were removed.
-const HOUSE_MODEL_URL = '/models/House_Final_v4.glb'
+// Current house scene exported from Blender. Includes the surrounding forest and
+// four boundary meshes named Plane, Plane.001, Plane.002 and Plane.003.
+const HOUSE_MODEL_URL = '/models/House.glb'
 const HOUSE_SCALE = 0.15
 
 const DOOR_SPEED = 12
@@ -52,18 +52,32 @@ const COLLISION_EXACT_EXCLUDES = new Set([
   'removed_barn_door_frame',
 ])
 
-// Labelled vehicle pieces in House(7).glb. Wheels are deliberately excluded:
-// the body/roof proxies give smoother collision and still let the player stand
-// on top of the vehicles.
-const VEHICLE_COLLISION_NAMES = new Set([
-  'car body',
-  'car sides',
-  'car top',
-  'car top.001',
-  'black van',
-  'black van side',
-  'back van roof',
-])
+// Blender boundary meshes. These stay in the model for collision but are
+// hidden from rendering at runtime. Blender auto-names duplicated Plane objects
+// as Plane.001, Plane.002, etc.
+function isBoundaryCollisionMesh(object) {
+  // Three.js may sanitize Blender names:
+  //
+  // Plane
+  // Plane.001
+  // Plane_001
+  // Plane001
+  //
+  // Turn all of those into:
+  // plane / plane001 / plane002 / plane003
+
+  const name = (object?.name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+
+  return (
+    name === 'plane' ||
+    name === 'plane001' ||
+    name === 'plane002' ||
+    name === 'plane003'
+  )
+}
 
 // Furniture collision.
 // These two meshes contain the furniture in the current GLB.
@@ -97,8 +111,8 @@ function shouldUseForCollision(object) {
     return false
   }
 
-  // Cars + van
-  if (VEHICLE_COLLISION_NAMES.has(name)) {
+  // Invisible forest boundary walls.
+  if (isBoundaryCollisionMesh(object)) {
     return true
   }
 
@@ -282,16 +296,36 @@ export async function loadHouse(level) {
 
   model.scale.setScalar(HOUSE_SCALE)
 
-  model.traverse((child) => {
-    if (!child.isMesh) return
+ model.traverse((child) => {
+  if (!child.isMesh) return
+
+  if (isBoundaryCollisionMesh(child)) {
+    console.log(
+      'FOUND INVISIBLE BOUNDARY:',
+      child.name,
+    )
+
+    // Completely invisible.
+    child.visible = false
     child.castShadow = false
-    child.receiveShadow = true
-  })
+    child.receiveShadow = false
+
+    return
+  }
+
+  child.castShadow = false
+  child.receiveShadow = true
+})
 
   model.updateMatrixWorld(true)
 
-  // Centre X/Z and place the lowest visible point at world Y = 0.
-  const initialBox = new THREE.Box3().setFromObject(model)
+  // Keep the original house alignment stable. The new forest and invisible
+  // boundary walls are separate roots in House.glb and must not change the
+  // centering used by the existing spawn, doors and lighting coordinates.
+  const placementRoot =
+    findObjectCaseInsensitive(model, 'world') || model
+
+  const initialBox = new THREE.Box3().setFromObject(placementRoot)
   const initialCenter = initialBox.getCenter(
     new THREE.Vector3(),
   )
@@ -329,7 +363,7 @@ export async function loadHouse(level) {
   const spawn = new THREE.Vector3(
     1.8,
     5.5,
-    -25.0,
+    -20.0,
   )
 
   // Face toward the centre of the house on spawn. Player.getForward() uses
@@ -420,53 +454,160 @@ function buildLabelledCollisionWorld(model) {
     const cleanName =
       (object.name || '').trim().toLowerCase()
 
-    // The newly added barn walls are visually thin planes/slabs. Build a
-    // small solid BoxGeometry around each one so collision works from both
-    // directions instead of behaving like a one-sided sheet.
-    if (
-      isBarnWallName(cleanName) ||
-      isVehicleCollisionName(cleanName)
-    ) {
-      const box = new THREE.Box3().setFromObject(object)
-      const size = box.getSize(new THREE.Vector3())
-      const centre = box.getCenter(new THREE.Vector3())
+    // =====================================================
+    // INVISIBLE FOREST BOUNDARY WALLS
+    // =====================================================
+    //
+    // Do NOT rely on the visible mesh triangles here.
+    // Build a guaranteed solid box from each Plane instead.
+    //
+    // This means:
+    //
+    // Plane
+    // Plane.001
+    // Plane.002
+    // Plane.003
+    //
+    // are invisible visually but remain solid collision.
 
-      // Thin barn panels and vehicle roof sheets get a small minimum depth so
-      // collision works reliably from either side and the player can stand on
-      // car/van roofs without dropping through a zero-thickness surface.
-      const minThickness = isBarnWallName(cleanName)
-        ? 0.22
-        : 0.18
+    if (isBoundaryCollisionMesh(object)) {
+      if (!object.geometry.boundingBox) {
+        object.geometry.computeBoundingBox()
+      }
 
-      if (size.x < minThickness) size.x = minThickness
-      if (size.y < minThickness) size.y = minThickness
-      if (size.z < minThickness) size.z = minThickness
+      const box =
+        object.geometry.boundingBox
+          .clone()
+          .applyMatrix4(object.matrixWorld)
 
-      const collisionMesh = new THREE.Mesh(
-        new THREE.BoxGeometry(
-          size.x,
-          size.y,
-          size.z,
-        ),
-        undefined,
-      )
+      const size =
+        box.getSize(
+          new THREE.Vector3(),
+        )
+
+      const centre =
+        box.getCenter(
+          new THREE.Vector3(),
+        )
+
+      // Guarantee enough thickness for collision.
+      const minimumThickness = 0.3
+
+      if (size.x < minimumThickness) {
+        size.x = minimumThickness
+      }
+
+      if (size.y < minimumThickness) {
+        size.y = minimumThickness
+      }
+
+      if (size.z < minimumThickness) {
+        size.z = minimumThickness
+      }
+
+      const collisionMesh =
+        new THREE.Mesh(
+          new THREE.BoxGeometry(
+            size.x,
+            size.y,
+            size.z,
+          ),
+        )
 
       collisionMesh.position.copy(centre)
-      collisionMesh.name =
-        `COLLISION_SOLID_${object.name}`
 
-      collisionRoot.add(collisionMesh)
-      names.push(`${object.name} [solid proxy]`)
+      collisionMesh.name =
+        `INVISIBLE_BOUNDARY_${object.name}`
+
+      collisionRoot.add(
+        collisionMesh,
+      )
+
+      names.push(
+        `${object.name} [INVISIBLE BOUNDARY]`,
+      )
+
+      console.log(
+        'Created invisible boundary collider:',
+        object.name,
+        {
+          size,
+          centre,
+        },
+      )
+
       return
     }
 
-    // Share the geometry; Octree.fromGraphNode only reads it. The clone gets
-    // the mesh's FINAL world transform so its triangles exactly match what the
-    // player sees.
-    const collisionMesh = new THREE.Mesh(
-      object.geometry,
-      undefined,
-    )
+    // =====================================================
+    // BARN WALLS
+    // =====================================================
+
+    if (isBarnWallName(cleanName)) {
+      const box =
+        new THREE.Box3().setFromObject(
+          object,
+        )
+
+      const size =
+        box.getSize(
+          new THREE.Vector3(),
+        )
+
+      const centre =
+        box.getCenter(
+          new THREE.Vector3(),
+        )
+
+      const minThickness = 0.22
+
+      if (size.x < minThickness) {
+        size.x = minThickness
+      }
+
+      if (size.y < minThickness) {
+        size.y = minThickness
+      }
+
+      if (size.z < minThickness) {
+        size.z = minThickness
+      }
+
+      const collisionMesh =
+        new THREE.Mesh(
+          new THREE.BoxGeometry(
+            size.x,
+            size.y,
+            size.z,
+          ),
+        )
+
+      collisionMesh.position.copy(
+        centre,
+      )
+
+      collisionMesh.name =
+        `COLLISION_SOLID_${object.name}`
+
+      collisionRoot.add(
+        collisionMesh,
+      )
+
+      names.push(
+        `${object.name} [solid proxy]`,
+      )
+
+      return
+    }
+
+    // =====================================================
+    // NORMAL HOUSE COLLISION
+    // =====================================================
+
+    const collisionMesh =
+      new THREE.Mesh(
+        object.geometry,
+      )
 
     object.matrixWorld.decompose(
       collisionMesh.position,
@@ -474,24 +615,38 @@ function buildLabelledCollisionWorld(model) {
       collisionMesh.scale,
     )
 
-    collisionMesh.name = `COLLISION_${object.name}`
-    collisionMesh.matrixAutoUpdate = true
+    collisionMesh.name =
+      `COLLISION_${object.name}`
 
-    collisionRoot.add(collisionMesh)
-    names.push(object.name)
+    collisionMesh.matrixAutoUpdate =
+      true
+
+    collisionRoot.add(
+      collisionMesh,
+    )
+
+    names.push(
+      object.name,
+    )
   })
 
   collisionRoot.updateMatrixWorld(true)
 
   const world = new Octree()
-  world.fromGraphNode(collisionRoot)
+
+  world.fromGraphNode(
+    collisionRoot,
+  )
 
   console.log(
     `House collision built from ${names.length} labelled meshes`,
     names,
   )
 
-  return { world, names }
+  return {
+    world,
+    names,
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -681,12 +836,6 @@ function isBarnWallName(name) {
   )
 }
 
-function isVehicleCollisionName(name) {
-  return VEHICLE_COLLISION_NAMES.has(
-    (name || '').trim().toLowerCase(),
-  )
-}
-
 function findObjectCaseInsensitive(root, wantedName) {
   const target = wantedName.trim().toLowerCase()
   let found = null
@@ -745,7 +894,6 @@ function splitRegularDoorMesh(source) {
   const sourceWorldMatrix =
     source.matrixWorld.clone()
 
-
   // ---------------------------------------------
   // CREATE DYNAMIC DOOR ROOT
   // ---------------------------------------------
@@ -775,7 +923,6 @@ function splitRegularDoorMesh(source) {
 
   parent.remove(source)
 
-
   // ---------------------------------------------
   // SPLIT ORIGINAL DOOR MESH
   // ---------------------------------------------
@@ -800,7 +947,6 @@ function splitRegularDoorMesh(source) {
             new THREE.Vector3(),
           )
 
-
         // Convert the centre of this particular
         // door panel into actual world coordinates.
 
@@ -810,7 +956,6 @@ function splitRegularDoorMesh(source) {
             .applyMatrix4(
               sourceWorldMatrix,
             )
-
 
         return {
           geometry,
@@ -827,14 +972,12 @@ function splitRegularDoorMesh(source) {
         a.centre.y - b.centre.y
       )
 
-
   // ---------------------------------------------
   // FIND THE TWO DOORS THAT NEED HINGES SWAPPED
   // ---------------------------------------------
 
   const requestedHingeSwapIndices =
     new Set()
-
 
   for (
     const target
@@ -845,7 +988,6 @@ function splitRegularDoorMesh(source) {
 
     let closestDistanceSq =
       Infinity
-
 
     entries.forEach(
       (entry, index) => {
@@ -862,7 +1004,6 @@ function splitRegularDoorMesh(source) {
           dx * dx +
           dz * dz
 
-
         if (
           distanceSq <
           closestDistanceSq
@@ -876,7 +1017,6 @@ function splitRegularDoorMesh(source) {
         }
       },
     )
-
 
     if (
       closestIndex >= 0 &&
@@ -899,13 +1039,11 @@ function splitRegularDoorMesh(source) {
     }
   }
 
-
   // ---------------------------------------------
   // CREATE INDIVIDUAL DOORS
   // ---------------------------------------------
 
   const controllers = []
-
 
   entries.forEach(
     (entry, index) => {
@@ -917,7 +1055,6 @@ function splitRegularDoorMesh(source) {
         worldCentre,
       } = entry
 
-
       const extentX =
         box.max.x -
         box.min.x
@@ -925,7 +1062,6 @@ function splitRegularDoorMesh(source) {
       const extentY =
         box.max.y -
         box.min.y
-
 
       // The source GLB uses local Z as vertical.
       // Therefore the horizontal width of the
@@ -936,10 +1072,8 @@ function splitRegularDoorMesh(source) {
           ? 'x'
           : 'y'
 
-
       const hinge =
         centre.clone()
-
 
       // -----------------------------------------
       // EXISTING HINGE CORRECTIONS
@@ -959,11 +1093,9 @@ function splitRegularDoorMesh(source) {
         index === 2 ||
         index === 5
 
-
       const shouldSwapRequestedDoor =
         requestedHingeSwapIndices
           .has(index)
-
 
       // XOR:
       //
@@ -976,12 +1108,10 @@ function splitRegularDoorMesh(source) {
         existingOppositeHingeSide !==
         shouldSwapRequestedDoor
 
-
       hinge[widthAxis] =
         oppositeHingeSide
           ? box.max[widthAxis]
           : box.min[widthAxis]
-
 
       // Debug so you can check exactly which doors
       // were changed in the browser console.
@@ -1002,7 +1132,6 @@ function splitRegularDoorMesh(source) {
         )
       }
 
-
       // -----------------------------------------
       // MOVE GEOMETRY RELATIVE TO NEW HINGE
       // -----------------------------------------
@@ -1016,7 +1145,6 @@ function splitRegularDoorMesh(source) {
       geometry.computeBoundingBox()
 
       geometry.computeBoundingSphere()
-
 
       // -----------------------------------------
       // CREATE HINGE / PIVOT
@@ -1034,7 +1162,6 @@ function splitRegularDoorMesh(source) {
 
       pivot.userData.dynamicDoor =
         true
-
 
       // -----------------------------------------
       // CREATE DOOR MESH
@@ -1058,11 +1185,9 @@ function splitRegularDoorMesh(source) {
       mesh.userData.dynamicDoor =
         true
 
-
       pivot.add(mesh)
 
       doorRoot.add(pivot)
-
 
       // -----------------------------------------
       // DOOR CONTROLLER
@@ -1103,7 +1228,6 @@ function splitRegularDoorMesh(source) {
       })
     },
   )
-
 
   nonIndexed.dispose()
 
