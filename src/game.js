@@ -137,6 +137,10 @@ export class Game {
 
     this.currentLevel = null
 
+    this.spawnPoint = null
+
+    this.spawnYaw = 0
+
     this.levelRoot = null
 
     this.levelLoadId = 0
@@ -282,6 +286,19 @@ export class Game {
   }
 
 
+  respawn() {
+
+    if (!this.loaded || this.currentLevel !== 'house' || !this.spawnPoint) {
+
+      return false
+    }
+
+    this.player.reset(this.spawnPoint, this.spawnYaw)
+
+    return true
+  }
+
+
 
   // ============================================
   // TREE ASSET LOADING
@@ -418,6 +435,14 @@ export class Game {
     ) {
 
       this.loadLevel('highway')
+    }
+
+    if (
+      this.currentLevel === 'house' &&
+      this.input.consumePressed('KeyR')
+    ) {
+
+      this.respawn()
     }
 
 
@@ -1005,9 +1030,13 @@ if (this.loaded) {
 
           else {
 
+            this.spawnPoint = spawn.clone()
+
+            this.spawnYaw = spawnYaw ?? level.yaw
+
             this.player.reset(
-              spawn,
-              spawnYaw ?? level.yaw
+              this.spawnPoint,
+              this.spawnYaw
             )
 
           }
@@ -1033,6 +1062,10 @@ if (this.loaded) {
 
 
           this.loaded = true
+
+          window.dispatchEvent(
+            new CustomEvent('levelloaded', { detail: { levelName } })
+          )
 
           this.houseAudio.setHouseActive(
             levelName === 'house',
@@ -1099,6 +1132,10 @@ if (this.loaded) {
     this.levelTimer = 0
 
     this.pendingGhostName = null
+
+    this.spawnPoint = null
+
+    this.spawnYaw = 0
 
 
     if (
@@ -1287,9 +1324,22 @@ if (this.loaded) {
     if (hudMode) {
 
       hudMode.textContent =
-        this.player.flying
-          ? 'FLY'
-          : 'WALK'
+        this.currentLevel
+          ? `STATUS: ${this.player.flying ? 'FLYING' : 'EXPLORING'}`
+          : 'STATUS: STANDBY'
+    }
+
+    const hudLevel = document.getElementById('hudLevel')
+
+    if (hudLevel) {
+
+      const names = {
+        house: 'LEVEL 1: THE HOUSE',
+        train: 'LEVEL 2: UNDEAD TRAIN',
+        highway: 'LEVEL 3: PHANTOM HIGHWAY',
+      }
+
+      hudLevel.textContent = names[this.currentLevel] || 'CHOOSE A LEVEL'
     }
   }
 

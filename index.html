@@ -27,19 +27,32 @@
       }
       #hud {
         position: fixed;
-        top: 0;
-        left: 0;
+        top: 16px;
+        left: 16px;
         z-index: 10;
-        padding: 10px 14px;
-        color: #fff;
-        font-size: 13px;
-        line-height: 1.6;
-        background: rgba(0, 0, 0, 0.45);
-        border-radius: 0 0 8px 0;
+        width: 248px;
+        overflow: hidden;
+        color: #f8fafc;
+        background: linear-gradient(135deg, rgba(8, 12, 22, 0.9), rgba(22, 8, 17, 0.8));
+        border: 1px solid rgba(203, 213, 225, 0.28);
+        border-left: 3px solid #dc2626;
+        border-radius: 7px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
         pointer-events: none;
         user-select: none;
         font-variant-numeric: tabular-nums;
       }
+      .hud-title { padding: 10px 12px 9px; font-size: 10px; font-weight: 800; letter-spacing: 0.18em; color: #fca5a5; background: rgba(127, 29, 29, 0.22); }
+      .hud-level { padding: 11px 12px 7px; font-size: 17px; font-weight: 750; letter-spacing: 0.04em; }
+      .hud-status { padding: 0 12px 11px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: #67e8f9; }
+      .hud-stats { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid rgba(203, 213, 225, 0.16); background: rgba(0, 0, 0, 0.18); }
+      .hud-stat { padding: 8px 12px 9px; font-size: 11px; color: #94a3b8; }
+      .hud-stat + .hud-stat { border-left: 1px solid rgba(203, 213, 225, 0.16); }
+      .hud-stat span { display: block; margin-top: 2px; font-size: 12px; font-weight: 700; color: #e2e8f0; }
+      #crosshair { position: fixed; top: 50%; left: 50%; z-index: 9; width: 14px; height: 14px; border: 1px solid rgba(255, 255, 255, 0.8); border-radius: 50%; box-shadow: 0 0 7px rgba(0, 0, 0, 0.9); pointer-events: none; transform: translate(-50%, -50%); }
+      #crosshair::after { position: absolute; top: 50%; left: 50%; width: 3px; height: 3px; border-radius: 50%; background: #fff; content: ''; transform: translate(-50%, -50%); }
+      #hudControls { position: fixed; bottom: 16px; left: 50%; z-index: 10; padding: 8px 12px; color: #cbd5e1; font-size: 11px; letter-spacing: 0.04em; background: rgba(8, 12, 22, 0.76); border: 1px solid rgba(203, 213, 225, 0.2); border-radius: 5px; pointer-events: none; user-select: none; transform: translateX(-50%); }
+      #hudControls kbd, #respawnBtn kbd { padding: 1px 4px; color: #fff; font: inherit; font-weight: 700; background: rgba(255, 255, 255, 0.16); border-radius: 3px; }
       #overlay {
         position: fixed;
         inset: 0;
@@ -108,17 +121,27 @@
       #interactionPrompt.hidden {
         display: none;
       }
+      #respawnBtn { position: fixed; top: 14px; right: 14px; z-index: 11; padding: 9px 14px; border: 1px solid rgba(255, 255, 255, 0.55); border-radius: 6px; color: #fff; font: inherit; font-size: 14px; font-weight: 600; background: rgba(70, 10, 20, 0.82); cursor: pointer; }
+      #respawnBtn:hover { background: rgba(125, 20, 35, 0.92); }
+      #respawnBtn.hidden { display: none; }
     </style>
   </head>
   <body>
     <div id="app"></div>
 
     <div id="hud">
-      <div>pos: <span id="hudPos">0, 0, 0</span></div>
-      <div>fps: <span id="hudFps">0</span></div>
-      <div>mode: <span id="hudMode">WALK</span></div>
+      <div class="hud-title">EXORCIST // THE LAST RITES</div>
+      <div id="hudLevel" class="hud-level">CHOOSE A LEVEL</div>
+      <div id="hudMode" class="hud-status">STATUS: STANDBY</div>
+      <div class="hud-stats">
+        <div class="hud-stat">POSITION<span id="hudPos">0.0, 0.0, 0.0</span></div>
+        <div class="hud-stat">FPS<span id="hudFps">0</span></div>
+      </div>
     </div>
+    <div id="crosshair" aria-hidden="true"></div>
+    <div id="hudControls"><kbd>WASD</kbd> MOVE &nbsp; <kbd>E</kbd> INTERACT &nbsp; <kbd>F</kbd> FLY &nbsp; <kbd>ESC</kbd> MENU</div>
     <div id="interactionPrompt" class="hidden"></div>
+    <button id="respawnBtn" class="hidden" type="button">Respawn <kbd>R</kbd></button>
 
     <div id="overlay">
       <h1>Exorcist: The Last Rites</h1>

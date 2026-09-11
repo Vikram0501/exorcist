@@ -16,6 +16,9 @@ const overlay =
 const playBtn =
   document.getElementById('playBtn')
 
+const respawnBtn =
+  document.getElementById('respawnBtn')
+
 
 
 // ============================================
@@ -89,6 +92,30 @@ function disableLevelButtons() {
   level3Btn.disabled = true
 
 }
+
+
+window.addEventListener(
+  'levelloaded',
+  (event) => {
+
+    respawnBtn.classList.toggle(
+      'hidden',
+      event.detail.levelName !== 'house'
+    )
+  }
+)
+
+
+respawnBtn.addEventListener(
+  'click',
+  () => {
+
+    if (game.respawn()) {
+
+      game.input.lock()
+    }
+  }
+)
 
 
 function enableLevelButtons() {
