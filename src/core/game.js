@@ -87,6 +87,10 @@ export class Game {
       500
     )
 
+    // Keep camera-attached gameplay visuals (flashlight and item inspection
+    // meshes) inside the scene graph so the renderer traverses them.
+    this.scene.add(this.camera)
+
 
     // RENDERER
     this.renderer = new THREE.WebGLRenderer({
@@ -227,6 +231,96 @@ export class Game {
       document.getElementById(
         'interactionPrompt'
       )
+
+    this.investigationItems = []
+
+    this.newspaperRead = false
+
+    this.newspaperOpen = false
+
+    this.newspaperInspectionObject = null
+
+    this.newspaperDrag = null
+
+    this.newspaperPreview =
+      document.getElementById(
+        'newspaperTexturePreview'
+      )
+
+    this.evidenceNewspaperThumbnail =
+      document.getElementById(
+        'evidenceNewspaperThumbnail'
+      )
+
+    this.newspaperPreviewTransform = {
+      x: 10,
+      y: -14,
+      z: -4,
+      scale: 1,
+    }
+
+    this.evidenceBookOpen = false
+
+    this.newspaperReader =
+      document.getElementById(
+        'newspaperReader'
+      )
+
+    const closeNewspaperButton =
+      document.getElementById(
+        'closeNewspaperInspectBtn'
+      )
+
+    const closeEvidenceButton =
+      document.getElementById(
+        'closeEvidenceNotepadBtn'
+      )
+
+    const evidenceButton =
+      document.getElementById(
+        'evidenceBtn'
+      )
+
+    closeNewspaperButton?.addEventListener(
+      'click',
+      () => this.closeNewspaperReader()
+    )
+
+    closeEvidenceButton?.addEventListener(
+      'click',
+      () => this.closeEvidenceBook()
+    )
+
+    evidenceButton?.addEventListener(
+      'click',
+      () => this.openEvidenceBook()
+    )
+
+    this.newspaperReader?.addEventListener(
+      'pointerdown',
+      (event) => this.startNewspaperDrag(event)
+    )
+
+    this.newspaperReader?.addEventListener(
+      'pointermove',
+      (event) => this.dragNewspaper(event)
+    )
+
+    this.newspaperReader?.addEventListener(
+      'pointerup',
+      () => this.stopNewspaperDrag()
+    )
+
+    this.newspaperReader?.addEventListener(
+      'pointercancel',
+      () => this.stopNewspaperDrag()
+    )
+
+    this.newspaperReader?.addEventListener(
+      'wheel',
+      (event) => this.zoomNewspaper(event),
+      { passive: false },
+    )
 
 
     // GAME STATE
@@ -445,6 +539,14 @@ export class Game {
       this.respawn()
     }
 
+    if (
+      this.currentLevel === 'house' &&
+      this.input.consumePressed('KeyI')
+    ) {
+
+      this.openEvidenceBook()
+    }
+
 
 
     // ----------------------------------------
@@ -656,16 +758,32 @@ if (this.loaded) {
     const door =
       this.getLookedAtDoor()
 
+    const investigationItem =
+      this.currentLevel === 'house'
+        ? this.getLookedAtInvestigationItem()
+        : null
+
 
     if (
-      this.input.consumePressed('KeyE') &&
-      door
+      this.input.consumePressed('KeyE')
     ) {
 
-      toggleDoor(door, this.player.position)
+      if (
+        investigationItem &&
+        investigationItem.id === 'newspaper' &&
+        !this.newspaperRead
+      ) {
 
-      if (this.currentLevel === 'house') {
-        this.houseAudio.playDoor(door.isOpen)
+        this.openNewspaperReader(investigationItem)
+      }
+
+      else if (door) {
+
+        toggleDoor(door, this.player.position)
+
+        if (this.currentLevel === 'house') {
+          this.houseAudio.playDoor(door.isOpen)
+        }
       }
 
     }
@@ -716,7 +834,8 @@ if (this.loaded) {
 
 
     this.updateInteractionPrompt(
-      door
+      door,
+      investigationItem
     )
 
 
@@ -839,6 +958,7 @@ if (this.loaded) {
             finishZ,
             ghostName,
             trainTerrain,
+            investigationItems,
             moonLight,
             roadPath,
             arcLengths,
@@ -872,6 +992,11 @@ if (this.loaded) {
 
           this.doors =
             doors || []
+
+          this.investigationItems =
+            investigationItems || []
+
+          this.newspaperRead = false
 
           this.ramps =
             ramps || []
@@ -1133,6 +1258,14 @@ if (this.loaded) {
 
     this.pendingGhostName = null
 
+    this.investigationItems = []
+
+    this.newspaperRead = false
+
+    this.hideNewspaperReader()
+
+    this.closeEvidenceBook(true)
+
     this.spawnPoint = null
 
     this.spawnYaw = 0
@@ -1325,8 +1458,8 @@ if (this.loaded) {
 
       hudMode.textContent =
         this.currentLevel
-          ? `STATUS: ${this.player.flying ? 'FLYING' : 'EXPLORING'}`
-          : 'STATUS: STANDBY'
+          ? this.player.flying ? 'UNNATURAL ELEVATION' : 'ON FOOT'
+          : 'AWAITING ENTRY'
     }
 
     const hudLevel = document.getElementById('hudLevel')
@@ -1334,12 +1467,42 @@ if (this.loaded) {
     if (hudLevel) {
 
       const names = {
-        house: 'LEVEL 1: THE HOUSE',
-        train: 'LEVEL 2: UNDEAD TRAIN',
-        highway: 'LEVEL 3: PHANTOM HIGHWAY',
+        house: 'VALE MANOR',
+        train: 'NIGHT TRAIN',
+        highway: 'OLD HIGHWAY',
       }
 
-      hudLevel.textContent = names[this.currentLevel] || 'CHOOSE A LEVEL'
+      hudLevel.textContent = names[this.currentLevel] || 'NO LOCATION'
+    }
+
+    const hudObjective =
+      document.getElementById('hudObjective')
+
+    if (hudObjective) {
+
+      const isHouse = this.currentLevel === 'house'
+
+      hudObjective.style.display =
+        isHouse ? '' : 'none'
+
+      if (isHouse) {
+
+        hudObjective.textContent =
+          this.newspaperRead
+            ? 'ENTRY 01 — NEWSPAPER CLIPPING LOGGED'
+            : 'FIND THE NEWSPAPER ON THE PORCH'
+      }
+    }
+
+    const evidenceButton =
+      document.getElementById('evidenceBtn')
+
+    if (evidenceButton) {
+
+      evidenceButton.classList.toggle(
+        'hidden',
+        this.currentLevel !== 'house'
+      )
     }
   }
 
@@ -1348,6 +1511,336 @@ if (this.loaded) {
   // ============================================
   // DOOR INTERACTION
   // ============================================
+
+  getLookedAtInvestigationItem() {
+
+    if (!this.input.isLocked || !this.model) {
+
+      return null
+    }
+
+    this.raycaster.setFromCamera(
+      new THREE.Vector2(0, 0),
+      this.camera
+    )
+
+    const hits = this.raycaster.intersectObject(
+      this.model,
+      true
+    )
+
+    for (const hit of hits) {
+
+      let object = hit.object
+
+      while (object) {
+
+        const item = this.investigationItems.find(
+          (candidate) => candidate.object === object
+        )
+
+        if (item) {
+
+          return item
+        }
+
+        object = object.parent
+      }
+    }
+
+    return null
+  }
+
+
+  openNewspaperReader(investigationItem) {
+
+    if (!this.newspaperReader || this.newspaperOpen) {
+
+      return
+    }
+
+    this.newspaperOpen = true
+
+    this.newspaperRead = true
+
+    this.newspaperPreviewTransform = {
+      x: 10,
+      y: -14,
+      z: -4,
+      scale: 1,
+    }
+
+    const inspectionGroup = new THREE.Group()
+    inspectionGroup.name = 'newspaper-inspection-view'
+
+    const sourceMesh =
+      investigationItem.object.isMesh
+        ? investigationItem.object
+        : investigationItem.object.getObjectByProperty(
+            'isMesh',
+            true,
+          )
+
+    if (!sourceMesh) {
+
+      this.hideNewspaperReader()
+      return
+    }
+
+    const inspectionObject =
+      new THREE.Mesh(
+        sourceMesh.geometry,
+        Array.isArray(sourceMesh.material)
+          ? sourceMesh.material.map((material) => createInspectionMaterial(material))
+          : createInspectionMaterial(sourceMesh.material),
+      )
+
+    investigationItem.object.visible = false
+
+    inspectionObject.position.set(0, 0, 0)
+    // The porch plane is horizontal in the GLB (its normal points upward),
+    // so turn the picked-up copy toward the camera for inspection.
+    inspectionObject.rotation.set(Math.PI / 2, 0, 0)
+    inspectionObject.scale.set(1, 1, 1)
+    inspectionObject.updateMatrixWorld(true)
+
+    inspectionObject.visible = true
+    inspectionObject.frustumCulled = false
+
+    const inspectionMaterials =
+      Array.isArray(inspectionObject.material)
+        ? inspectionObject.material
+        : [inspectionObject.material]
+
+    for (const material of inspectionMaterials) {
+
+      if (!material?.map) continue
+
+      material.map.anisotropy =
+        this.renderer.capabilities.getMaxAnisotropy()
+
+      material.map.magFilter = THREE.LinearFilter
+      material.map.minFilter = THREE.LinearMipmapLinearFilter
+      material.map.needsUpdate = true
+    }
+
+    const sourceMaterial =
+      Array.isArray(sourceMesh.material)
+        ? sourceMesh.material[0]
+        : sourceMesh.material
+
+    if (this.newspaperPreview && sourceMaterial?.map?.image) {
+
+      const image = sourceMaterial.map.image
+      const canvas = document.createElement('canvas')
+      canvas.width = image.width
+      canvas.height = image.height
+
+      const context = canvas.getContext('2d')
+
+      if (context) {
+
+        context.drawImage(image, 0, 0)
+        const newspaperImageUrl = canvas.toDataURL('image/png')
+
+        this.newspaperPreview.src = newspaperImageUrl
+        this.newspaperPreview.classList.remove('hidden')
+        this.evidenceNewspaperThumbnail.src = newspaperImageUrl
+        this.updateNewspaperPreviewTransform()
+      }
+    }
+
+    const bounds = new THREE.Box3().setFromObject(
+      inspectionObject,
+    )
+    const centre = bounds.getCenter(new THREE.Vector3())
+    const size = bounds.getSize(new THREE.Vector3())
+    const largestDimension = Math.max(
+      size.x,
+      size.y,
+      size.z,
+      0.001,
+    )
+
+    inspectionObject.position.sub(centre)
+    inspectionObject.scale.setScalar(1.35 / largestDimension)
+    inspectionGroup.add(inspectionObject)
+    inspectionGroup.position.set(0, -0.1, -2.15)
+    inspectionGroup.rotation.set(0.12, -0.16, -0.08)
+    inspectionGroup.scale.setScalar(1)
+    this.camera.add(inspectionGroup)
+    this.newspaperInspectionObject = inspectionGroup
+
+    this.newspaperReader.classList.remove('hidden')
+
+    this.newspaperReader.classList.add('inspect-mode')
+
+    this.input.release()
+  }
+
+
+  closeNewspaperReader() {
+
+    if (!this.newspaperOpen) {
+
+      return
+    }
+
+    this.hideNewspaperReader()
+
+    this.input.lock()
+  }
+
+
+  startNewspaperDrag(event) {
+
+    if (!this.newspaperOpen || event.target.closest('button')) {
+
+      return
+    }
+
+    this.newspaperDrag = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    }
+
+    this.newspaperReader?.setPointerCapture(event.pointerId)
+  }
+
+
+  dragNewspaper(event) {
+
+    if (
+      !this.newspaperDrag ||
+      !this.newspaperInspectionObject ||
+      event.pointerId !== this.newspaperDrag.pointerId
+    ) {
+
+      return
+    }
+
+    const dx = event.clientX - this.newspaperDrag.x
+    const dy = event.clientY - this.newspaperDrag.y
+
+    this.newspaperDrag.x = event.clientX
+    this.newspaperDrag.y = event.clientY
+
+    this.newspaperInspectionObject.rotation.y += dx * 0.01
+    this.newspaperInspectionObject.rotation.x += dy * 0.01
+
+    this.newspaperPreviewTransform.y += dx * 0.5
+    this.newspaperPreviewTransform.x += dy * 0.5
+    this.updateNewspaperPreviewTransform()
+  }
+
+
+  stopNewspaperDrag() {
+
+    this.newspaperDrag = null
+  }
+
+
+  zoomNewspaper(event) {
+
+    if (!this.newspaperOpen || !this.newspaperInspectionObject) {
+
+      return
+    }
+
+    event.preventDefault()
+
+    const zoom = event.deltaY > 0 ? 0.9 : 1.1
+    const nextScale = THREE.MathUtils.clamp(
+      this.newspaperInspectionObject.scale.x * zoom,
+      0.55,
+      3.2,
+    )
+
+    this.newspaperInspectionObject.scale.setScalar(nextScale)
+
+    this.newspaperPreviewTransform.scale = THREE.MathUtils.clamp(
+      this.newspaperPreviewTransform.scale * zoom,
+      0.55,
+      3.2,
+    )
+    this.updateNewspaperPreviewTransform()
+  }
+
+
+  updateNewspaperPreviewTransform() {
+
+    if (!this.newspaperPreview) return
+
+    const transform = this.newspaperPreviewTransform
+
+    this.newspaperPreview.style.transform =
+      `translate(-50%, -50%) perspective(900px) ` +
+      `rotateX(${transform.x}deg) ` +
+      `rotateY(${transform.y}deg) ` +
+      `rotateZ(${transform.z}deg) ` +
+      `scale(${transform.scale})`
+  }
+
+
+  openEvidenceBook() {
+
+    if (this.currentLevel !== 'house' || this.evidenceBookOpen) {
+
+      return
+    }
+
+    const evidenceBook =
+      document.getElementById('evidenceBook')
+
+    if (!evidenceBook) {
+
+      return
+    }
+
+    this.evidenceBookOpen = true
+
+    evidenceBook.classList.toggle(
+      'has-evidence',
+      this.newspaperRead,
+    )
+
+    evidenceBook.classList.remove('hidden')
+
+    this.input.release()
+  }
+
+
+  closeEvidenceBook(fromLevelUnload = false) {
+
+    const evidenceBook =
+      document.getElementById('evidenceBook')
+
+    this.evidenceBookOpen = false
+
+    evidenceBook?.classList.add('hidden')
+
+    if (!fromLevelUnload && this.loaded) {
+
+      this.input.lock()
+    }
+  }
+
+
+  hideNewspaperReader() {
+
+    this.newspaperOpen = false
+
+    this.newspaperReader?.classList.add('hidden')
+    this.newspaperPreview?.classList.add('hidden')
+    this.newspaperPreview?.removeAttribute('src')
+
+    if (this.newspaperInspectionObject) {
+
+      this.camera.remove(this.newspaperInspectionObject)
+      this.newspaperInspectionObject = null
+    }
+  }
 
   getLookedAtDoor() {
 
@@ -1407,12 +1900,27 @@ if (this.loaded) {
     return null
   }
 
-  updateInteractionPrompt(door) {
+  updateInteractionPrompt(door, investigationItem = null) {
 
     if (!this.interactionPrompt) {
 
       return
 
+    }
+
+
+    if (investigationItem) {
+
+      this.interactionPrompt.textContent =
+        this.newspaperRead
+          ? 'Newspaper evidence logged'
+          : investigationItem.prompt
+
+      this.interactionPrompt
+        .classList
+        .remove('hidden')
+
+      return
     }
 
 
@@ -2819,6 +3327,20 @@ if (this.loaded) {
 // ============================================
 // CLEAN UP LEVEL
 // ============================================
+
+function createInspectionMaterial(source) {
+
+  return new THREE.MeshBasicMaterial({
+    map: source?.map || null,
+    color: source?.color || 0xffffff,
+    transparent: source?.transparent || false,
+    opacity: source?.opacity ?? 1,
+    alphaTest: source?.alphaTest || 0,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    depthWrite: false,
+  })
+}
 
 function disposeLevel(levelRoot) {
 

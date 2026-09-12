@@ -19,65 +19,22 @@ const playBtn =
 const respawnBtn =
   document.getElementById('respawnBtn')
 
-
-
-// ============================================
-// LEVEL SELECT MENU
-// ============================================
-
-playBtn.textContent =
-  'LEVEL 1 — HOUSE'
-
-
-const trainBtn =
-  playBtn.cloneNode(true)
-
-
-trainBtn.removeAttribute('id')
-
-trainBtn.textContent =
-  'LEVEL 2 — TRAIN'
+const trainBtn = document.getElementById('trainBtn')
+const level3Btn = document.getElementById('highwayBtn')
 
 
 
-const level3Btn =
-  playBtn.cloneNode(true)
+function resetLevelButtons() {
+  playBtn.innerHTML = `
+    <span class="level-card-number">LEVEL 01</span>
+    <span><strong class="level-card-title">Vale Manor</strong><small class="level-card-copy">Old Mill Road · A missing-person investigation</small></span>
+    <span class="level-card-action">ENTER</span>
+  `
 
-
-level3Btn.removeAttribute('id')
-
-level3Btn.textContent =
-  'LEVEL 3 — PHANTOM HIGHWAY'
-
-
-
-playBtn.insertAdjacentElement(
-  'afterend',
-  trainBtn
-)
-
-
-trainBtn.insertAdjacentElement(
-  'afterend',
-  level3Btn
-)
-
-
-
-// ============================================
-// ORIGINAL BUTTON TEXT
-// ============================================
-
-const HOUSE_TEXT =
-  'LEVEL 1 — HOUSE'
-
-const TRAIN_TEXT =
-  'LEVEL 2 — TRAIN'
-
-const HIGHWAY_TEXT =
-  'LEVEL 3 — PHANTOM HIGHWAY'
-
-
+  playBtn.disabled = false
+  trainBtn.disabled = true
+  level3Btn.disabled = true
+}
 
 // ============================================
 // BUTTON STATE
@@ -116,36 +73,6 @@ respawnBtn.addEventListener(
     }
   }
 )
-
-
-function enableLevelButtons() {
-
-  playBtn.disabled = false
-
-  trainBtn.disabled = false
-
-  level3Btn.disabled = false
-
-}
-
-
-function resetLevelButtons() {
-
-  playBtn.textContent =
-    HOUSE_TEXT
-
-  trainBtn.textContent =
-    TRAIN_TEXT
-
-  level3Btn.textContent =
-    HIGHWAY_TEXT
-
-
-
-  enableLevelButtons()
-
-}
-
 
 
 // ============================================
@@ -206,11 +133,7 @@ async function startLevel(
     )
 
 
-    button.textContent =
-      'FAILED — TRY AGAIN'
-
-
-    enableLevelButtons()
+    resetLevelButtons()
 
   }
 

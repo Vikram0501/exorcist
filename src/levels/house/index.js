@@ -344,6 +344,9 @@ export async function loadHouse(level) {
   const doors = createInteractiveDoors(model)
   model.updateMatrixWorld(true)
 
+  const investigationItems =
+    createInvestigationItems(model)
+
   // Build the collision Octree from the labelled structural meshes in THIS
   // model, using their final world transforms. No second GLB, no alignment drift.
   const {
@@ -361,14 +364,14 @@ export async function loadHouse(level) {
     setupHouseLighting(level, model, size)
 
   const spawn = new THREE.Vector3(
-    1.8,
-    5.5,
-    -20.0,
+    1,
+    2,
+    25,
   )
 
   // Face toward the centre of the house on spawn. Player.getForward() uses
   // (-sin(yaw), 0, -cos(yaw)), so derive yaw from the target direction.
-  const houseTarget = new THREE.Vector3(0, spawn.y, 0)
+  const houseTarget = new THREE.Vector3(0, 2, 0)
   const toHouse = houseTarget.clone().sub(spawn)
   const spawnYaw = Math.atan2(
     -toHouse.x,
@@ -391,6 +394,7 @@ export async function loadHouse(level) {
     colliderHelpers: [],
     lightHelpers,
     doors,
+    investigationItems,
     ramps: [],
     model,
     spawn,
@@ -1415,4 +1419,29 @@ function copyTriangles(sourceGeometry, triangleIndices) {
   }
 
   return geometry
+}
+
+
+function createInvestigationItems(model) {
+
+  const newspaper =
+    findObjectCaseInsensitive(
+      model,
+      'Newspaper_front',
+    )
+
+  if (!newspaper) {
+
+    console.warn(
+      'House investigation prop not found: Newspaper_front',
+    )
+
+    return []
+  }
+
+  return [{
+    id: 'newspaper',
+    object: newspaper,
+    prompt: 'Press E to read the newspaper',
+  }]
 }
