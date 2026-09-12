@@ -279,7 +279,9 @@
       .evidence-notepad p { font-size: 14px; line-height: 1.6; }
       .evidence-notepad .evidence-entry { display: none; }
       #evidenceBook.has-evidence .evidence-empty { display: none; }
-      #evidenceBook.has-evidence .evidence-entry { display: flex; gap: 18px; }
+      #evidenceBook.has-newspaper-evidence [data-evidence="newspaper"],
+      #evidenceBook.has-frame-evidence [data-evidence="frame"],
+      #evidenceBook.has-tableware-evidence [data-evidence="tableware"] { display: flex; gap: 18px; }
       .evidence-entry-number { font: 700 30px Georgia, serif; color: #795548; }
       .evidence-thumbnail {
         display: block;
@@ -372,11 +374,12 @@
     <button id="respawnBtn" class="hidden" type="button">Respawn <kbd>R</kbd></button>
     <button id="evidenceBtn" class="hidden" type="button">Evidence <kbd>I</kbd></button>
     <div id="newspaperReader" class="hidden" role="dialog" aria-modal="true" aria-labelledby="newspaperHeadline">
-      <img id="newspaperTexturePreview" class="hidden" alt="Newspaper clipping found on the front porch" decoding="sync" />
+      <img id="newspaperTexturePreview" class="hidden" alt="Inspectable evidence" decoding="sync" />
       <section id="newspaperInspectionPanel">
-        <div class="evidence-label">FOUND ON FRONT PORCH</div>
+        <div id="inspectionFoundAt" class="evidence-label">FOUND ON FRONT PORCH</div>
         <h2 id="newspaperInspectTitle">Newspaper clipping</h2>
-        <p>Inspect the original clipping, then return to the house.</p>
+        <p id="inspectionStoryNote">Inspect the original clipping, then return to the house.</p>
+        <p id="inspectionRiteNote"></p>
         <p class="newspaper-controls">Drag to rotate Â· Scroll to zoom</p>
         <button id="closeNewspaperInspectBtn" type="button">CLOSE INSPECTION</button>
       </section>
@@ -403,13 +406,33 @@
           <p>No evidence logged yet.</p>
           <p>Inspect the newspaper on the front porch to begin the investigation.</p>
         </div>
-        <div class="evidence-entry">
+        <div class="evidence-entry" data-evidence="newspaper">
           <div class="evidence-entry-number">01</div>
           <img id="evidenceNewspaperThumbnail" class="evidence-thumbnail" alt="Newspaper clipping evidence" />
           <div class="evidence-entry-details">
             <h3>Newspaper clipping</h3>
             <p class="evidence-clue">Missing-person article connected to the Vale house.</p>
             <p><strong>Found:</strong> Front porch</p>
+            <span class="evidence-stamp">LOGGED</span>
+          </div>
+        </div>
+        <div class="evidence-entry" data-evidence="frame">
+          <div class="evidence-entry-number">02</div>
+          <div class="evidence-entry-details">
+            <h3>Vale family photograph</h3>
+            <p class="evidence-clue">Story: Evelyn holds Margaret's music box in the photograph.</p>
+            <p><strong>Exorcism:</strong> The music box is Evelyn's anchor; use it in her release rite.</p>
+            <p><strong>Found:</strong> Entrance room</p>
+            <span class="evidence-stamp">LOGGED</span>
+          </div>
+        </div>
+        <div class="evidence-entry" data-evidence="tableware">
+          <div class="evidence-entry-number">03</div>
+          <div class="evidence-entry-details">
+            <h3>Fourth place setting</h3>
+            <p class="evidence-clue">Story: Four places are laid for a family of three.</p>
+            <p><strong>Exorcism:</strong> A second spirit is present. Evelyn is not the only dead person here.</p>
+            <p><strong>Found:</strong> Dining room</p>
             <span class="evidence-stamp">LOGGED</span>
           </div>
         </div>

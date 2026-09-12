@@ -106,33 +106,26 @@ The house once belonged to the **Vale family**:
 - Margaret Vale — mother
 - Evelyn Vale — daughter
 
-Margaret became ill and died.
+Margaret became ill and died. After her funeral, young Evelyn began saying that
+"the man from the barn" was walking through the house at night. Daniel assumed
+she was grieving and invented the story to get attention.
 
-After her death, Evelyn began hearing footsteps and voices inside the house.
+The activity escalated: food appeared spoiled overnight, the telephone rang with
+no caller, and heavy footsteps crossed the upstairs hall. Daniel began to fear
+Evelyn instead of protecting her. He shut her in the small upstairs annex beside
+her bedroom, believing isolation would stop the disturbances.
 
-She believed her mother was still present.
+Evelyn scratched messages into the annex wall: the man was real, he was angry,
+and he wanted the house back. During one final violent night, Daniel abandoned
+the house. Evelyn died trapped in the annex.
 
-Daniel initially believed the same thing.
+Daniel secretly buried her behind the barn in an unmarked child-sized grave,
+hid her music box among the barn's old possessions, and told police that she
+ran away. The house was abandoned soon after.
 
-The activity became increasingly disturbing.
-
-Eventually Daniel became convinced that something supernatural was following Evelyn.
-
-He became frightened of his daughter and began isolating her.
-
-He eventually imprisoned Evelyn inside a concealed room upstairs.
-
-Evelyn insisted that the paranormal presence was **not inside her**.
-
-She repeatedly described seeing a strange man inside and around the house.
-
-During a violent paranormal event, Evelyn was trapped inside the hidden room and died.
-
-Daniel concealed her death and told people that she had run away.
-
-The house was eventually abandoned.
-
-Decades later, Evelyn still haunts the property.
+Decades later, Evelyn remains tied to the house and her music box. She wants the
+exorcist to find her grave and tell the truth; the other presence wants those
+facts to stay buried.
 
 ---
 
@@ -166,7 +159,11 @@ Her paranormal activity tends to:
 
 ### The Other Presence
 
-The second ghost is a tall human figure connected to the house from before the Vale family lived there.
+The second ghost is **Elias Wren**, a tall human figure connected to the property
+before the Vale family lived there. He was the estate caretaker and died in an
+old barn accident; no record says where he was buried. He treats every family
+who lives here as an intruder. His incomplete history is the unresolved hook for
+the next case.
 
 It should still clearly look like a **dead human**, not a demon.
 
@@ -198,7 +195,8 @@ Margaret gave it to Evelyn when she was young.
 
 After Margaret died, Evelyn used the music box for comfort.
 
-Evelyn had it with her shortly before her death.
+Evelyn had it with her shortly before her death. Daniel later hid it in the
+barn with the belongings he could not bring himself to destroy.
 
 The strong emotional connection caused the object to become a paranormal anchor.
 
@@ -220,12 +218,13 @@ Progression should usually happen because the player has discovered something im
 
 Examples:
 
-- Reading a diary causes footsteps upstairs.
-- Investigating the bathroom causes Evelyn to leave a message.
-- Discovering the hidden room causes the house to change.
-- Learning about the shed causes the back door to open.
-- Taking the music box begins the first chase.
-- Completing the investigation allows the exorcism to begin.
+- Inspecting the family photograph and funeral programme causes footsteps upstairs.
+- Hearing the kitchen telephone directs the player to Evelyn's bedroom.
+- Reading Evelyn's diary opens the annex door beside her bedroom.
+- Investigating the bathroom mirror reveals that the man is connected to the barn.
+- Finding Daniel's confession in the large upstairs room reveals the grave site.
+- Taking the music box from the barn begins the return chase.
+- Completing the investigation allows the grave-side exorcism to begin.
 
 ---
 
@@ -233,27 +232,53 @@ Examples:
 
 The intended broad flow is:
 
-**Front Yard  
-→ Front Porch  
-→ Living / Fireplace Room  
-→ Dining Room  
-→ Kitchen  
-→ Upstairs Hallway  
-→ Evelyn's Bedroom  
-→ Bathroom  
-→ Parents' Bedroom  
-→ Hidden Room  
-→ Downstairs  
-→ Backyard  
-→ Road Event  
-→ Shed  
-→ Backyard Chase  
-→ House Under Full Haunting  
-→ Hidden Room Revisit  
-→ Exorcism Room  
-→ Front Yard Ending**
+1. Front yard → front porch: newspaper
+2. Entrance room: enter the house
+3. Dining room: Vale family photograph and Margaret's funeral programme
+4. Kitchen: impossible telephone call / figure at the window
+5. Upstairs hall: footsteps and first Evelyn glimpse
+6. Child's bedroom: diary and music-box melody
+7. Small upstairs annex: scratches, restraint and Evelyn's final message
+8. Bathroom: mirror message points to the barn
+9. Large upstairs room: Daniel's confession and a map to the grave
+10. Downstairs / backyard → barn: recover the music box and learn the older spirit's name
+11. Cemetery / grave plot: find Evelyn's unmarked grave
+12. Chase back through the yard → grave-side exorcism → front-yard ending
 
 The player may have some freedom within sections, especially upstairs, but the overall escalation remains controlled.
+
+---
+
+## Room-by-Room Gameplay Contract
+
+This is the level's implementation order. Each room introduces one story fact,
+one interaction, and one paranormal response; no room is a filler stop.
+
+| Space | Story / player action | Required prop(s) | Paranormal payoff |
+| --- | --- | --- | --- |
+| Front porch | Read the missing-person newspaper. | Newspaper (complete) | A knock from inside invites the player in. |
+| Entrance room | Cross the threshold and orient in the house. | Optional coat stand / lamp | Front door shuts or the lamp flickers behind the player. |
+| Entrance / dining room | Learn the Vale family existed and Margaret died. | `Frame1` (Vale family photo), funeral programme | The kitchen telephone begins ringing. |
+| Kitchen | Hear Evelyn's distress and see the threat for the first time. | `Phone`, window curtain | Answering it directs the player upstairs. |
+| Child's bedroom | Learn Evelyn knew the man was real. | Bed, diary, small toys | A music-box melody comes from the annex. |
+| Small upstairs annex | Confirm Evelyn was imprisoned here. | Child's blanket, restraint/chain, wall scratches | Evelyn's warning opens the bathroom objective. |
+| Bathroom | Receive the direction to the barn. | Mirror | “BARN” appears in condensation. |
+| Large upstairs room | Learn Daniel buried Evelyn and locate the grave. | Desk/table, confession letter, hand-drawn yard map | The room darkens; Elias appears in the doorway. |
+| Barn | Recover the anchor and identify the older spirit. | Music box, old caretaker record / ledger | The barn door shuts; chase begins. |
+| Cemetery / grave plot | Confirm Evelyn's burial and perform the release. | One unmarked child grave, optional Vale marker, rite items | Final manifestation and exorcism. |
+
+### Asset Ownership
+
+The environment artist supplies the listed GLB props as separate, clearly named
+objects. The game implementation handles placement, interaction prompts, UI,
+audio, lights, visibility, animations, triggers, ghost appearances, objectives,
+the chase, and the exorcism logic.
+
+Use these object names where possible: `Frame1`,
+`Funeral_Programme_Margaret`, `Phone`, `Diary_Evelyn`,
+`Blanket_Annex`, `Restraint_Annex`, `Mirror_Bathroom`,
+`Letter_Daniel_Confession`, `Map_Grave_Site`, `MusicBox_Evelyn`,
+`Ledger_Elias_Wren`, and `Grave_Evelyn_Unmarked`.
 
 ---
 
@@ -261,68 +286,57 @@ The player may have some freedom within sections, especially upstairs, but the o
 
 ### Stage 1 — Curiosity
 
-- Strange light upstairs
-- Old missing-person article
-- Knocking from inside the house
+- Newspaper identifies Evelyn and the lie that she ran away.
+- A light or knock draws the player from the entrance room to the dining room.
+- The family photograph shows Margaret, Daniel and Evelyn before the haunting.
 
 ### Stage 2 — Unease
 
-- Footsteps upstairs
-- Objects moving slightly
-- Family photographs altered
-- Sounds coming from empty rooms
+- The kitchen telephone rings; only static and a frightened child can be heard.
+- A tall figure is visible outside the kitchen window, then gone.
+- Heavy footsteps cross the upstairs hall after the call ends.
 
 ### Stage 3 — Apparitions
 
-- Evelyn at the top of the stairs
-- Figure outside the kitchen window
-- Movement behind curtains
-- Reflections that do not match the room
+- Evelyn appears briefly at the top of the stairs, then leads the player to her bedroom.
+- Her diary says that a man watches from the barn and that her father will not listen.
+- Her music-box melody plays from behind the annex door.
 
 ### Stage 4 — Communication
 
-- Writing on the bathroom mirror
-- Music box playing by itself
-- Diary clues
-- Evelyn directly warning the player
+- The annex contains scratches, a child's blanket and Evelyn's warning: "HE IS NOT MOTHER."
+- The bathroom mirror writes: "BARN."
+- Daniel's confession in the large upstairs room admits he buried Evelyn behind it.
 
 ### Stage 5 — Threat
 
-- Heavy footsteps
-- Violent object movement
-- Blood appearing
-- Rooms changing
-- Second ghost appearing more frequently
+- The house reacts violently once the player knows the truth.
+- The older ghost becomes visible in doorways and throws or moves objects.
+- Evelyn's manifestations become protective rather than threatening.
 
 ### Stage 6 — Chase
 
-- Music box removed from the shed
-- Second ghost becomes openly hostile
-- Player runs back to the house
-- Doors and objects interfere with escape
+- In the barn, the player finds Evelyn's music box and a record naming the former caretaker, Elias Wren.
+- The music box reveals the route to the small cemetery / grave plot.
+- Evelyn's unmarked grave confirms Daniel's confession.
 
 ### Stage 7 — Full Haunting
 
-- House layout feels unstable
-- Lights fail
-- Furniture moves
-- Blood and damage appear
-- Ghost appearances become aggressive
+- Recovering the music box makes Elias openly hostile.
+- The player escapes the barn and crosses the yard to the grave while doors, lights and objects interfere.
+- Elias appears closer every time the player looks away.
 
 ### Stage 8 — Exorcism
 
-- Player prepares the final room
-- Evelyn manifests
-- Second ghost attempts to interrupt
-- Player completes the rite
-- Evelyn is released
+- The player places Evelyn's photograph, music box and exorcist equipment at her grave.
+- They identify Evelyn, her death and Daniel's responsibility while keeping the rite intact.
+- Evelyn manifests, Elias tries to interrupt, and Evelyn is released.
 
 ### Stage 9 — Final Sting
 
-- House becomes calm
-- Player leaves
-- Second ghost appears in the upstairs window
-- The case is only partially solved
+- The yard becomes quiet and Evelyn's grave is no longer disturbed.
+- As the player leaves, Elias appears in the large upstairs window.
+- Evelyn's case is closed; the older spirit remains.
 
 ---
 
@@ -355,7 +369,7 @@ Possible actions:
 - Identify how she died
 - Keep candles lit
 - Use holy water
-- Continue the rite while the room reacts
+- Continue the rite while the grave site reacts
 - Open the music box during the final stage
 
 The exorcism should look like a **religious / spiritual rite performed by an exorcist**, not an occult ritual.
@@ -540,6 +554,6 @@ Before adding detailed gameplay scripting:
 
 The first playable milestone should be:
 
-**Front Yard → Porch → Living Room → First Evidence → Upstairs Footsteps**
+**Front Yard → Porch → Entrance Room → Dining Room → Upstairs Footsteps**
 
 That small section should establish the visual quality, interaction system, lighting style, audio style, and paranormal-event system before the rest of the house is built.

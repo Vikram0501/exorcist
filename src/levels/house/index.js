@@ -1,11 +1,14 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { Octree } from 'three/addons/math/Octree.js'
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { setupHouseLighting } from './lighting.js'
 
 // Current house scene exported from Blender. Includes the surrounding forest and
 // four boundary meshes named Plane, Plane.001, Plane.002 and Plane.003.
-const HOUSE_MODEL_URL = '/models/House.glb'
+// Generated from House.glb with WebP textures and meshopt compression. Keep
+// the Blender export beside it as the editable source asset.
+const HOUSE_MODEL_URL = '/models/House.optimized.glb'
 const HOUSE_SCALE = 0.15
 
 const DOOR_SPEED = 12
@@ -87,6 +90,24 @@ const FURNITURE_COLLISION_NAMES = new Set([
   'furniture',
 ])
 
+// These meshes need collision even though their Blender-generated names do not
+// identify their purpose. Keeping them explicit prevents future exports from
+// silently making their geometry walk-through.
+const EXPLICIT_COLLISION_MESH_NAMES = new Set([
+  'material3.014',
+  'material3.031',
+  'material3.047',
+  'material3.065',
+  'all furniture',
+  'furniture',
+  'house floor',
+])
+
+// House Floor is a Blender helper mesh: it is collision-only at runtime.
+const HIDDEN_RENDER_MESH_NAMES = new Set([
+  'house floor',
+])
+
 // Player HUD X/Z coordinates of the two doors whose hinges
 // need to be changed to the opposite side.
 const DOOR_HINGE_SWAP_TARGETS = [
@@ -117,7 +138,10 @@ function shouldUseForCollision(object) {
   }
 
   // Indoor furniture
-  if (FURNITURE_COLLISION_NAMES.has(name)) {
+  if (
+    FURNITURE_COLLISION_NAMES.has(name) ||
+    EXPLICIT_COLLISION_MESH_NAMES.has(name)
+  ) {
     return true
   }
 
@@ -134,6 +158,42 @@ function shouldUseForCollision(object) {
     (keyword) =>
       name.includes(keyword),
   )
+}
+
+function shouldHideAtRuntime(object) {
+  const name = (object?.name || '')
+    .trim()
+    .toLowerCase()
+
+  return HIDDEN_RENDER_MESH_NAMES.has(name)
+}
+
+function getPlacementBox(root) {
+  const box = new THREE.Box3()
+
+  root.traverse((object) => {
+    if (
+      !object.isMesh ||
+      shouldHideAtRuntime(object)
+    ) {
+      return
+    }
+
+    if (!object.geometry.boundingBox) {
+      object.geometry.computeBoundingBox()
+    }
+
+    box.union(
+      object.geometry.boundingBox
+        .clone()
+        .applyMatrix4(object.matrixWorld),
+    )
+  })
+
+  // Keep the loader resilient to a malformed export with no renderable mesh.
+  return box.isEmpty()
+    ? new THREE.Box3().setFromObject(root)
+    : box
 }
 
 // -----------------------------------------------------------------------------
@@ -286,6 +346,7 @@ export function getDoorColliders(doors) {
 
 export async function loadHouse(level) {
   const loader = new GLTFLoader()
+  loader.setMeshoptDecoder(MeshoptDecoder)
   const gltf = await loader.loadAsync(HOUSE_MODEL_URL)
   const model = gltf.scene
 
@@ -296,8 +357,15 @@ export async function loadHouse(level) {
 
   model.scale.setScalar(HOUSE_SCALE)
 
- model.traverse((child) => {
+  model.traverse((child) => {
   if (!child.isMesh) return
+
+  if (shouldHideAtRuntime(child)) {
+    child.visible = false
+    child.castShadow = false
+    child.receiveShadow = false
+    return
+  }
 
   if (isBoundaryCollisionMesh(child)) {
     console.log(
@@ -315,7 +383,7 @@ export async function loadHouse(level) {
 
   child.castShadow = false
   child.receiveShadow = true
-})
+  })
 
   model.updateMatrixWorld(true)
 
@@ -325,7 +393,9 @@ export async function loadHouse(level) {
   const placementRoot =
     findObjectCaseInsensitive(model, 'world') || model
 
-  const initialBox = new THREE.Box3().setFromObject(placementRoot)
+  // Do not let collision-only Blender helpers alter the visual house origin.
+  // In particular, House Floor is deliberately much larger than the house.
+  const initialBox = getPlacementBox(placementRoot)
   const initialCenter = initialBox.getCenter(
     new THREE.Vector3(),
   )
@@ -1423,25 +1493,98 @@ function copyTriangles(sourceGeometry, triangleIndices) {
 
 
 function createInvestigationItems(model) {
-
   const newspaper =
     findObjectCaseInsensitive(
       model,
       'Newspaper_front',
     )
 
-  if (!newspaper) {
+  const frame =
+    findObjectCaseInsensitive(
+      model,
+      'Frame1',
+    )
 
+  const phone =
+    findObjectCaseInsensitive(
+      model,
+      'Phone',
+    )
+
+  const tableSetting =
+    findObjectCaseInsensitive(
+      model,
+      'Table Set',
+    )
+
+  const items = []
+
+  if (newspaper) {
+    items.push({
+      id: 'newspaper',
+      object: newspaper,
+      prompt: 'Press E to read the newspaper',
+      title: 'Newspaper clipping',
+      foundAt: 'Front porch',
+      storyNote:
+        'Evelyn Vale vanished from this house. Daniel said she ran away, but neighbours heard a girl crying.',
+      riteNote:
+        'Rite fact: the spirit must be called Evelyn Vale, not “the Vale girl.”',
+      removeOnInspect: true,
+    })
+  } else {
     console.warn(
       'House investigation prop not found: Newspaper_front',
     )
-
-    return []
   }
 
-  return [{
-    id: 'newspaper',
-    object: newspaper,
-    prompt: 'Press E to read the newspaper',
-  }]
+  if (frame) {
+    items.push({
+      id: 'vale-frame',
+      object: frame,
+      prompt: 'Press E to inspect the Vale family photograph',
+      title: 'Vale family photograph',
+      foundAt: 'Entrance room',
+      storyNote:
+        'Daniel, Margaret and Evelyn are pictured together. Evelyn is holding a small music box.',
+      riteNote:
+        'Rite fact: the music box belonged to Margaret Vale and is Evelyn’s likely anchor.',
+    })
+  } else {
+    console.warn(
+      'House investigation prop not found: Frame1',
+    )
+  }
+
+  if (phone) {
+    items.push({
+      id: 'kitchen-phone',
+      object: phone,
+      prompt: 'The telephone is silent',
+    })
+  } else {
+    console.warn(
+      'House investigation prop not found: Phone',
+    )
+  }
+
+  if (tableSetting) {
+    items.push({
+      id: 'fourth-place-setting',
+      object: tableSetting,
+      prompt: 'Press E to inspect the fourth place setting',
+      title: 'Fourth place setting',
+      foundAt: 'Dining room',
+      storyNote:
+        'The table is laid for four, although the Vale family had only three members.',
+      riteNote:
+        'Rite fact: another presence is in the house. Do not confuse it with Evelyn during the release.',
+    })
+  } else {
+    console.warn(
+      'House investigation prop not found: Table Set',
+    )
+  }
+
+  return items
 }

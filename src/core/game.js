@@ -234,7 +234,13 @@ export class Game {
 
     this.investigationItems = []
 
+    this.inspectedEvidence = new Set()
+
     this.newspaperRead = false
+
+    this.valeFrameInspected = false
+
+    this.kitchenPhoneAnswered = false
 
     this.newspaperOpen = false
 
@@ -777,6 +783,38 @@ if (this.loaded) {
         this.openNewspaperReader(investigationItem)
       }
 
+      else if (
+        investigationItem &&
+        investigationItem.id === 'vale-frame' &&
+        this.newspaperRead &&
+        !this.valeFrameInspected
+      ) {
+
+        this.inspectValeFrame(investigationItem)
+      }
+
+      else if (
+        investigationItem &&
+        investigationItem.id === 'fourth-place-setting' &&
+        this.newspaperRead &&
+        !this.inspectedEvidence.has(
+          investigationItem.id,
+        )
+      ) {
+
+        this.openNewspaperReader(investigationItem)
+      }
+
+      else if (
+        investigationItem &&
+        investigationItem.id === 'kitchen-phone' &&
+        this.valeFrameInspected &&
+        !this.kitchenPhoneAnswered
+      ) {
+
+        this.answerKitchenPhone()
+      }
+
       else if (door) {
 
         toggleDoor(door, this.player.position)
@@ -996,7 +1034,13 @@ if (this.loaded) {
           this.investigationItems =
             investigationItems || []
 
+          this.inspectedEvidence = new Set()
+
           this.newspaperRead = false
+
+          this.valeFrameInspected = false
+
+          this.kitchenPhoneAnswered = false
 
           this.ramps =
             ramps || []
@@ -1260,7 +1304,13 @@ if (this.loaded) {
 
     this.investigationItems = []
 
+    this.inspectedEvidence = new Set()
+
     this.newspaperRead = false
+
+    this.valeFrameInspected = false
+
+    this.kitchenPhoneAnswered = false
 
     this.hideNewspaperReader()
 
@@ -1491,6 +1541,19 @@ if (this.loaded) {
           this.newspaperRead
             ? 'ENTRY 01 — NEWSPAPER CLIPPING LOGGED'
             : 'FIND THE NEWSPAPER ON THE PORCH'
+
+        if (this.newspaperRead) {
+          if (!this.valeFrameInspected) {
+            hudObjective.textContent =
+              'ENTER THE HOUSE AND INSPECT THE FAMILY FRAME'
+          } else if (!this.kitchenPhoneAnswered) {
+            hudObjective.textContent =
+              'ANSWER THE RINGING KITCHEN TELEPHONE'
+          } else {
+            hudObjective.textContent =
+              'FOLLOW THE FOOTSTEPS UPSTAIRS'
+          }
+        }
       }
     }
 
@@ -1561,7 +1624,17 @@ if (this.loaded) {
 
     this.newspaperOpen = true
 
-    this.newspaperRead = true
+    this.inspectedEvidence.add(
+      investigationItem.id,
+    )
+
+    if (investigationItem.id === 'newspaper') {
+      this.newspaperRead = true
+    }
+
+    this.setInspectionPanelContent(
+      investigationItem,
+    )
 
     this.newspaperPreviewTransform = {
       x: 10,
@@ -1595,7 +1668,9 @@ if (this.loaded) {
           : createInspectionMaterial(sourceMesh.material),
       )
 
-    investigationItem.object.visible = false
+    if (investigationItem.removeOnInspect) {
+      investigationItem.object.visible = false
+    }
 
     inspectionObject.position.set(0, 0, 0)
     // The porch plane is horizontal in the GLB (its normal points upward),
@@ -1645,7 +1720,12 @@ if (this.loaded) {
 
         this.newspaperPreview.src = newspaperImageUrl
         this.newspaperPreview.classList.remove('hidden')
-        this.evidenceNewspaperThumbnail.src = newspaperImageUrl
+
+        if (investigationItem.id === 'newspaper') {
+          this.evidenceNewspaperThumbnail.src =
+            newspaperImageUrl
+        }
+
         this.updateNewspaperPreviewTransform()
       }
     }
@@ -1676,6 +1756,74 @@ if (this.loaded) {
     this.newspaperReader.classList.add('inspect-mode')
 
     this.input.release()
+  }
+
+  setInspectionPanelContent(investigationItem) {
+
+    const foundAt = document.getElementById(
+      'inspectionFoundAt',
+    )
+    const title = document.getElementById(
+      'newspaperInspectTitle',
+    )
+    const storyNote = document.getElementById(
+      'inspectionStoryNote',
+    )
+    const riteNote = document.getElementById(
+      'inspectionRiteNote',
+    )
+
+    if (foundAt) {
+      foundAt.textContent =
+        'FOUND: ' +
+        (investigationItem.foundAt || 'Vale Manor')
+    }
+
+    if (title) {
+      title.textContent =
+        investigationItem.title || 'Evidence'
+    }
+
+    if (storyNote) {
+      storyNote.textContent =
+        investigationItem.storyNote ||
+        'Inspect the evidence carefully.'
+    }
+
+    if (riteNote) {
+      riteNote.textContent =
+        investigationItem.riteNote
+          ? 'EXORCISM NOTE — ' +
+            investigationItem.riteNote
+          : ''
+    }
+
+    if (this.newspaperPreview) {
+      this.newspaperPreview.alt =
+        investigationItem.title || 'Inspectable evidence'
+    }
+  }
+
+
+  inspectValeFrame(investigationItem) {
+
+    this.valeFrameInspected = true
+
+    // The phone's changed prompt is the immediate, in-world instruction:
+    // the player is not sent to a detached quest marker.
+    this.houseAudio.playRandomGhostSound()
+
+    this.openNewspaperReader(investigationItem)
+  }
+
+
+  answerKitchenPhone() {
+
+    this.kitchenPhoneAnswered = true
+
+    // A short ghost vocal is used as Evelyn's distorted message until a
+    // dedicated telephone recording is supplied.
+    this.houseAudio.playRandomGhostSound()
   }
 
 
@@ -1802,7 +1950,24 @@ if (this.loaded) {
 
     evidenceBook.classList.toggle(
       'has-evidence',
-      this.newspaperRead,
+      this.inspectedEvidence.size > 0,
+    )
+
+    evidenceBook.classList.toggle(
+      'has-newspaper-evidence',
+      this.inspectedEvidence.has('newspaper'),
+    )
+
+    evidenceBook.classList.toggle(
+      'has-frame-evidence',
+      this.inspectedEvidence.has('vale-frame'),
+    )
+
+    evidenceBook.classList.toggle(
+      'has-tableware-evidence',
+      this.inspectedEvidence.has(
+        'fourth-place-setting',
+      ),
     )
 
     evidenceBook.classList.remove('hidden')
@@ -1912,9 +2077,9 @@ if (this.loaded) {
     if (investigationItem) {
 
       this.interactionPrompt.textContent =
-        this.newspaperRead
-          ? 'Newspaper evidence logged'
-          : investigationItem.prompt
+        this.getInvestigationPrompt(
+          investigationItem,
+        )
 
       this.interactionPrompt
         .classList
@@ -1944,6 +2109,48 @@ if (this.loaded) {
     this.interactionPrompt
       .classList
       .remove('hidden')
+  }
+
+  getInvestigationPrompt(investigationItem) {
+
+    switch (investigationItem.id) {
+      case 'newspaper':
+        return this.newspaperRead
+          ? 'Newspaper evidence logged'
+          : investigationItem.prompt
+
+      case 'vale-frame':
+        if (!this.newspaperRead) {
+          return 'Log the porch newspaper first'
+        }
+
+        return this.valeFrameInspected
+          ? 'The Vale family: Daniel, Margaret and Evelyn'
+          : investigationItem.prompt
+
+      case 'kitchen-phone':
+        if (!this.valeFrameInspected) {
+          return 'The telephone is silent'
+        }
+
+        return this.kitchenPhoneAnswered
+          ? 'A child whispered: “Upstairs.”'
+          : 'Press E to answer the ringing telephone'
+
+      case 'fourth-place-setting':
+        if (!this.newspaperRead) {
+          return 'Log the porch newspaper first'
+        }
+
+        return this.inspectedEvidence.has(
+          investigationItem.id,
+        )
+          ? 'Fourth place-setting evidence logged'
+          : investigationItem.prompt
+
+      default:
+        return investigationItem.prompt
+    }
   }
 
 
