@@ -45,6 +45,7 @@ import {
 } from '../levels/house/index.js'
 
 import { loadTrain } from '../levels/train/index.js'
+import { createFlashlight } from '../levels/shared/lighting.js'
 
 
 const DOOR_INTERACTION_RANGE = 3
@@ -553,6 +554,16 @@ export class Game {
       this.openEvidenceBook()
     }
 
+    if (
+      this.currentLevel === 'train' &&
+      this.input.consumePressed('KeyT')
+    ) {
+
+      if (this.flashlight) {
+        this.flashlight.visible = !this.flashlight.visible
+      }
+    }
+
 
 
     // ----------------------------------------
@@ -996,6 +1007,7 @@ if (this.loaded) {
             finishZ,
             ghostName,
             trainTerrain,
+            carriages,
             investigationItems,
             moonLight,
             roadPath,
@@ -1050,6 +1062,9 @@ if (this.loaded) {
 
           this.trainTerrain =
             trainTerrain || null
+
+          this.trainCarriages =
+            carriages || null
 
 
           // ======================================
@@ -1208,6 +1223,11 @@ if (this.loaded) {
               this.spawnYaw
             )
 
+          }
+
+          // Train level: attach flashlight to camera.
+          if (levelName === 'train') {
+            this.flashlight = createFlashlight(this.camera)
           }
 
 
@@ -1389,6 +1409,15 @@ if (this.loaded) {
 
       this.trainTerrain = null
 
+    }
+
+    this.trainCarriages = null
+
+    if (this.flashlight) {
+      this.camera.remove(this.flashlight)
+      this.camera.remove(this.flashlight.target)
+      this.flashlight.dispose()
+      this.flashlight = null
     }
 
     if (this.levelRoot) {

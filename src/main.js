@@ -32,8 +32,8 @@ function resetLevelButtons() {
   `
 
   playBtn.disabled = false
-  trainBtn.disabled = true
-  level3Btn.disabled = true
+  trainBtn.disabled = false
+  level3Btn.disabled = false
 }
 
 // ============================================

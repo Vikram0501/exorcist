@@ -1,106 +1,94 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import { setupTrainLighting } from './lighting.js'
+import { createCarriageLights, setupTrainLighting } from './lighting.js'
 import { createTrainTerrain } from './terrain.js'
 
-// New train is very large in its original coordinates.
-// This brings it into roughly the same world scale as the new house.
 const TRAIN_SCALE = 0.1
 
-const EYE_HEIGHT = 1.7
-const SPAWN_DISTANCE = 8
+const CARRIAGE_01_PATH = '/models/Train_Carriage_New_01.glb'
+const CARRIAGE_02_PATH = '/models/Train_Carriage_New_02.glb'
+
+const cachedGltf = {}
+
+function loadModel(path) {
+  if (cachedGltf[path]) return Promise.resolve(cachedGltf[path])
+  const loader = new GLTFLoader()
+  return new Promise((resolve, reject) => {
+    loader.load(path, (gltf) => { cachedGltf[path] = gltf; resolve(gltf) }, undefined, reject)
+  })
+}
+
+function cloneCarriage(gltf) {
+  const model = gltf.scene.clone(true)
+  model.scale.setScalar(TRAIN_SCALE)
+  model.traverse((child) => {
+    if (!child.isMesh) return
+    child.castShadow = true
+    child.receiveShadow = true
+  })
+  model.updateMatrixWorld(true)
+  return model
+}
+
+function measureZ(gltf) {
+  const m = cloneCarriage(gltf)
+  m.updateMatrixWorld(true)
+  return new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3()).z
+}
+
+function placeCarriage(gltf, z, level, carriages) {
+  const model = cloneCarriage(gltf)
+  const group = new THREE.Group()
+  group.name = 'carriage'
+  group.add(model)
+  createCarriageLights(group)
+  group.position.z = z
+  carriages.push({ group, model })
+  level.add(group)
+}
+
 
 export function loadTrain(level) {
-  return new Promise((resolve, reject) => {
-    const loader = new GLTFLoader()
+  return Promise.all([loadModel(CARRIAGE_01_PATH), loadModel(CARRIAGE_02_PATH)]).then(() => {
+    const L1 = measureZ(cachedGltf[CARRIAGE_01_PATH])
+    const L2 = measureZ(cachedGltf[CARRIAGE_02_PATH])
 
-    loader.load(
-      '/models/Train.glb',
+    const carriages = []
+    let z = 0
 
-      (gltf) => {
-        const model = gltf.scene
+    // [01] at z=0, then 4x [02] going negative Z.
+    placeCarriage(cachedGltf[CARRIAGE_01_PATH], z, level, carriages)
+     
 
-        // Scale train down.
-        model.scale.setScalar(TRAIN_SCALE)
+    for (let i = 0; i < 4; i++) {
+      placeCarriage(cachedGltf[CARRIAGE_02_PATH], z, level, carriages)
+      z -= L2
+    }
 
-        // Enable shadows.
-        model.traverse((child) => {
-          if (!child.isMesh) return
+    const carriage02Size = (() => {
+      const m = cloneCarriage(cachedGltf[CARRIAGE_02_PATH])
+      return new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3())
+    })()
 
-          child.castShadow = true
-          child.receiveShadow = true
-        })
+    setupTrainLighting(level, carriages[carriages.length - 1].model, carriage02Size)
+    const trainTerrain = createTrainTerrain(level)
 
-        model.updateMatrixWorld(true)
+    // Player spawns at the far end, facing back toward carriage 01.
+    const spawn = new THREE.Vector3(0, 1.7, z)
+    const spawnYaw = Math.PI
 
-        // Find original scaled bounds.
-        const initialBox = new THREE.Box3().setFromObject(model)
-        const initialCenter = initialBox.getCenter(new THREE.Vector3())
-
-        // Centre train on X/Z.
-        model.position.x -= initialCenter.x
-        model.position.z -= initialCenter.z
-
-        // Put lowest part of train on ground level.
-        model.position.y -= initialBox.min.y
-
-        model.updateMatrixWorld(true)
-
-        // Final bounds.
-        const box = new THREE.Box3().setFromObject(model)
-        const size = box.getSize(new THREE.Vector3())
-
-        level.add(model)
-
-        // Lighting.
-        const { lightHelpers } = setupTrainLighting(level, model, size)
-
-        // Moving terrain outside windows.
-        const trainTerrain = createTrainTerrain(level, box)
-
-        const spawn = new THREE.Vector3(
-          0,
-          3,
-          -16
-        )
-
-        console.log('New Train.glb loaded', {
-          bounds: {
-            min: box.min,
-            max: box.max,
-          },
-          size,
-          spawn,
-        })
-
-        resolve({
-          // No collisions yet.
-          colliders: [],
-
-          colliderHelpers: [],
-
-          lightHelpers,
-
-          doors: [],
-
-          ramps: [],
-
-          model,
-
-          spawn,
-
-          modelSize: size,
-
-          trainTerrain,
-        })
-      },
-
-      undefined,
-
-      (err) => {
-        console.error('Failed to load Train.glb:', err)
-        reject(err)
-      }
-    )
+    return {
+      colliders: [],
+      colliderHelpers: [],
+      lightHelpers: [],
+      doors: [],
+      ramps: [],
+      model: carriages[0].model,
+      spawn,
+      spawnYaw,
+      modelSize: carriage02Size,
+      trainTerrain,
+      carriages,
+    }
   })
 }

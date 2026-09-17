@@ -2,56 +2,65 @@ import * as THREE from 'three'
 import { addLevelLights } from '../shared/lighting.js'
 
 
-const TRAIN_INTERIOR_LIGHTS = [
-  { type: 'point', name: 'ceiling_light_front', position: { x: 0.4, y: 4.3, z: -15.7 }, color: 0xffcc88, intensity: 0.4, distance: 3.5, decay: 1.8 },
-  { type: 'point', name: 'ceiling_light_mid_front', position: { x: 0.3, y: 4.3, z: -13.8 }, color: 0xffcc88, intensity: 0.4, distance: 3.5, decay: 1.8 },
-  { type: 'point', name: 'ceiling_light_mid', position: { x: 0.4, y: 4.3, z: -12 }, color: 0xffcc88, intensity: 0.4, distance: 3.5, decay: 1.8 },
-  { type: 'point', name: 'ceiling_light_mid_back', position: { x: 0, y: 4.5, z: -4 }, color: 0xffcc88, intensity: 0.25, distance: 3.5, decay: 1.8 },
-  { type: 'point', name: 'ceiling_light_back', position: { x: 0, y: 4.5, z: -8 }, color: 0xffcc88, intensity: 0.3, distance: 4, decay: 1.8 },
+// Per-carriage ceiling lights.
+// Positions are local offsets within a carriage group.
+const CARRIAGE_LIGHT_CONFIG = [
+  { offset: { x: 0.4, y: 4.3, z: -1.5 } },
+  { offset: { x: 0.3, y: 4.3, z: -3.8 } },
+  { offset: { x: 0.4, y: 4.3, z: -6.0 } },
+  { offset: { x: 0.0, y: 4.5, z: -8.0 } },
+  { offset: { x: 0.0, y: 4.5, z: -10.5 } },
 ]
 
+const LIGHT_COLOR = 0xffcc88
+const LIGHT_INTENSITY = 0.4
+const LIGHT_DISTANCE = 3.5
+const LIGHT_DECAY = 1.8
 
-function addInteriorLights(level, config = []) {
 
+export function createCarriageLights(carriageGroup) {
   const lights = []
   const helpers = []
-  const merged = [...TRAIN_INTERIOR_LIGHTS, ...config]
 
-  for (const def of merged) {
-    let light
-    if (def.type === 'point') {
-      light = new THREE.PointLight(def.color, def.intensity, def.distance, def.decay)
-      light.position.set(def.position.x, def.position.y, def.position.z)
-      const helper = new THREE.PointLightHelper(light, 0.3)
-      helper.visible = false
-      level.add(helper)
-      helpers.push(helper)
-    } else if (def.type === 'spot') {
-      light = new THREE.SpotLight(def.color, def.intensity, def.distance, def.angle, def.penumbra, 1)
-      light.position.set(def.position.x, def.position.y, def.position.z)
-      light.target.position.set(def.target.x, def.target.y, def.target.z)
-      level.add(light.target)
-      const helper = new THREE.SpotLightHelper(light)
-      helper.visible = false
-      level.add(helper)
-      helpers.push(helper)
-    }
+  for (let i = 0; i < CARRIAGE_LIGHT_CONFIG.length; i++) {
+    const cfg = CARRIAGE_LIGHT_CONFIG[i]
+    const light = new THREE.PointLight(
+      LIGHT_COLOR,
+      LIGHT_INTENSITY,
+      LIGHT_DISTANCE,
+      LIGHT_DECAY
+    )
+    light.position.set(cfg.offset.x, cfg.offset.y, cfg.offset.z)
     light.castShadow = false
-    light.name = def.name
-    level.add(light)
+    light.name = `carriage_light_${i}`
+    carriageGroup.add(light)
     lights.push(light)
+
+    const helper = new THREE.PointLightHelper(light, 0.3)
+    helper.visible = false
+    carriageGroup.add(helper)
+    helpers.push(helper)
   }
 
   return { lights, helpers }
 }
 
 
+export function disposeCarriageLights(carriageGroup) {
+  const toRemove = []
+  carriageGroup.traverse((child) => {
+    if (child.isLight) {
+      toRemove.push(child)
+    }
+  })
+  for (const light of toRemove) {
+    carriageGroup.remove(light)
+    if (light.dispose) light.dispose()
+  }
+}
+
+
 export function setupTrainLighting(level, model, size) {
-
   addLevelLights(level, size)
-
-  const { helpers: lightHelpers } =
-    addInteriorLights(level)
-
-  return { lightHelpers }
+  return { lightHelpers: [] }
 }
