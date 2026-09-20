@@ -220,3 +220,21 @@ window.addEventListener(
 
   }
 )
+
+
+document.addEventListener(
+  'click',
+  (e) => {
+
+    if (
+      !game.loaded ||
+      game.input.isLocked
+    ) return
+
+    if (e.target.closest('button')) return
+
+    overlay.classList.add('hidden')
+    game.input.lock()
+
+  }
+)

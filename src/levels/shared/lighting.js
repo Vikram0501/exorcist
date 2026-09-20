@@ -25,11 +25,7 @@ export function addLevelLights(level, size) {
 
 export function createFlashlight(camera) {
   const flashlight = new THREE.SpotLight(0xffffff, 1.5, 25, Math.PI / 6, 0.3, 1)
-  flashlight.castShadow = true
-  flashlight.shadow.mapSize.set(1024, 1024)
-  flashlight.shadow.camera.near = 0.5
-  flashlight.shadow.camera.far = 25
-  flashlight.shadow.bias = -0.0002
+  flashlight.castShadow = false
   flashlight.name = 'flashlight'
   camera.add(flashlight)
   camera.add(flashlight.target)

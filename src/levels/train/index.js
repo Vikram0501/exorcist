@@ -36,14 +36,14 @@ function measureZ(gltf) {
   return new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3()).z
 }
 
-function placeCarriage(gltf, z, level, carriages) {
+function placeCarriage(gltf, z, level, carriages, carriageType, instanceIndex) {
   const model = cloneCarriage(gltf)
   const group = new THREE.Group()
   group.name = 'carriage'
   group.add(model)
-  createCarriageLights(group)
+  const controller = createCarriageLights(group, carriageType, instanceIndex)
   group.position.z = z
-  carriages.push({ group, model })
+  carriages.push({ group, model, controller })
   level.add(group)
 }
 
@@ -55,15 +55,19 @@ export function loadTrain(level) {
 
     const carriages = []
     let z = 0
+    let carriage02Instance = 0
 
-    // [01] at z=0, then 4x [02] going negative Z.
-    placeCarriage(cachedGltf[CARRIAGE_01_PATH], z, level, carriages)
-     
+    // [01] at z=0
+    placeCarriage(cachedGltf[CARRIAGE_01_PATH], z, level, carriages, '01', 0)
 
+    // 4x [02] going negative Z, each with unique lighting preset
     for (let i = 0; i < 4; i++) {
-      placeCarriage(cachedGltf[CARRIAGE_02_PATH], z, level, carriages)
+      placeCarriage(cachedGltf[CARRIAGE_02_PATH], z, level, carriages, '02', carriage02Instance)
+      carriage02Instance++
       z -= L2
     }
+
+    const controllers = carriages.map(c => c.controller)
 
     const carriage02Size = (() => {
       const m = cloneCarriage(cachedGltf[CARRIAGE_02_PATH])
@@ -74,7 +78,7 @@ export function loadTrain(level) {
     const trainTerrain = createTrainTerrain(level)
 
     // Player spawns at the far end, facing back toward carriage 01.
-    const spawn = new THREE.Vector3(0, 1.7, z)
+    const spawn = new THREE.Vector3(2.8, 2, -127)
     const spawnYaw = Math.PI
 
     return {
@@ -89,6 +93,7 @@ export function loadTrain(level) {
       modelSize: carriage02Size,
       trainTerrain,
       carriages,
+      controllers,
     }
   })
 }

@@ -64,6 +64,10 @@
         background: radial-gradient(ellipse at 50% 18%, rgba(81, 33, 30, 0.28), transparent 38%), linear-gradient(105deg, rgba(4, 5, 7, 0.94), rgba(11, 10, 12, 0.84));
         backdrop-filter: blur(8px);
         text-align: center;
+        pointer-events: none;
+      }
+      #overlay > * {
+        pointer-events: auto;
       }
       #overlay h1 {
         max-width: 760px;

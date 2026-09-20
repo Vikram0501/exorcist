@@ -45,6 +45,7 @@ import {
 } from '../levels/house/index.js'
 
 import { loadTrain } from '../levels/train/index.js'
+import { toggleCarriageLightDebug } from '../levels/train/lighting.js'
 import { createFlashlight } from '../levels/shared/lighting.js'
 
 
@@ -169,6 +170,12 @@ export class Game {
     this.obstacles = null
 
     this.trainTerrain = null
+
+    this.carriageLightControllers = null
+
+    this.carriageLightDebug = false
+
+    this.debugPositionEl = null
 
 
     // ============================================
@@ -560,7 +567,7 @@ export class Game {
     ) {
 
       if (this.flashlight) {
-        this.flashlight.visible = !this.flashlight.visible
+        this.flashlight.intensity = this.flashlight.intensity > 0 ? 0 : 1.5
       }
     }
 
@@ -771,6 +778,27 @@ if (this.loaded) {
 
     }
 
+    if (
+      this.currentLevel === 'train' &&
+      this.carriageLightControllers
+    ) {
+
+      for (const ctrl of this.carriageLightControllers) {
+        ctrl.update(dt)
+      }
+
+    }
+
+    if (
+      this.currentLevel === 'train' &&
+      this.carriageLightDebug &&
+      this.debugPositionEl
+    ) {
+      const p = this.camera.position
+      this.debugPositionEl.textContent =
+        `Pos  X: ${p.x.toFixed(2)}  Y: ${p.y.toFixed(2)}  Z: ${p.z.toFixed(2)}`
+    }
+
 
     const door =
       this.getLookedAtDoor()
@@ -868,6 +896,38 @@ if (this.loaded) {
 
         }
       )
+
+    }
+
+
+    // Toggle carriage light debug (train level)
+    if (
+      this.currentLevel === 'train' &&
+      this.input.consumePressed('KeyK')
+    ) {
+
+      this.carriageLightDebug =
+        !this.carriageLightDebug
+
+      if (this.carriageLightControllers) {
+        toggleCarriageLightDebug(
+          this.carriageLightControllers,
+          this.carriageLightDebug
+        )
+      }
+
+      if (this.carriageLightDebug) {
+        if (!this.debugPositionEl) {
+          this.debugPositionEl = document.createElement('div')
+          this.debugPositionEl.style.cssText =
+            'position:fixed;top:10px;left:10px;color:#0f0;font:14px/1.4 monospace;' +
+            'background:rgba(0,0,0,0.6);padding:6px 10px;border-radius:4px;z-index:9999;pointer-events:none;'
+          document.body.appendChild(this.debugPositionEl)
+        }
+        this.debugPositionEl.style.display = 'block'
+      } else if (this.debugPositionEl) {
+        this.debugPositionEl.style.display = 'none'
+      }
 
     }
 
@@ -1008,6 +1068,7 @@ if (this.loaded) {
             ghostName,
             trainTerrain,
             carriages,
+            controllers,
             investigationItems,
             moonLight,
             roadPath,
@@ -1065,6 +1126,9 @@ if (this.loaded) {
 
           this.trainCarriages =
             carriages || null
+
+          this.carriageLightControllers =
+            controllers || null
 
 
           // ======================================
@@ -1413,6 +1477,15 @@ if (this.loaded) {
 
     this.trainCarriages = null
 
+    this.carriageLightControllers = null
+
+    this.carriageLightDebug = false
+
+    if (this.debugPositionEl) {
+      this.debugPositionEl.remove()
+      this.debugPositionEl = null
+    }
+
     if (this.flashlight) {
       this.camera.remove(this.flashlight)
       this.camera.remove(this.flashlight.target)
@@ -1448,6 +1521,10 @@ if (this.loaded) {
     this.levelData = null
 
     this.trainTerrain = null
+
+    this.carriageLightControllers = null
+
+    this.carriageLightDebug = false
 
     this.loaded = false
 
