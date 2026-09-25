@@ -1164,6 +1164,15 @@ if (this.loaded) {
 
             this.highwayController.obstacles =
               obstacles
+            
+              this.highwayController.onCrash = 
+              () => {
+                this.showGameOver(
+                  ghostName,
+                  false,
+                  true
+                )
+              }
 
             this.highwayRace =
               new HighwayRaceController(
@@ -2693,7 +2702,8 @@ if (this.loaded) {
 
   showGameOver(
     ghostName,
-    wrongName
+    wrongName,
+    crashed = false
   ) {
 
     this.levelState = 'GAME_OVER'
@@ -2779,7 +2789,12 @@ if (this.loaded) {
     const goMsg =
       document.createElement('div')
 
-    if (wrongName) {
+    if (crashed) {
+
+      goMsg.textContent =
+        'YOU CRASHED ON THE HIGHWAY.'
+
+    } else if (wrongName) {
 
       goMsg.textContent =
         'WRONG NAME.'
@@ -2821,19 +2836,52 @@ if (this.loaded) {
     el.appendChild(goMsg2)
 
 
-    const goHint =
-      document.createElement('div')
+    const restartBtn =
+      document.createElement('button')
 
-    goHint.textContent =
-      'Press 3 to try again'
+    restartBtn.textContent =
+      'TRY AGAIN'
 
-    goHint.style.color = '#666666'
+    restartBtn.style.padding =
+      '12px 32px'
 
-    goHint.style.fontSize = '14px'
+    restartBtn.style.fontSize =
+      '16px'
 
-    goHint.style.letterSpacing = '1px'
+    restartBtn.style.fontFamily =
+      'monospace'
 
-    el.appendChild(goHint)
+    restartBtn.style.fontWeight =
+      'bold'
+
+    restartBtn.style.background =
+      '#aa1111'
+
+    restartBtn.style.color =
+      '#ffffff'
+
+    restartBtn.style.border =
+      '2px solid #ff3333'
+
+    restartBtn.style.borderRadius =
+      '6px'
+
+    restartBtn.style.cursor =
+      'pointer'
+
+    restartBtn.style.letterSpacing =
+      '2px'
+
+    restartBtn.addEventListener(
+      'click',
+      () => {
+
+        this.restartHighway()
+
+      }
+    )
+
+    el.appendChild(restartBtn)
 
 
     document.body.appendChild(el)
@@ -2858,6 +2906,21 @@ if (this.loaded) {
     }
 
     this.gameOverEl = null
+
+  }
+  
+  restartHighway() {
+
+    if (this.currentLevel !== 'highway') {
+      return
+    }
+
+    this.hideGameOver()
+
+    // Force loadLevel() to actually reload the highway.
+    this.loaded = false
+
+    this.loadLevel('highway')
 
   }
 
