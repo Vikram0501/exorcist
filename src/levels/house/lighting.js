@@ -92,7 +92,7 @@ function addHauntedSky(level) {
   sky.add(stars)
 
   const moonTexture = new THREE.TextureLoader().load(
-    '/textures/haunted-moon.png',
+    '/levels/house/textures/moon.png',
   )
   moonTexture.colorSpace = THREE.SRGBColorSpace
 
@@ -128,19 +128,11 @@ function addInteriorLights(level, config = []) {
     if (def.type === 'point') {
       light = new THREE.PointLight(def.color, def.intensity, def.distance, def.decay)
       light.position.set(def.position.x, def.position.y, def.position.z)
-      const helper = new THREE.PointLightHelper(light, 0.3)
-      helper.visible = false
-      level.add(helper)
-      helpers.push(helper)
     } else if (def.type === 'spot') {
       light = new THREE.SpotLight(def.color, def.intensity, def.distance, def.angle, def.penumbra, 1)
       light.position.set(def.position.x, def.position.y, def.position.z)
       light.target.position.set(def.target.x, def.target.y, def.target.z)
       level.add(light.target)
-      const helper = new THREE.SpotLightHelper(light)
-      helper.visible = false
-      level.add(helper)
-      helpers.push(helper)
     }
     light.castShadow = false
     light.name = def.name

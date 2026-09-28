@@ -6,11 +6,11 @@ A browser-based 3D first-person game built with Three.js. You play as a disgrace
 
 Stripped of your title after a failed exorcism gone wrong, you must prove yourself worthy once more. Three hauntings await — each more perilous than the last — as you journey from crumbling mansions to speeding trains to open highways, battling forces that defy the living.
 
-**Mission 1 — The Haunted House**
-- A vengeful spirit haunts an old house
-- Explore the environment and piece together the mystery of how it died
-- Use that knowledge to perform the exorcism
-- Focus: investigation, puzzle-solving, atmosphere
+**Mission 1 — Vale Manor**
+- Investigate Evelyn Vale's disappearance through the house and rear yard
+- Answer the ringing telephone, gather the upstairs evidence and recover her music box
+- Escape Elias Wren to Evelyn's grave, then use the evidence in the release rite
+- Return to the road to close Evelyn's case
 
 **Mission 2 — The Undead Train**
 - An undead creature stalks the carriages of a moving train, attacking anything it finds
@@ -36,7 +36,9 @@ Stripped of your title after a failed exorcism gone wrong, you must prove yourse
 | `Space` | Jump / fly up |
 | `C` | Fly down |
 | `Shift` | Sprint |
-| `E` | Interact (doors) |
+| `E` | Interact with doors, inspect evidence, begin the grave-side rite |
+| `I` | Open / close field notes |
+| `T` | Toggle the torch in Level 1 |
 | `F` | Toggle fly mode |
 | `H` | Toggle collider debug view |
 | `J` | Log nearby wall colliders |
@@ -56,6 +58,12 @@ npm run dev
 ```
 
 The game opens at `http://localhost:5173`. Click **Start Game** to begin.
+
+### Tests
+
+```bash
+npm test
+```
 
 ### Build for Production
 
@@ -124,81 +132,49 @@ Level 3 is a procedurally generated highway race with no GLB model. All geometry
 
 ## Project Structure
 
-```
-Exorcist/
-├── index.html                 # HTML shell, HUD, start screen
-├── package.json               # Scripts and dependencies
-├── public/
-│   └── models/
-│       ├── house_game.glb     # Level 1 environment
-│       └── train.glb          # Level 2 environment
-├── docs/
-│   ├── BUILDSPEC.md           # Architecture and coding conventions
-│   ├── level-1-haunted-house.md
-│   ├── level-2-undead-train.md
-│   └── level-3-phantom-highway.md
-└── src/
-    ├── main.js                # Entry point, start/escape wiring
-    ├── game.js                # Game class: scene, camera, renderer, loop
-    ├── player.js              # First-person controller (movement, collision)
-    ├── input.js               # Keyboard state + pointer-lock mouse look
-    └── levels/
-        ├── house.js           # Level 1 GLB loader, colliders, doors
-        ├── houseLighting.js   # Level 1 lighting
-        ├── train.js           # Level 2 GLB loader
-        ├── trainLighting.js   # Level 2 lighting
-        ├── highway.js         # Level 3 procedural road, cars, ghost name UI
-        ├── highwayCar.js      # Level 3 vehicle controller (WASD, chase cam)
-        ├── highwayRace.js     # Level 3 race logic, countdown, ghost AI, brake-cut
-        ├── highwayCollectibles.js  # Level 3 letter pickups and HUD updates
-        ├── highwaySigns.js    # Level 3 roadside clue signs
-        └── lighting.js        # Shared ambient + directional lighting
+```text
+exorcist/
+  index.html                   HTML shell, HUD, and menus
+  src/
+    main.js                    Entry point
+    core/                      Shared game, input, and player
+    levels/
+      house/                   Level 1 environment, story, audio, and UI
+      train/                   Level 2 (existing layout)
+      highway/                 Level 3 (existing layout)
+      shared/                  Shared lighting
+  public/
+    levels/house/
+      models/vale-manor.glb     Active Level 1 environment
+      textures/moon.png
+      audio/                   Descriptively named house recordings
+        screams/               scream-01.ogg through scream-04.ogg
+    models/                    Existing Level 2, Level 3, and shared assets
+  tests/house/                 Level 1 regression tests
+  docs/
+    BUILDSPEC.md               Project conventions
+    house/                     Level 1 guide, playthrough, and archived brief
+    level-2-undead-train.md
+    level-3-phantom-highway.md
 ```
 
-The current source layout groups code by responsibility and by level:
-
-```
-src/
-├── main.js
-├── audio/
-│   └── hauntedHouseAudio.js
-├── core/
-│   ├── game.js
-│   ├── input.js
-│   └── player.js
-└── levels/
-    ├── house/
-    │   ├── index.js
-    │   └── lighting.js
-    ├── train/
-    │   ├── index.js
-    │   ├── lighting.js
-    │   └── terrain.js
-    ├── highway/
-    │   ├── index.js
-    │   ├── car.js
-    │   ├── collectibles.js
-    │   ├── environment.js
-    │   ├── obstacles.js
-    │   ├── race.js
-    │   └── signs.js
-    └── shared/
-        └── lighting.js
-```
+Level 1 file responsibilities and asset placement are documented in
+[the house guide](docs/house/README.md). Use lowercase kebab-case names for new
+house files. Generated `dist/` and installed `node_modules/` are ignored by Git.
 
 ## Development
 
-The game has no physics library. Collision is handled with custom AABB and circle logic — the player is a vertical line with a horizontal circle of radius 0.35 for XZ push-out. Collision data is authored separately from the GLB geometry.
+The house uses capsule collision against an Octree built from selected environment meshes, with dynamic door bounds. Shared movement also supports AABB collision for other environments. There is no external physics engine.
 
 Level design documents live in `docs/`. Read `docs/BUILDSPEC.md` first if you plan to contribute — it covers module responsibilities, coding conventions, and known gotchas.
 
 ### Adding a New Level
 
 1. Place the `.glb` model in `public/models/`
-2. Create a loader in `src/levels/` following the pattern in `house.js`
+2. Create a loader in `src/levels/<level>/index.js` following the pattern in `src/levels/house/index.js`
 3. Register it in the `LEVELS` object in `src/core/game.js`
 4. Add floor, wall, and door colliders as needed
-5. Switch levels at runtime with `1`/`2` keys
+5. Select the level from the game menu
 
 ## Current Status
 
@@ -211,6 +187,7 @@ Level design documents live in `docs/`. Read `docs/BUILDSPEC.md` first if you pl
 - [x] Level 3 — dynamic roadside clue signs
 - [x] Level 3 — brake-cut sequence
 - [ ] Level 3 — final exorcism / name-entry finale
-- [ ] Investigation clues and puzzle items
-- [ ] Ambient sound and atmosphere
+- [x] Level 1 investigation: newspaper, family photograph, fourth place setting, telephone, diary, annex message, confession, music box, grave
+- [x] Level 1 evidence journal, three-question release rite, and departure ending
+- [x] Level 1 ambient recordings, telephone ring, music-box melody, candlelight, torch, and story apparitions
 - [ ] Enemy AI and combat

@@ -353,6 +353,23 @@
       @media (max-width: 560px) {
         .newspaper-copy { column-count: 1; }
       }
+      #houseCaption { position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%); z-index: 15; width: min(700px, calc(100% - 48px)); padding: 16px 24px; color: #ede4d2; background: linear-gradient(90deg, transparent, rgba(5, 9, 12, .94) 12%, rgba(5, 9, 12, .94) 88%, transparent); text-align: center; font: 17px/1.65 Georgia, serif; pointer-events: none; text-shadow: 0 2px 8px #000; }
+      #houseRite { position: fixed; inset: 0; z-index: 110; display: grid; place-items: center; padding: 24px; overflow-y: auto; background: rgba(4, 9, 12, .86); backdrop-filter: blur(5px); }
+      #houseRite.hidden, #houseCaption.hidden { display: none; }
+      .rite-panel { width: min(590px, 100%); padding: clamp(24px, 5vw, 46px); border: 1px solid #796e58; background: radial-gradient(ellipse at top, #252c2b, #101517); color: #e6dcc9; box-shadow: 0 25px 100px #000; }
+      .rite-panel .evidence-label { margin-bottom: 18px; color: #b8ab8e; }
+      .rite-panel h2 { font: 30px/1.2 Georgia, serif; margin-bottom: 16px; }
+      .rite-panel p { font: 15px/1.65 Georgia, serif; margin-bottom: 18px; }
+      .rite-panel button { display: block; width: 100%; margin: 10px 0; padding: 15px 18px; border: 1px solid #665e4e; background: #222826; color: #eee5d1; text-align: left; font: 16px/1.4 Georgia, serif; cursor: pointer; }
+      .rite-panel button:hover, .rite-panel button:focus-visible { outline: 2px solid #c1b695; outline-offset: 2px; background: #343e37; }
+      .rite-panel .rite-back { background: transparent; font-size: 13px; text-align: center; }
+      .rite-panel .rite-feedback { color: #d5a68b; min-height: 24px; }
+      .story-journal-entry { padding: 24px 0; border-top: 1px solid #a69a7d; }
+      .story-journal-entry small { font: 10px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .12em; }
+      .story-journal-entry h3 { margin: 8px 0 12px; font: 700 23px Georgia, serif; }
+      .story-journal-entry p + p { margin-top: 10px; }
+      #newspaperInspectionPanel { max-height: calc(100vh - 48px); overflow-y: auto; }
+      @media (prefers-reduced-motion: reduce) { .level-card { transition: none; } }
     </style>
   </head>
   <body>
@@ -369,11 +386,11 @@
       </div>
     </div>
     <div id="crosshair" aria-hidden="true"></div>
-    <div id="hudControls"><kbd>WASD</kbd> MOVE &nbsp;Â·&nbsp; <kbd>E</kbd> INSPECT &nbsp;Â·&nbsp; <kbd>I</kbd> NOTES</div>
+    <div id="hudControls"><kbd>WASD</kbd> MOVE &nbsp;&middot;&nbsp; <kbd>E</kbd> INSPECT &nbsp;&middot;&nbsp; <kbd>I</kbd> NOTES &nbsp;&middot;&nbsp; <kbd>T</kbd> TORCH</div>
     <div id="interactionPrompt" class="hidden"></div>
     <button id="respawnBtn" class="hidden" type="button">Respawn <kbd>R</kbd></button>
     <button id="evidenceBtn" class="hidden" type="button">Evidence <kbd>I</kbd></button>
-    <div id="newspaperReader" class="hidden" role="dialog" aria-modal="true" aria-labelledby="newspaperHeadline">
+    <div id="newspaperReader" class="hidden" role="dialog" aria-modal="true" aria-labelledby="newspaperInspectTitle">
       <img id="newspaperTexturePreview" class="hidden" alt="Inspectable evidence" decoding="sync" />
       <section id="newspaperInspectionPanel">
         <div id="inspectionFoundAt" class="evidence-label">FOUND ON FRONT PORCH</div>
@@ -441,7 +458,7 @@
       <section class="evidence-book">
         <article class="evidence-page">
           <div class="evidence-label">FIELD JOURNAL Â· EVIDENCE 01</div>
-          <h2 id="evidenceBookTitle">The Vale Girl</h2>
+          <h2>The Vale Girl</h2>
           <p><strong>Source:</strong> Vale County Gazette clipping, found on the front porch.</p>
           <p><strong>Subject:</strong> Evelyn Vale, age sixteen, reported missing from Old Mill Road.</p>
           <span class="evidence-stamp">LOGGED</span>

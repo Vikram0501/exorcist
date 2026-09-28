@@ -220,3 +220,27 @@ window.addEventListener(
 
   }
 )
+
+document.addEventListener('pointerlockchange', () => {
+  if (game.input.isLocked || document.pointerLockElement) {
+    if (game.loaded) overlay.classList.add('hidden')
+    return
+  }
+  if (game.loaded && !game.newspaperOpen && !game.evidenceBookOpen && !game.houseStoryView?.open) {
+    resetLevelButtons()
+    const action = playBtn.querySelector('.level-card-action')
+    if (action && game.currentLevel === 'house') action.textContent = 'RESUME'
+    overlay.classList.remove('hidden')
+  }
+})
+
+window.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return
+  if (game.houseStoryView?.open) game.houseStoryView.closeRite(false)
+  if (game.newspaperOpen) game.hideNewspaperReader()
+  if (game.evidenceBookOpen) game.closeEvidenceBook(true)
+  if (!document.pointerLockElement && game.loaded) {
+    resetLevelButtons()
+    overlay.classList.remove('hidden')
+  }
+})

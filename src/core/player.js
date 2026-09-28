@@ -3,8 +3,8 @@ import { Capsule } from 'three/addons/math/Capsule.js'
 
 const PLAYER_RADIUS = 0.35
 const EYE_HEIGHT = 1
-const WALK_SPEED = 6
-const SPRINT_SPEED = 10
+const WALK_SPEED = 4.8
+const SPRINT_SPEED = 8
 const ACCEL = 45
 const DAMPING = 10
 const GRAVITY = -20
@@ -22,7 +22,7 @@ export class Player {
     this.flying = false
 
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'KeyF') {
+      if (e.code === 'KeyF' && this.input.isLocked && !e.repeat) {
         this.flying = !this.flying
         this.velocity.y = 0
       }

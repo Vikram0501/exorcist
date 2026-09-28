@@ -20,12 +20,14 @@ export class Input {
     }
     this.onLockChange = () => {
       this.isLocked = document.pointerLockElement === this.dom
+      if (!this.isLocked) this.clear()
     }
 
     window.addEventListener('keydown', this.onKeyDown)
     window.addEventListener('keyup', this.onKeyUp)
     document.addEventListener('mousemove', this.onMouseMove)
     document.addEventListener('pointerlockchange', this.onLockChange)
+    window.addEventListener('blur', () => this.clear())
   }
 
   isDown(code) {
@@ -42,7 +44,9 @@ export class Input {
   }
 
   lock() {
-    this.dom.requestPointerLock()
+    this.clear()
+    const request = this.dom.requestPointerLock()
+    request?.catch(() => {})
   }
 
   release() {

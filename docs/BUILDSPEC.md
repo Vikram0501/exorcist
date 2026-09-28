@@ -16,7 +16,7 @@ different skills — investigation, evasion, and reflexes.
 
 - Runtime: modern web browser (desktop). Pointer Lock API is required.
 - Rendering: WebGL via `THREE.WebGLRenderer` with shadows.
-- No physics engine: collision is custom AABB + circle logic (see §7).
+- No physics engine: the house uses Octree/capsule collision; shared movement also supports AABBs (see section 7).
 - Level geometry is loaded from GLB models via `GLTFLoader`.
 
 ## 1a. Game Design
@@ -46,19 +46,20 @@ control, reflexes, final confrontation.
 | Package    | npm             | 12 deps    |
 
 - The project uses **ES modules** (`"type": "module"` in `package.json`).
-- No TypeScript, no linting tooling, no test framework installed yet.
+- No TypeScript or linting tooling. Tests use the built-in Node.js test runner.
 - Vanilla three.js only — no add-ons like `OrbitControls`, `PointerLockControls`,
   or any game engine. Adding add-ons is fine, but import from
   `three/addons/...` and keep the vendored style consistent.
 
 ## 3. Commands
 
-Run these from the project root (`C:\Users\subra\Exorcist`).
+Run these from the repository root (the folder containing `package.json`).
 
 | Command            | Purpose                                          |
 | ------------------ | ------------------------------------------------ |
 | `npm install`      | Install dependencies (after cloning / new deps). |
 | `npm run dev`      | Start dev server (default http://localhost:5173).|
+| `npm test`         | Run the Level 1 regression tests.                  |
 | `npm run build`    | Production build → `dist/`.                      |
 | `npm run preview`  | Serve the production build locally.              |
 
@@ -69,27 +70,35 @@ Verification for agent sessions:
 
 ## 4. File Structure
 
+```text
+exorcist/
+  index.html                   HTML shell, HUD, and menus
+  src/
+    main.js                    Entry point
+    core/                      Shared game, input, and player
+    levels/
+      house/                   Level 1 environment, story, audio, and UI
+      train/                   Level 2 (existing layout)
+      highway/                 Level 3 (existing layout)
+      shared/                  Shared lighting
+  public/
+    levels/house/
+      models/vale-manor.glb     Active Level 1 environment
+      textures/moon.png
+      audio/                   Descriptively named house recordings
+        screams/               scream-01.ogg through scream-04.ogg
+    models/                    Existing Level 2, Level 3, and shared assets
+  tests/house/                 Level 1 regression tests
+  docs/
+    BUILDSPEC.md               Project conventions
+    house/                     Level 1 guide, playthrough, and archived brief
+    level-2-undead-train.md
+    level-3-phantom-highway.md
 ```
-Exorcist/
-├── index.html          # HTML shell: #app canvas mount, #hud overlay, start screen
-├── package.json        # Scripts + deps (three, vite)
-├── dist/               # Build output (gitignored, generated)
-├── docs/
-│   ├── BUILDSPEC.md              # This file
-│   ├── level-1-haunted-house.md  # Level 1 design doc
-│   ├── level-2-undead-train.md   # Level 2 design doc
-│   └── level-3-phantom-highway.md# Level 3 design doc
-├── public/
-│   └── models/
-│       └── house_game.glb # Level 1 GLB environment model
-└── src/
-    ├── main.js         # Entry point: instantiates Game, wires start overlay
-    ├── game.js         # Game class: scene, camera, renderer, render loop, HUD
-    ├── player.js       # First-person controller (movement, gravity, collision)
-    ├── input.js        # Keyboard set + pointer-lock mouse look state
-    └── levels/
-        └── house.js    # Level 1 loader: GLB, colliders, lighting
-```
+
+Level 1 file responsibilities and asset placement are documented in
+[the house guide](house/README.md). Use lowercase kebab-case names for new
+house files. Generated `dist/` and installed `node_modules/` are ignored by Git.
 
 ## 5. Module Responsibilities
 
@@ -110,11 +119,11 @@ Core runtime class. Owns:
 - `loaded` — boolean, `true` once the GLB model has finished loading.
 
 Key flow:
-- Constructor kicks off async `loadHouse(this.scene)`. On resolve, sets level
-  collision data, positions the player at the authored level spawn, and sets
-  `loaded = true`.
-- `start()` only runs if `loaded` is true. Sets `started = true`, calls
-  `input.lock()`, kicks off `animate()`.
+- `start(levelName)` starts the loop and loads or resumes the selected level.
+- `loadLevel(levelName)` installs the returned model, collisions, and spawn;
+  a load identifier prevents stale asynchronous results replacing the active level.
+- House music starts on the animation frame after the loaded scene renders,
+  only while pointer lock is active. Unloading cancels a pending music start.
 - `animate()` uses `requestAnimationFrame`; `dt = min(clock.getDelta(), 0.05)`
   clamps delta to avoid tunneling after tab switches.
 - `updateHud(dt)` maintains a 20-sample FPS ring buffer and writes position +
@@ -135,54 +144,32 @@ Stateless input aggregator:
 - Mouse look only accumulates while locked.
 
 ### `src/levels/house/index.js`
-Level 1 loader. Exports `loadHouse(scene)` which returns a Promise resolving to
-`{ colliders, doors, ramps, model, spawn, modelSize }`.
+Level 1 loader. Exports `loadHouse(level)`, resolving to the model, spawn,
+spawn yaw, model size, doors, investigation items, collider data, and helper arrays.
 
-- Loads `public/models/house_game.glb` via `GLTFLoader`.
-- Uses `gltf.scene` at its Blender-authored scale and +Y-up orientation.
-- Preserves all GLB hierarchy, including door hinge/object nodes.
-- Traverses meshes only to enable `castShadow` / `receiveShadow`.
-- Defines floor AABBs and one curved stair ramp separately from visual geometry.
-  Structural bounds are not expanded by the player radius.
-- Detects connected wall sections from every non-door GLB mesh using tall, thin
-  component dimensions, preserving door openings; set `SHOW_COLLIDERS` to
-  `true` to show wireframe debug bounds.
-- Returns named door nodes; `getDoorColliders()` recalculates their world-space
-  AABBs while the door is closed. `updateDoors()` animates their existing pivots.
-- Adds ambient + directional lighting with shadow map.
+- Loads `public/levels/house/models/vale-manor.glb` with `GLTFLoader` and
+  `MeshoptDecoder`, at scale 0.15, centered using the visible environment bounds.
+- Preserves the authored hierarchy, named objects, door pivots, and transforms.
+- Builds an Octree from selected structural and furniture meshes using their
+  final world transforms. Collision-only helpers stay hidden.
+- Returns named door controllers; `getDoorColliders()` supplies dynamic bounds
+  and `updateDoors()` animates the existing pivots.
+- Delegates sky, moon, and interior lights to `lighting.js`.
+- House audio, story progression, ghost assets, chase state, and story UI live
+  alongside the loader. See [house module responsibilities](house/README.md).
 
-### `src/core/player.js` — `class Player`
-First-person controller wrapping the camera. **The camera IS the player** — the
-player has no separate mesh.
+### `src/core/player.js` - `class Player`
+Shared first-person controller wrapping the camera. It owns velocity, grounded
+state, fly mode, rotation, movement, and collision resolution.
 
-Tuning constants (top of file):
-```
-PLAYER_RADIUS = 0.35    // circle radius used for XZ collision
-EYE_HEIGHT    = 1.7     // camera height above ground
-WALK_SPEED    = 6
-SPRINT_SPEED  = 10
-ACCEL         = 45      // move accel blend rate
-DAMPING       = 10      // DECLARED BUT UNUSED — safe to remove or wire up
-GRAVITY       = -20
-JUMP_VELOCITY = 7.5
-```
+Current tuning: radius 0.35, eye height 1, walk speed 4.8, sprint speed 8,
+acceleration 45, gravity -20, jump velocity 7.5, and step height 0.5.
+The pursuing house ghost moves at 5.6 units per second in `house/pursuit.js`.
 
-Update pipeline (`update(dt, colliders)`), in order:
-1. `updateRotation()` — `rotation.order = 'YXZ'`, applies `yaw` to Y, `pitch` to X.
-2. `updateVelocity(dt)` — builds wish direction from WASD (+camera forward/right,
-   W/S then normalized), lerps current velocity toward `speed * wishDir`
-   (exponential smoothing via `1 − e^(−ACCEL·dt)`), handles jump impulse when
-   grounded and Space pressed.
-3. `move(dt)` — integrates position from velocity.
-4. `collide(colliders)` — circle-vs-AABB XZ push-out for wall and door bounds.
-5. `applyGravity(dt, colliders)` — gravity integration, floor landing, and
-   smooth support for the authored stair-ramp surface.
-6. All walls are tested for XZ collision; their `minY`/`maxY` bounds determine
-   whether they overlap the player's body at the current height.
-
-Direction helpers (both return horizontal, y=0 vectors):
-- `getForward()` → `(-sin(yaw), 0, -cos(yaw))`
-- `getRight()`   → `(cos(yaw), 0, -sin(yaw))`
+`update(dt, colliders)` applies rotation and desired velocity, then chooses
+fly movement, Octree capsule collision, or the shared AABB movement path.
+Keep camera rotation order `YXZ` and W moving in the camera's forward direction.
+`reset(spawn, yaw)` clears velocity and restores the authored spawn orientation.
 
 ## 6. `index.html` DOM Contract
 
@@ -204,34 +191,17 @@ CSS lives in `<style>` in `index.html` (no separate stylesheet). Controls:
 
 ## 7. Collision System (Important)
 
-There is **no physics library**. The player is modeled as:
-- A vertical line at `position` with eye height `EYE_HEIGHT` above the feet.
-- A horizontal circle of radius `PLAYER_RADIUS = 0.35` for XZ blocking.
+There is no external physics library. The house supplies a Three.js Octree built
+from selected environment meshes. The player uses capsule collision against it,
+with grounded movement and step handling. Door bounds update as doors move.
+Shared movement also retains an AABB/circle collision path for other environments.
 
-Collision data is authored separately from the GLB:
-- Walls and doors are vertical AABBs
-  `{ type, minX, maxX, minZ, maxZ, minY, maxY, floor }`.
-- Floors are horizontal AABBs `{ type: 'floor', minX, maxX, minZ, maxZ, top }`.
-- The staircase is one `ramp` with a curved XZ centerline, lower/upper heights,
-  and width. The player interpolates the surface height along that centerline.
-
-- `collide()`: for wall/door bounds, find the nearest point on the box to the
-  player center; if the distance is less than `PLAYER_RADIUS`, push the player
-  out along the nearest axis. Handles the "center-inside-box" case by pushing
-  toward the nearest face.
-- `applyGravity()`: the player lands when its swept feet position crosses a
-  floor/ramp surface and stays grounded while walking within one step height.
-
-Door bounds are regenerated every frame from their named GLB nodes. Other
-colliders are static, intentional gameplay geometry rather than visual meshes.
-The camera raycasts the centre screen up to 2 metres; a hit is resolved through
-its parent chain to one of the four door controller nodes.
-
-**Limitations to be aware of:**
-- Door colliders follow their GLB nodes; structural walls, floors, and ramps are static.
-- Collision is approximate (bounding boxes don't match intricate geometry).
-- No player-vs-player or projectile collision yet.
-- Ramp support is limited to the authored house staircase path.
+- Build structural collision after applying the environment's world transforms.
+- Preserve GLB node names used by collision filtering and door discovery.
+- Hidden boundary and floor helpers may still be required for collision.
+- Keep the player radius in the movement controller; do not inflate every mesh
+  by that radius when authoring obstacles.
+- Test stairs, doorways, and the backyard route after replacing the house model.
 
 ## 8. Conventions & Coding Rules
 
@@ -250,9 +220,9 @@ its parent chain to one of the four door controller nodes.
 
 ## 9. Adding Features — Quick Recipes
 
-**New GLB model:** place the `.glb` file in `public/models/`, import `GLTFLoader`
-from `three/addons/loaders/GLTFLoader.js`, load with `loader.load('/models/file.glb',
-...)`. Traverse meshes to enable shadows and define intentional colliders
+**New house GLB model:** place the `.glb` file in `public/levels/house/models/`,
+import `GLTFLoader` from `three/addons/loaders/GLTFLoader.js`, and load it from
+`/levels/house/models/file.glb`. Traverse meshes to enable shadows and define intentional colliders
 separately from visual geometry.
 
 **New key binding:** add the code string to a check in `player.js`

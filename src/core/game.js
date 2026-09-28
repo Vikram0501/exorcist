@@ -1,7 +1,9 @@
 import * as THREE from 'three'
 import { Input } from './input.js'
 import { Player } from './player.js'
-import { HauntedHouseAudio } from '../audio/hauntedHouseAudio.js'
+import { HauntedHouseAudio } from '../levels/house/audio.js'
+import { HouseStory } from '../levels/house/story.js'
+import { HouseStoryView } from '../levels/house/story-view.js'
 
 import {
   createHighwayLevel,
@@ -127,6 +129,8 @@ export class Game {
     )
 
     this.houseAudio = new HauntedHouseAudio()
+    this.houseStory = null
+    this.houseStoryView = null
 
 
     // LEVEL DATA
@@ -331,6 +335,7 @@ export class Game {
 
     // GAME STATE
     this.loaded = false
+    this.houseAudioStartFrame = null
 
     this.started = false
 
@@ -549,8 +554,8 @@ export class Game {
       this.currentLevel === 'house' &&
       this.input.consumePressed('KeyI')
     ) {
-
-      this.openEvidenceBook()
+      if (this.evidenceBookOpen) this.closeEvidenceBook()
+      else if (this.input.isLocked) this.openEvidenceBook()
     }
 
 
@@ -737,6 +742,13 @@ if (this.loaded) {
   // ======================================
 
   else {
+    const active = this.input.isLocked && !this.newspaperOpen && !this.evidenceBookOpen && !this.houseStoryView?.open
+    this.houseStoryView?.update(dt, active)
+    if (this.currentLevel === 'house') this.houseAudio.setPaused(!active && !this.newspaperOpen && !this.houseStoryView?.open && !this.houseStory?.jumpScareTime)
+    if (active) {
+    if (this.houseStory && this.input.consumePressed('KeyT')) {
+      this.houseStory.flashlight.visible = !this.houseStory.flashlight.visible
+    }
 
     updateDoors(
       this.doors,
@@ -771,10 +783,23 @@ if (this.loaded) {
 
 
     if (
-      this.input.consumePressed('KeyE')
+      this.input.consumePressed('KeyE') && !(this.houseStory?.jumpScareTime > 0)
     ) {
 
       if (
+        investigationItem &&
+        investigationItem.story
+      ) {
+        if (this.houseStory.canInspect(investigationItem.id)) {
+          if (investigationItem.id === 'evelyn-grave') {
+            this.houseStoryView.openRite()
+          } else {
+            this.houseStory.inspect(investigationItem.id)
+            this.openNewspaperReader(investigationItem)
+          }
+        }
+      }
+      else if (
         investigationItem &&
         investigationItem.id === 'newspaper' &&
         !this.newspaperRead
@@ -809,6 +834,7 @@ if (this.loaded) {
         investigationItem &&
         investigationItem.id === 'kitchen-phone' &&
         this.valeFrameInspected &&
+        this.houseStory?.isPhoneRinging() &&
         !this.kitchenPhoneAnswered
       ) {
 
@@ -894,6 +920,13 @@ if (this.loaded) {
 
     if (this.currentLevel === 'house') {
       this.houseAudio.update(this.player)
+      if (!this.newspaperOpen && !this.houseStoryView?.open) {
+        this.houseStory?.update(dt, this.player, this.valeFrameInspected && !this.kitchenPhoneAnswered)
+      }
+    }
+    } else {
+      this.player.velocity.set(0, 0, 0)
+      this.interactionPrompt?.classList.add('hidden')
     }
 
   }
@@ -901,6 +934,22 @@ if (this.loaded) {
 }
 
 
+
+    if (this.currentLevel === 'house') this.houseStory?.updateJumpScare(dt, this.player)
+    const scareTime = this.currentLevel === 'house'
+      ? this.houseStory?.jumpScareTime || 0
+      : 0
+    if (scareTime > 0) {
+      const strength = Math.min(1, scareTime * 4)
+      const x = (Math.random() - 0.5) * 48 * strength
+      const y = (Math.random() - 0.5) * 38 * strength
+      const roll = (Math.random() - 0.5) * 3.5 * strength
+      this.renderer.domElement.style.transform = `translate(${x}px, ${y}px) rotate(${roll}deg) scale(1.12)`
+      this.renderer.domElement.style.filter = 'contrast(1.3) brightness(1.15)'
+    } else {
+      this.renderer.domElement.style.transform = ''
+      this.renderer.domElement.style.filter = ''
+    }
 
     // ----------------------------------------
     // RENDER
@@ -911,8 +960,23 @@ if (this.loaded) {
       this.camera
     )
 
+    this.startHouseAudioAfterRender()
 
     this.updateHud(dt)
+  }
+
+  startHouseAudioAfterRender() {
+    if (!this.loaded || this.currentLevel !== 'house' || !this.input.isLocked ||
+        this.houseAudio.enabled || this.houseAudioStartFrame !== null) return
+
+    const loadId = this.levelLoadId
+    // Let the browser present the first rendered scene before starting audio.
+    this.houseAudioStartFrame = requestAnimationFrame(() => {
+      this.houseAudioStartFrame = null
+      if (!this.loaded || loadId !== this.levelLoadId || this.currentLevel !== 'house' ||
+          !this.input.isLocked || this.houseAudio.enabled) return
+      this.houseAudio.setHouseActive(true, this.model)
+    })
   }
 
 
@@ -1047,6 +1111,15 @@ if (this.loaded) {
 
           this.model =
             model
+
+          if (levelName === 'house') {
+            this.houseStoryView = new HouseStoryView(this)
+            this.houseStory = new HouseStory({
+              model, level: levelRoot, items: this.investigationItems,
+              camera: this.camera, audio: this.houseAudio,
+              onMessage: (text, duration) => this.houseStoryView.message(text, duration),
+            })
+          }
 
           this.trainTerrain =
             trainTerrain || null
@@ -1236,12 +1309,6 @@ if (this.loaded) {
             new CustomEvent('levelloaded', { detail: { levelName } })
           )
 
-          this.houseAudio.setHouseActive(
-            levelName === 'house',
-            levelName === 'house' ? model : null,
-          )
-
-
           console.log(
             `${levelName} loaded`
           )
@@ -1285,6 +1352,14 @@ if (this.loaded) {
   // ============================================
 
   unloadCurrentLevel() {
+    if (this.houseAudioStartFrame !== null) {
+      cancelAnimationFrame(this.houseAudioStartFrame)
+      this.houseAudioStartFrame = null
+    }
+    this.houseStory?.dispose()
+    this.houseStoryView?.dispose()
+    this.houseStory = null
+    this.houseStoryView = null
 
     this.houseAudio.setHouseActive(false)
 
@@ -1548,13 +1623,19 @@ if (this.loaded) {
               'ENTER THE HOUSE AND INSPECT THE FAMILY FRAME'
           } else if (!this.kitchenPhoneAnswered) {
             hudObjective.textContent =
-              'ANSWER THE RINGING KITCHEN TELEPHONE'
+              this.houseStory?.isPhoneRinging()
+                ? 'ANSWER THE RINGING KITCHEN TELEPHONE'
+                : 'THE KITCHEN TELEPHONE IS SILENT'
           } else {
             hudObjective.textContent =
               'FOLLOW THE FOOTSTEPS UPSTAIRS'
           }
         }
       }
+    }
+
+    if (hudObjective && this.houseStory?.objective()) {
+      hudObjective.textContent = this.houseStory.objective()
     }
 
     const evidenceButton =
@@ -1587,10 +1668,9 @@ if (this.loaded) {
       this.camera
     )
 
-    const hits = this.raycaster.intersectObject(
-      this.model,
-      true
-    )
+    const hits = this.raycaster.intersectObjects(
+      [this.model, ...(this.houseStory ? [this.houseStory.root] : [])], true,
+    ).filter(hit => isEffectivelyVisible(hit.object))
 
     for (const hit of hits) {
 
@@ -1609,6 +1689,7 @@ if (this.loaded) {
 
         object = object.parent
       }
+      if (hit.object.isMesh && hit.object.material?.transparent !== true) break
     }
 
     return null
@@ -1647,18 +1728,20 @@ if (this.loaded) {
     inspectionGroup.name = 'newspaper-inspection-view'
 
     const sourceMesh =
-      investigationItem.object.isMesh
+      investigationItem.inspectionMesh || (investigationItem.object.isMesh
         ? investigationItem.object
         : investigationItem.object.getObjectByProperty(
             'isMesh',
             true,
-          )
+          ))
 
     if (!sourceMesh) {
 
       this.hideNewspaperReader()
       return
     }
+
+    this.currentInspectionItemId = investigationItem.id
 
     const inspectionObject =
       new THREE.Mesh(
@@ -1675,7 +1758,7 @@ if (this.loaded) {
     inspectionObject.position.set(0, 0, 0)
     // The porch plane is horizontal in the GLB (its normal points upward),
     // so turn the picked-up copy toward the camera for inspection.
-    inspectionObject.rotation.set(Math.PI / 2, 0, 0)
+    inspectionObject.rotation.set(investigationItem.story ? 0 : Math.PI / 2, 0, 0)
     inspectionObject.scale.set(1, 1, 1)
     inspectionObject.updateMatrixWorld(true)
 
@@ -1809,10 +1892,6 @@ if (this.loaded) {
 
     this.valeFrameInspected = true
 
-    // The phone's changed prompt is the immediate, in-world instruction:
-    // the player is not sent to a detached quest marker.
-    this.houseAudio.playRandomGhostSound()
-
     this.openNewspaperReader(investigationItem)
   }
 
@@ -1823,7 +1902,7 @@ if (this.loaded) {
 
     // A short ghost vocal is used as Evelyn's distorted message until a
     // dedicated telephone recording is supplied.
-    this.houseAudio.playRandomGhostSound()
+    this.houseStory?.answerPhone()
   }
 
 
@@ -1834,9 +1913,14 @@ if (this.loaded) {
       return
     }
 
+    const inspectionId = this.currentInspectionItemId
     this.hideNewspaperReader()
+    this.currentInspectionItemId = null
 
     this.input.lock()
+
+    if (inspectionId === 'vale-frame') this.houseStory?.schedulePhoneRing(3)
+    this.houseStory?.finishInspection(inspectionId)
   }
 
 
@@ -1933,7 +2017,7 @@ if (this.loaded) {
 
   openEvidenceBook() {
 
-    if (this.currentLevel !== 'house' || this.evidenceBookOpen) {
+    if (this.currentLevel !== 'house' || this.evidenceBookOpen || this.newspaperOpen || this.houseStoryView?.open) {
 
       return
     }
@@ -1947,6 +2031,7 @@ if (this.loaded) {
     }
 
     this.evidenceBookOpen = true
+    this.houseStoryView?.updateJournal()
 
     evidenceBook.classList.toggle(
       'has-evidence',
@@ -2002,6 +2087,10 @@ if (this.loaded) {
 
     if (this.newspaperInspectionObject) {
 
+      this.newspaperInspectionObject.traverse(object => {
+        const materials = Array.isArray(object.material) ? object.material : [object.material]
+        materials.forEach(material => material?.dispose())
+      })
       this.camera.remove(this.newspaperInspectionObject)
       this.newspaperInspectionObject = null
     }
@@ -2112,6 +2201,7 @@ if (this.loaded) {
   }
 
   getInvestigationPrompt(investigationItem) {
+    if (investigationItem.story) return this.houseStory.prompt(investigationItem)
 
     switch (investigationItem.id) {
       case 'newspaper':
@@ -2129,13 +2219,13 @@ if (this.loaded) {
           : investigationItem.prompt
 
       case 'kitchen-phone':
-        if (!this.valeFrameInspected) {
+        if (this.kitchenPhoneAnswered) {
+          return 'A child whispered: “Upstairs.”'
+        }
+        if (!this.valeFrameInspected || !this.houseStory?.isPhoneRinging()) {
           return 'The telephone is silent'
         }
-
-        return this.kitchenPhoneAnswered
-          ? 'A child whispered: “Upstairs.”'
-          : 'Press E to answer the ringing telephone'
+        return 'Press E to answer the ringing telephone'
 
       case 'fourth-place-setting':
         if (!this.newspaperRead) {
@@ -3534,6 +3624,14 @@ if (this.loaded) {
 // ============================================
 // CLEAN UP LEVEL
 // ============================================
+
+function isEffectivelyVisible(object) {
+  while (object) {
+    if (!object.visible) return false
+    object = object.parent
+  }
+  return true
+}
 
 function createInspectionMaterial(source) {
 

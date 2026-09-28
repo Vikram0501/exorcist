@@ -6,9 +6,7 @@ import { setupHouseLighting } from './lighting.js'
 
 // Current house scene exported from Blender. Includes the surrounding forest and
 // four boundary meshes named Plane, Plane.001, Plane.002 and Plane.003.
-// Generated from House.glb with WebP textures and meshopt compression. Keep
-// the Blender export beside it as the editable source asset.
-const HOUSE_MODEL_URL = '/models/House.optimized.glb'
+const HOUSE_MODEL_URL = '/levels/house/models/vale-manor.glb'
 const HOUSE_SCALE = 0.15
 
 const DOOR_SPEED = 12
@@ -388,7 +386,7 @@ export async function loadHouse(level) {
   model.updateMatrixWorld(true)
 
   // Keep the original house alignment stable. The new forest and invisible
-  // boundary walls are separate roots in House.glb and must not change the
+  // boundary walls are separate roots in the house model and must not change the
   // centering used by the existing spawn, doors and lighting coordinates.
   const placementRoot =
     findObjectCaseInsensitive(model, 'world') || model
@@ -911,13 +909,14 @@ function isBarnWallName(name) {
 }
 
 function findObjectCaseInsensitive(root, wantedName) {
-  const target = wantedName.trim().toLowerCase()
+  const normalize = name => name.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const target = normalize(wantedName)
   let found = null
 
   root.traverse((object) => {
     if (
       !found &&
-      (object.name || '').trim().toLowerCase() === target
+      normalize(object.name || '') === target
     ) {
       found = object
     }
