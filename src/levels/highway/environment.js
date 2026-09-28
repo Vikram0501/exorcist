@@ -16,11 +16,6 @@ const HEADLIGHT_ANGLE = Math.PI / 6
 const HEADLIGHT_PENUMBRA = 0.4
 const HEADLIGHT_DECAY = 1.0
 
-const TREE_COUNT = 2000
-const TREE_VARIATION_COUNT = 5
-const LARGE_TREE_COUNT = 24
-const BRANCH_COUNT = 700
-const BUSH_COUNT = 500
 const SILHOUETTE_COUNT = 36
 const MIST_LAYER_COUNT = 3
 const MIST_INSTANCES_PER_LAYER = 80
@@ -40,9 +35,33 @@ const ROAD_MIN_Z = -940
 const HORROR_BUILD_START_Z = -80
 const HORROR_BUILD_END_Z = -800
 
-const TREE_MIN_SCALE = 0.8
-const TREE_MAX_SCALE = 1.5
-const TREE_TILT_RANGE = 0.1
+// The city block is wider than it is deep and faces its -X edge to the road.
+// Sections are pushed outward until that edge clears the safe corridor, so the
+// clearance is a guarantee rather than an offset that depends on the model.
+const CITY_MODEL_SCALE = 1.5
+const CITY_Y_OFFSET = -0.15 // Outer ground top: keeps bases out of the air.
+const CITY_SAFE_ROAD_CLEARANCE = 17
+const CITY_CLEARANCE_VARIATION = 1.5
+const CITY_CLEARANCE_TOLERANCE = 0.02
+const CITY_FOOTPRINT_STEP = 1
+// Flipped blocks alternate with upright ones and the two footprints reach in
+// opposite directions, so each gap is keyed to the block just placed: an
+// upright block's main mass ends about 11 units ahead of its origin, and the
+// next (rotated) block reaches its mass back about 11 units, so the tight gap
+// still leaves a metre of overlap. After a rotated block the mass reaches
+// about 16 units ahead plus the outlying group near 24, so the gap stays wide
+// while the next block's trailing outlying group keeps the street wall solid.
+// Both combinations keep the footprints overlapping, so the street wall never
+// opens a section-sized hole.
+const CITY_SEGMENT_LENGTH = 25 // After a rotated block.
+const CITY_SPACING_VARIATION = 1.2
+const CITY_SEGMENT_LENGTH_TIGHT = 20 // After an upright block.
+const CITY_SPACING_VARIATION_TIGHT = 0.7
+const CITY_SCALE_VARIATION = 0.02
+const CITY_DRAW_DISTANCE = 140
+const CITY_END_CUSHION = 18
+const CITY_TANGENT_HALF = 4
+const CITY_SIDES = [-1, 1]
 
 
 // ============================================
@@ -117,33 +136,6 @@ function horrorFactor(z) {
 function buildShoulderMaterial() {
   return new THREE.MeshStandardMaterial({
     color: 0x141010,
-    roughness: 0.95,
-    metalness: 0,
-  })
-}
-
-
-function buildTreeMaterial() {
-  return new THREE.MeshStandardMaterial({
-    color: 0x121212,
-    roughness: 0.95,
-    metalness: 0,
-  })
-}
-
-
-function buildBranchMaterial() {
-  return new THREE.MeshStandardMaterial({
-    color: 0x0e0e0e,
-    roughness: 0.95,
-    metalness: 0,
-  })
-}
-
-
-function buildBushMaterial() {
-  return new THREE.MeshStandardMaterial({
-    color: 0x0d120d,
     roughness: 0.95,
     metalness: 0,
   })
@@ -291,43 +283,6 @@ function createSilhouetteGeometry() {
 
 
 // ============================================
-// GLB TREE PREPARATION
-// ============================================
-
-function prepareTreeGeometry(geometry, quaternion, scale) {
-  const geo = geometry.clone()
-
-  const m = new THREE.Matrix4()
-  const q = new THREE.Quaternion().set(
-    quaternion[0],
-    quaternion[1],
-    quaternion[2],
-    quaternion[3]
-  )
-  const s = new THREE.Vector3(
-    scale[0],
-    scale[1],
-    scale[2]
-  )
-  m.compose(new THREE.Vector3(0, 0, 0), q, s)
-  geo.applyMatrix4(m)
-
-  geo.computeBoundingBox()
-  const box = geo.boundingBox
-
-  const cx = (box.max.x + box.min.x) / 2
-  const cz = (box.max.z + box.min.z) / 2
-  geo.translate(-cx, 0, -cz)
-  geo.translate(0, -box.min.y, 0)
-
-  return {
-    geometry: geo,
-    height: box.max.y - box.min.y,
-  }
-}
-
-
-// ============================================
 // ENVIRONMENT MANAGER
 // ============================================
 
@@ -338,7 +293,7 @@ export class HighwayEnvironmentManager {
     highwayGroup,
     playerCar,
     moonLight,
-    treeTemplates,
+    cityBuildings,
     roadPath,
     arcLengths,
   }) {
@@ -348,7 +303,7 @@ export class HighwayEnvironmentManager {
     this.playerCar = playerCar
     this.moonLight = moonLight
 
-    this.treeTemplates = treeTemplates || []
+    this.cityTemplate = cityBuildings || null
     this.roadPath = roadPath || []
     this.arcLengths = arcLengths || []
 
@@ -366,11 +321,8 @@ export class HighwayEnvironmentManager {
     this.mistLayers = []
     this.mistLayerData = []
 
-    this.treeBaseMatrices = []
-    this.treeSwayData = []
-
-    this.treeVariationMeshes = []
-    this.treePlacementData = []
+    this.cityGroup = null
+    this.citySections = []
 
     this.sharedMaterials = []
 
@@ -387,8 +339,7 @@ export class HighwayEnvironmentManager {
     this.setupFog()
     this.setupHeadlights()
     this.setupShoulders()
-    this.setupForest()
-    this.setupBranches()
+    this.setupCity()
     this.setupGroundMist()
     this.setupSilhouettes()
     this.setupRoadsideClutter()
@@ -457,43 +408,6 @@ export class HighwayEnvironmentManager {
       0,
       p0.z + (p1.z - p0.z) * t
     )
-  }
-
-
-  distanceToRoadCenter(x, z) {
-    if (
-      !this.roadPath ||
-      !this.roadPath.length ||
-      !this.arcLengths
-    ) {
-      return 999
-    }
-
-    const totalLength =
-      this.arcLengths[
-        this.arcLengths.length - 1
-      ]
-    const step = 5
-
-    let minDist = Infinity
-
-    for (
-      let d = 0;
-      d <= totalLength;
-      d += step
-    ) {
-      const sample = this.getPathSample(d)
-      const dx = x - sample.x
-      const dz = z - sample.z
-      const dist = Math.sqrt(
-        dx * dx + dz * dz
-      )
-      if (dist < minDist) {
-        minDist = dist
-      }
-    }
-
-    return minDist
   }
 
 
@@ -672,642 +586,289 @@ export class HighwayEnvironmentManager {
 
 
   // ============================================
-  // FOREST
+  // CITY
   // ============================================
 
-  setupForest() {
+  setupCity() {
 
-    if (this.treeTemplates.length > 0) {
-      this.setupForestFromGLB()
-    } else {
-      this.setupForestFallback()
+    if (!this.cityTemplate) return
+
+    const box = this.cityTemplate.userData.cityBox
+
+    if (!box) return
+
+    const totalLength =
+      this.arcLengths[this.arcLengths.length - 1]
+
+    if (!totalLength) return
+
+    this.cityGroup = new THREE.Group()
+    this.cityGroup.name = 'cityEnvironment'
+    this.group.add(this.cityGroup)
+
+    for (const side of CITY_SIDES) {
+
+      let distance = 0
+      let index = 0
+
+      while (distance < totalLength + CITY_END_CUSHION) {
+
+        // Alternating blocks swap which end carries the outlying group, and
+        // the left/right sides run in opposite phase so the two walls do not
+        // read as mirror copies.
+        const sideParity = side > 0 ? 1 : 0
+        const parity =
+          (sideParity + (index % 2 === 1 ? 1 : 0)) % 2
+
+        this.addCitySection(side, index, distance, box, parity)
+
+        // The gap depends on the block just placed; see the constants above.
+        const tight = parity === 0
+        const segment = tight
+          ? CITY_SEGMENT_LENGTH_TIGHT
+          : CITY_SEGMENT_LENGTH
+        const variation = tight
+          ? CITY_SPACING_VARIATION_TIGHT
+          : CITY_SPACING_VARIATION
+
+        distance += segment + hashRange(
+          index * 3.7 + side * 11.3,
+          -variation,
+          variation
+        )
+
+        index += 1
+
+      }
+
     }
 
-    this.setupBushes()
+    console.log(
+      'City environment:',
+      this.citySections.length,
+      'sections'
+    )
   }
 
 
-  setupForestFromGLB() {
+  // Built once here: the race only toggles visibility, and a restart builds
+  // from a freshly loaded template instead of reusing anything stale.
+  addCitySection(side, index, distance, box, parity) {
 
-    const dummy = new THREE.Object3D()
+    const frame = this.getCityFrame(distance)
 
-    const treesPerVariation =
-      Math.ceil(TREE_COUNT / TREE_VARIATION_COUNT)
-    const variationCounts =
-      new Array(TREE_VARIATION_COUNT).fill(0)
-
-    const treeAssignments = []
-
-    for (
-      let i = 0;
-      i < TREE_COUNT;
-      i++
-    ) {
-      const vi =
-        Math.floor(
-          hash(i * 99.9) * TREE_VARIATION_COUNT
-        )
-      variationCounts[vi]++
-      treeAssignments.push(vi)
-    }
-
-    for (
-      let v = 0;
-      v < TREE_VARIATION_COUNT;
-      v++
-    ) {
-      const count = variationCounts[v]
-      if (count === 0) continue
-
-      const template =
-        this.treeTemplates[
-          v % this.treeTemplates.length
-        ]
-
-      const mesh =
-        new THREE.InstancedMesh(
-          template.mesh.geometry,
-          template.mesh.material,
-          count
-        )
-      mesh.castShadow = true
-      mesh.receiveShadow = true
-
-      this.treeVariationMeshes.push(mesh)
-      this.group.add(mesh)
-    }
-
-    const variationIndices =
-      new Array(TREE_VARIATION_COUNT).fill(0)
-
-    for (
-      let i = 0;
-      i < TREE_COUNT;
-      i++
-    ) {
-
-      const vi = treeAssignments[i]
-      const localIdx = variationIndices[vi]
-      variationIndices[vi]++
-
-      const hf = horrorFactor(
-        ROAD_MAX_Z -
-          hash(i * 6.6) * ROAD_LENGTH
+    // Alternating blocks swap which end carries the outlying group, so the
+    // repeated model does not read as one stamped strip. `parity` comes from
+    // the caller because it also decides the gap to the next block.
+    const scale = CITY_MODEL_SCALE * (
+      1 + hashRange(
+        index * 9.3 + side * 4.7,
+        -CITY_SCALE_VARIATION,
+        CITY_SCALE_VARIATION
       )
+    )
 
-      const side =
-        hash(i * 1.1 + 0.5) > 0.5
-          ? 1 : -1
+    const clearance = CITY_SAFE_ROAD_CLEARANCE + hashRange(
+      index * 5.1 + side * 7.9,
+      0,
+      CITY_CLEARANCE_VARIATION
+    )
 
-      const zone = hash(i * 2.2 + 0.3)
+    const section = this.cityTemplate.clone()
 
-      let minDist = 9
-      let maxDist = 55
+    section.name =
+      `citySection_${side > 0 ? 'right' : 'left'}_${index}`
+    section.rotation.y =
+      frame.angle + (parity === 1 ? Math.PI : 0)
+    section.scale.setScalar(scale)
+    section.position.set(
+      frame.x,
+      CITY_Y_OFFSET,
+      frame.z
+    )
 
-      if (hf > 0.3) {
-        minDist = 8 - hf * 2
-        maxDist = 55 - hf * 10
-      }
+    this.cityGroup.add(section)
+    section.updateMatrixWorld(true)
 
-      let x
-      if (zone < 0.4) {
-        x = side *
-          (minDist + hash(i * 3.3) *
-            (14 - minDist))
-      } else if (zone < 0.8) {
-        x = side *
-          (14 + hash(i * 4.4) * 16)
-      } else {
-        x = side *
-          (30 + hash(i * 5.5) *
-            (maxDist - 30))
-      }
+    this.settleCitySection(
+      section, box, frame, side, clearance
+    )
 
-      const z =
-        ROAD_MAX_Z + 5 -
-        hash(i * 6.6) *
-          (ROAD_LENGTH + 20)
+    this.citySections.push(section)
+  }
 
-      const roadDist =
-        this.distanceToRoadCenter(x, z)
 
-      const minRoadDist =
-        ROAD_WIDTH * 0.5 + 3
+  // A block is straight and the road bends under it, so placement starts from
+  // the frame and then measures the whole footprint against the path until
+  // every corner is at the safe distance.
+  settleCitySection(section, box, frame, side, clearance) {
 
-      if (roadDist < minRoadDist) {
-        dummy.position.set(0, -1000, 0)
-        dummy.rotation.set(0, 0, 0)
-        dummy.scale.setScalar(0)
-        dummy.updateMatrix()
+    const near =
+      this.measureCityNearEdge(section, box, frame, side)
+    let shift = side * clearance - near
 
-        const mesh =
-          this.treeVariationMeshes[vi]
-        mesh.setMatrixAt(
-          localIdx,
-          dummy.matrix
-        )
+    for (let attempt = 0; attempt < 4; attempt++) {
 
-        this.treePlacementData.push({
-          variationIdx: vi,
-          instanceIdx: localIdx,
-          base: {
-            x: 0, z: -1000, rotY: 0,
-            leanX: 0,
-            leanZ: 0,
-            scale: 0,
-          },
-          sway: {
-            phase: 0,
-            speed: 0,
-            amplitude: 0,
-          },
-        })
+      section.position.x += frame.perpX * shift
+      section.position.z += frame.perpZ * shift
+      section.updateMatrixWorld(true)
 
-        continue
-      }
+      const gap =
+        clearance - this.measureCityClearance(section, box)
 
-      const rotY =
-        hash(i * 9.9) * Math.PI * 2
+      if (gap <= CITY_CLEARANCE_TOLERANCE) return
 
-      const leanX =
-        hashRange(i * 40.1, -TREE_TILT_RANGE, TREE_TILT_RANGE) *
-        (1 + hf * 1.5)
+      shift = side * gap
 
-      const leanZ =
-        (hash(i * 40.2) > 0.5 ? 1 : -1) *
-        hashRange(i * 40.3, 0.02, 0.12) *
-        (1 + hf * 2)
-
-      const sideSign = side
-      const inwardBias = 0.03
-      const leanXBias =
-        sideSign > 0
-          ? -inwardBias
-          : inwardBias
-
-      const uniformScale =
-        hashRange(
-          i * 88.8,
-          TREE_MIN_SCALE,
-          TREE_MAX_SCALE
-        )
-
-      dummy.position.set(x, 0, z)
-      dummy.rotation.set(
-        leanX + leanXBias,
-        rotY,
-        leanZ
-      )
-      dummy.scale.setScalar(uniformScale)
-      dummy.updateMatrix()
-
-      const mesh =
-        this.treeVariationMeshes[vi]
-      mesh.setMatrixAt(localIdx, dummy.matrix)
-
-      this.treePlacementData.push({
-        variationIdx: vi,
-        instanceIdx: localIdx,
-        base: {
-          x, z, rotY,
-          leanX: leanX + leanXBias,
-          leanZ,
-          scale: uniformScale,
-        },
-        sway: {
-          phase: hash(i * 50.1) * Math.PI * 2,
-          speed: hashRange(i * 50.2, 0.3, 0.8),
-          amplitude:
-            hashRange(i * 50.3, 0.003, 0.012) *
-            (1 + hf * 0.5),
-        },
-      })
-    }
-
-    for (
-      const mesh of this.treeVariationMeshes
-    ) {
-      mesh.instanceMatrix.needsUpdate = true
     }
   }
 
 
-  setupForestFallback() {
+  measureCityNearEdge(section, box, frame, side) {
 
-    const treeMat = buildTreeMaterial()
-    this.sharedMaterials.push(treeMat)
+    const corners = [
+      new THREE.Vector3(box.min.x, 0, box.min.z),
+      new THREE.Vector3(box.max.x, 0, box.min.z),
+      new THREE.Vector3(box.min.x, 0, box.max.z),
+      new THREE.Vector3(box.max.x, 0, box.max.z),
+    ]
 
-    const trunkGeo =
-      new THREE.CylinderGeometry(
-        0.06, 0.2, 1, 6
+    let nearest = side < 0 ? -Infinity : Infinity
+
+    for (const corner of corners) {
+
+      corner.applyMatrix4(section.matrixWorld)
+
+      const along =
+        (corner.x - frame.x) * frame.perpX +
+        (corner.z - frame.z) * frame.perpZ
+
+      nearest = side < 0
+        ? Math.max(nearest, along)
+        : Math.min(nearest, along)
+
+    }
+
+    return nearest
+  }
+
+
+  measureCityClearance(section, box) {
+
+    const corners = [
+      [box.min.x, box.min.z],
+      [box.max.x, box.min.z],
+      [box.max.x, box.max.z],
+      [box.min.x, box.max.z],
+    ]
+
+    const point = new THREE.Vector3()
+    let nearest = Infinity
+
+    for (let i = 0; i < corners.length; i++) {
+
+      const [fromX, fromZ] = corners[i]
+      const [toX, toZ] = corners[(i + 1) % corners.length]
+
+      const edgeLength =
+        Math.hypot(toX - fromX, toZ - fromZ)
+      const steps = Math.max(
+        1,
+        Math.ceil(edgeLength / CITY_FOOTPRINT_STEP)
       )
 
-    const trunkMesh =
-      new THREE.InstancedMesh(
-        trunkGeo, treeMat, TREE_COUNT
-      )
-    trunkMesh.castShadow = true
-    trunkMesh.receiveShadow = true
+      for (let step = 0; step <= steps; step++) {
 
-    const dummy = new THREE.Object3D()
+        const t = step / steps
 
-    for (
-      let i = 0;
-      i < TREE_COUNT;
-      i++
-    ) {
-
-      const progress =
-        Math.max(
+        point.set(
+          fromX + (toX - fromX) * t,
           0,
-          Math.min(
-            1,
-            -hash(i * 6.6) *
-              ROAD_LENGTH /
-              ROAD_LENGTH
-          )
+          fromZ + (toZ - fromZ) * t
         )
+        point.applyMatrix4(section.matrixWorld)
 
-      const hf = horrorFactor(
-        ROAD_MAX_Z -
-          hash(i * 6.6) * ROAD_LENGTH
-      )
+        const distance =
+          this.distanceToPath(point.x, point.z)
 
-      const side =
-        hash(i * 1.1 + 0.5) > 0.5
-          ? 1 : -1
+        if (distance < nearest) {
+          nearest = distance
+        }
 
-      const zone = hash(i * 2.2 + 0.3)
-
-      let minDist = 9
-      let maxDist = 55
-
-      if (hf > 0.3) {
-        minDist = 8 - hf * 2
-        maxDist = 55 - hf * 10
       }
 
-      let x
-      if (zone < 0.4) {
-        x = side *
-          (minDist + hash(i * 3.3) *
-            (14 - minDist))
-      } else if (zone < 0.8) {
-        x = side *
-          (14 + hash(i * 4.4) * 16)
-      } else {
-        x = side *
-          (30 + hash(i * 5.5) *
-            (maxDist - 30))
-      }
-
-      const z =
-        ROAD_MAX_Z + 5 -
-        hash(i * 6.6) *
-          (ROAD_LENGTH + 20)
-
-      const roadDist =
-        this.distanceToRoadCenter(x, z)
-
-      const minRoadDist =
-        ROAD_WIDTH * 0.5 + 3
-
-      if (roadDist < minRoadDist) {
-        dummy.position.set(0, -1000, 0)
-        dummy.rotation.set(0, 0, 0)
-        dummy.scale.set(0, 0, 0)
-        dummy.updateMatrix()
-
-        trunkMesh.setMatrixAt(
-          i, dummy.matrix
-        )
-
-        this.treeBaseMatrices.push({
-          x: 0, z: -1000,
-          height: 0,
-          widthScale: 0,
-          rotY: 0, leanX: 0, leanZ: 0,
-        })
-
-        this.treeSwayData.push({
-          phase: 0,
-          speed: 0,
-          amplitude: 0,
-        })
-
-        continue
-      }
-
-      const baseHeight =
-        hashRange(i * 7.7, 3, 9)
-
-      const height =
-        baseHeight * (1 + hf * 0.3)
-
-      const widthScale =
-        hashRange(i * 8.8, 0.5, 1.4)
-
-      const rotY =
-        hash(i * 9.9) * Math.PI * 2
-
-      const leanX =
-        hashRange(i * 40.1, -0.08, 0.08) *
-        (1 + hf * 1.5)
-
-      const leanZ =
-        (hash(i * 40.2) > 0.5 ? 1 : -1) *
-        hashRange(i * 40.3, 0.02, 0.12) *
-        (1 + hf * 2)
-
-      dummy.position.set(x, 0, z)
-      dummy.rotation.set(leanX, rotY, leanZ)
-      dummy.scale.set(
-        widthScale, height, widthScale
-      )
-      dummy.updateMatrix()
-
-      trunkMesh.setMatrixAt(
-        i, dummy.matrix
-      )
-
-      this.treeBaseMatrices.push({
-        x, z, height, widthScale,
-        rotY, leanX, leanZ,
-      })
-
-      this.treeSwayData.push({
-        phase: hash(i * 50.1) * Math.PI * 2,
-        speed: hashRange(i * 50.2, 0.3, 0.8),
-        amplitude:
-          hashRange(i * 50.3, 0.003, 0.012) *
-          (1 + hf * 0.5),
-      })
     }
 
-    trunkMesh.instanceMatrix.needsUpdate = true
-    this.group.add(trunkMesh)
-    this.trunkMesh = trunkMesh
-
-
-    // LARGE SINISTER TREES
-
-    const largeCount = LARGE_TREE_COUNT
-    const largeGeo =
-      new THREE.CylinderGeometry(
-        0.15, 0.4, 1, 7
-      )
-
-    const largeMesh =
-      new THREE.InstancedMesh(
-        largeGeo, treeMat, largeCount
-      )
-    largeMesh.castShadow = true
-    largeMesh.receiveShadow = true
-
-    for (
-      let i = 0;
-      i < largeCount;
-      i++
-    ) {
-
-      const side =
-        hash(i * 60.1) > 0.5 ? 1 : -1
-
-      const x =
-        side *
-        (9 + hash(i * 60.2) * 8)
-
-      const zStart =
-        ROAD_MAX_Z - 30
-      const zRange = ROAD_LENGTH - 60
-      const z =
-        zStart -
-        hash(i * 60.3) * zRange
-
-      const height =
-        hashRange(i * 60.4, 10, 16)
-
-      const widthScale =
-        hashRange(i * 60.5, 1.8, 3.0)
-
-      const rotY =
-        hash(i * 60.6) * Math.PI * 2
-
-      const leanZ =
-        (hash(i * 60.7) > 0.5 ? 1 : -1) *
-        hashRange(i * 60.8, 0.05, 0.2)
-
-      dummy.position.set(x, 0, z)
-      dummy.rotation.set(0, rotY, leanZ)
-      dummy.scale.set(
-        widthScale, height, widthScale
-      )
-      dummy.updateMatrix()
-
-      largeMesh.setMatrixAt(
-        i, dummy.matrix
-      )
-
-      this.treeBaseMatrices.push({
-        x, z, height, widthScale,
-        rotY, leanX: 0, leanZ,
-        isLarge: true,
-      })
-
-      this.treeSwayData.push({
-        phase: hash(i * 61.1) * Math.PI * 2,
-        speed: hashRange(i * 61.2, 0.15, 0.4),
-        amplitude:
-          hashRange(i * 61.3, 0.002, 0.006),
-      })
-    }
-
-    largeMesh.instanceMatrix.needsUpdate = true
-    this.group.add(largeMesh)
+    return nearest
   }
 
 
-  setupBushes() {
+  // Exact distance to the path polyline: sampling it would blur the corners
+  // the block has to stay away from.
+  distanceToPath(x, z) {
 
-    const bushMat = buildBushMaterial()
-    this.sharedMaterials.push(bushMat)
+    const points = this.roadPath
+    let nearest = Infinity
 
-    const bushGeo =
-      new THREE.DodecahedronGeometry(0.7, 1)
+    for (let i = 1; i < points.length; i++) {
 
-    const bushPos =
-      bushGeo.getAttribute('position')
-    for (
-      let i = 0;
-      i < bushPos.count;
-      i++
-    ) {
-      bushPos.setY(
-        i,
-        bushPos.getY(i) * 0.3
-      )
-    }
-    bushPos.needsUpdate = true
-    bushGeo.computeVertexNormals()
+      const a = points[i - 1]
+      const b = points[i]
 
-    const bushMesh =
-      new THREE.InstancedMesh(
-        bushGeo, bushMat, BUSH_COUNT
-      )
-    bushMesh.castShadow = false
-    bushMesh.receiveShadow = true
+      const dx = b.x - a.x
+      const dz = b.z - a.z
+      const lengthSq = dx * dx + dz * dz
 
-    const dummy = new THREE.Object3D()
+      const t = lengthSq > 0
+        ? ((x - a.x) * dx + (z - a.z) * dz) / lengthSq
+        : 0
+      const along = t < 0 ? 0 : t > 1 ? 1 : t
 
-    for (
-      let i = 0;
-      i < BUSH_COUNT;
-      i++
-    ) {
+      const px = a.x + dx * along - x
+      const pz = a.z + dz * along - z
+      const distance = Math.sqrt(px * px + pz * pz)
 
-      const side =
-        hash(i * 11.1 + 2.1) > 0.5
-          ? 1 : -1
-
-      const x =
-        side *
-        (7.5 + hash(i * 12.2) * 22)
-
-      const z =
-        ROAD_MAX_Z + 3 -
-        hash(i * 13.3) *
-          (ROAD_LENGTH + 10)
-
-      const roadDist =
-        this.distanceToRoadCenter(x, z)
-
-      const minRoadDist =
-        ROAD_WIDTH * 0.5 + 2
-
-      if (roadDist < minRoadDist) {
-        dummy.position.set(0, -1000, 0)
-        dummy.rotation.set(0, 0, 0)
-        dummy.scale.setScalar(0)
-        dummy.updateMatrix()
-
-        bushMesh.setMatrixAt(
-          i, dummy.matrix
-        )
-        continue
+      if (distance < nearest) {
+        nearest = distance
       }
 
-      const scale =
-        hashRange(i * 14.4, 0.4, 1.8)
-
-      const rotY =
-        hash(i * 15.5) * Math.PI * 2
-
-      dummy.position.set(x, 0.1, z)
-      dummy.rotation.set(0, rotY, 0)
-      dummy.scale.set(
-        scale, scale * 0.7, scale
-      )
-      dummy.updateMatrix()
-
-      bushMesh.setMatrixAt(
-        i, dummy.matrix
-      )
     }
 
-    bushMesh.instanceMatrix.needsUpdate = true
-    this.group.add(bushMesh)
+    return nearest
   }
 
 
-  // ============================================
-  // BRANCHES
-  // ============================================
+  // Path position, travel yaw and the perpendicular both sides are measured
+  // against, taken from the same convention as the barriers and cars.
+  getCityFrame(distance) {
 
-  setupBranches() {
+    const totalLength =
+      this.arcLengths[this.arcLengths.length - 1]
 
-    const mat = buildBranchMaterial()
-    this.sharedMaterials.push(mat)
+    const tangentAt = Math.min(
+      Math.max(distance, CITY_TANGENT_HALF),
+      totalLength - CITY_TANGENT_HALF
+    )
 
-    const branchGeo =
-      new THREE.CylinderGeometry(
-        0.015, 0.04, 1, 4
-      )
+    const behind =
+      this.getPathSample(tangentAt - CITY_TANGENT_HALF)
+    const ahead =
+      this.getPathSample(tangentAt + CITY_TANGENT_HALF)
+    const origin = this.getPathSample(distance)
 
-    const branchMesh =
-      new THREE.InstancedMesh(
-        branchGeo, mat, BRANCH_COUNT
-      )
-    branchMesh.castShadow = false
-    branchMesh.receiveShadow = false
+    const dx = ahead.x - behind.x
+    const dz = ahead.z - behind.z
+    const length = Math.sqrt(dx * dx + dz * dz) || 1
+    const dirX = dx / length
+    const dirZ = dz / length
 
-    const dummy = new THREE.Object3D()
-
-    for (
-      let i = 0;
-      i < BRANCH_COUNT;
-      i++
-    ) {
-
-      const side =
-        hash(i * 70.1) > 0.5 ? 1 : -1
-
-      const x =
-        side *
-        (7.5 + hash(i * 70.2) * 18)
-
-      const z =
-        ROAD_MAX_Z + 2 -
-        hash(i * 70.3) * (ROAD_LENGTH + 10)
-
-      const roadDist =
-        this.distanceToRoadCenter(x, z)
-
-      const minRoadDist =
-        ROAD_WIDTH * 0.5 + 2
-
-      if (roadDist < minRoadDist) {
-        dummy.position.set(0, -1000, 0)
-        dummy.rotation.set(0, 0, 0)
-        dummy.scale.setScalar(0)
-        dummy.updateMatrix()
-
-        branchMesh.setMatrixAt(
-          i, dummy.matrix
-        )
-        continue
-      }
-
-      const branchLen =
-        hashRange(i * 70.4, 1.5, 4)
-
-      const heightOffGround =
-        hashRange(i * 70.5, 2, 7)
-
-      const tiltAngle =
-        (hash(i * 70.6) > 0.5 ? 1 : -1) *
-        hashRange(i * 70.7, 0.3, 1.2)
-
-      const rotY =
-        hash(i * 70.8) * Math.PI * 2
-
-      dummy.position.set(
-        x, heightOffGround, z
-      )
-      dummy.rotation.set(
-        tiltAngle, rotY, 0
-      )
-      dummy.scale.set(
-        1, branchLen, 1
-      )
-      dummy.updateMatrix()
-
-      branchMesh.setMatrixAt(
-        i, dummy.matrix
-      )
+    return {
+      x: origin.x,
+      z: origin.z,
+      angle: Math.atan2(dirX, dirZ),
+      perpX: -dirZ,
+      perpZ: dirX,
     }
-
-    branchMesh.instanceMatrix.needsUpdate = true
-    this.group.add(branchMesh)
   }
 
 
@@ -1866,7 +1427,7 @@ export class HighwayEnvironmentManager {
 
     this.updateHeadlights(time)
     this.updateGroundMist(dt, time)
-    this.updateTreeSway(dt, time)
+    this.updateCity()
     this.updateShadowFollowing()
     this.updateSilhouettes(dt, time)
     this.updateDisturbances(dt, time)
@@ -2036,131 +1597,19 @@ export class HighwayEnvironmentManager {
   }
 
 
-  updateTreeSway(dt, time) {
+  updateCity() {
 
-    if (
-      this.treeVariationMeshes.length > 0
-    ) {
-      this.updateTreeSwayGLB(dt, time)
-    } else if (this.trunkMesh) {
-      this.updateTreeSwayFallback(dt, time)
+    if (this.citySections.length === 0) return
+
+    const playerZ = this.playerCar.position.z
+
+    for (const section of this.citySections) {
+
+      section.visible =
+        Math.abs(section.position.z - playerZ) <=
+        CITY_DRAW_DISTANCE
+
     }
-  }
-
-
-  updateTreeSwayGLB(dt, time) {
-
-    const dummy = new THREE.Object3D()
-
-    for (
-      let i = 0;
-      i < this.treePlacementData.length;
-      i++
-    ) {
-
-      const data = this.treePlacementData[i]
-      const base = data.base
-      const sway = data.sway
-
-      const swayX =
-        Math.sin(
-          time * sway.speed + sway.phase
-        ) *
-        sway.amplitude
-
-      const swayZ =
-        Math.cos(
-          time * sway.speed * 0.7 +
-            sway.phase + 1.5
-        ) *
-        sway.amplitude *
-        0.6
-
-      dummy.position.set(
-        base.x, 0, base.z
-      )
-      dummy.rotation.set(
-        base.leanX + swayX,
-        base.rotY,
-        base.leanZ + swayZ
-      )
-      dummy.scale.setScalar(base.scale)
-      dummy.updateMatrix()
-
-      const mesh =
-        this.treeVariationMeshes[
-          data.variationIdx
-        ]
-      mesh.setMatrixAt(
-        data.instanceIdx,
-        dummy.matrix
-      )
-    }
-
-    for (
-      const mesh of this.treeVariationMeshes
-    ) {
-      mesh.instanceMatrix.needsUpdate = true
-    }
-  }
-
-
-  updateTreeSwayFallback(dt, time) {
-
-    if (!this.trunkMesh) return
-
-    const dummy = new THREE.Object3D()
-
-    const totalTrees =
-      this.treeBaseMatrices.length
-
-    for (
-      let i = 0;
-      i < totalTrees;
-      i++
-    ) {
-
-      const base = this.treeBaseMatrices[i]
-      const sway = this.treeSwayData[i]
-
-      if (!base || !sway) continue
-
-      const swayX =
-        Math.sin(
-          time * sway.speed + sway.phase
-        ) *
-        sway.amplitude
-
-      const swayZ =
-        Math.cos(
-          time * sway.speed * 0.7 +
-            sway.phase + 1.5
-        ) *
-        sway.amplitude *
-        0.6
-
-      dummy.position.set(
-        base.x, 0, base.z
-      )
-      dummy.rotation.set(
-        base.leanX + swayX,
-        base.rotY,
-        base.leanZ + swayZ
-      )
-      dummy.scale.set(
-        base.widthScale,
-        base.height,
-        base.widthScale
-      )
-      dummy.updateMatrix()
-
-      this.trunkMesh.setMatrixAt(
-        i, dummy.matrix
-      )
-    }
-
-    this.trunkMesh.instanceMatrix.needsUpdate =
-      true
   }
 
 
@@ -2395,17 +1844,6 @@ export class HighwayEnvironmentManager {
       this.group.parent.remove(this.group)
     }
 
-    for (
-      const mesh of this.treeVariationMeshes
-    ) {
-      if (mesh.parent) {
-        mesh.parent.remove(mesh)
-      }
-      mesh.dispose()
-    }
-    this.treeVariationMeshes = []
-    this.treePlacementData = []
-
     this.group.traverse((child) => {
       if (child.geometry) {
         child.geometry.dispose()
@@ -2431,11 +1869,11 @@ export class HighwayEnvironmentManager {
 
     this.mistLayers = []
     this.mistLayerData = []
-    this.treeBaseMatrices = []
-    this.treeSwayData = []
     this.silhouetteMeshes = []
     this.silhouetteData = []
-    this.trunkMesh = null
+    this.cityGroup = null
+    this.citySections = []
+    this.cityTemplate = null
 
     this.scene.fog = null
   }

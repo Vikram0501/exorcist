@@ -1,4 +1,7 @@
 import * as THREE from 'three'
+import { loadHighwayRoad, seatCarVisuals } from './road.js'
+import { loadHighwayCars } from './cars.js'
+import { loadCityBuildings } from './city.js'
 import { createObstacles }
   from './obstacles.js'
 
@@ -239,8 +242,6 @@ const ROAD_PATH_POINTS = [
   new THREE.Vector3(0, 0, -940),
 ]
 
-const CURVED_SEGMENT_LENGTH = 18
-const STRAIGHT_SEGMENT_LENGTH = 20
 const ROAD_WIDTH = 14
 
 
@@ -387,104 +388,6 @@ function getPositionAlongPath(
 }
 
 
-function createRoadMesh(
-  points,
-  arcLengths,
-  roadWidth,
-  material
-) {
-  const halfWidth = roadWidth * 0.5
-  const sampleStep = 2
-  const totalLength =
-    arcLengths[arcLengths.length - 1]
-
-  const vertices = []
-  const indices = []
-  const uvs = []
-
-  let sampleCount = 0
-
-  for (
-    let d = 0;
-    d <= totalLength;
-    d += sampleStep
-  ) {
-    const sample = getPositionAlongPath(
-      points,
-      arcLengths,
-      d
-    )
-
-    const dir = sample.direction
-    const perpX = -dir.y
-    const perpZ = dir.x
-
-    const leftX =
-      sample.position.x + perpX * halfWidth
-    const leftZ =
-      sample.position.z + perpZ * halfWidth
-    const rightX =
-      sample.position.x - perpX * halfWidth
-    const rightZ =
-      sample.position.z - perpZ * halfWidth
-
-    vertices.push(
-      leftX,
-      0.05,
-      leftZ,
-      rightX,
-      0.05,
-      rightZ
-    )
-
-    const v = d / totalLength
-    uvs.push(0, v, 1, v)
-
-    if (sampleCount > 0) {
-      const base =
-        (sampleCount - 1) * 2
-      indices.push(
-        base,
-        base + 2,
-        base + 1,
-        base + 1,
-        base + 2,
-        base + 3
-      )
-    }
-
-    sampleCount++
-  }
-
-  const geometry =
-    new THREE.BufferGeometry()
-
-  geometry.setAttribute(
-    'position',
-    new THREE.Float32BufferAttribute(
-      vertices,
-      3
-    )
-  )
-
-  geometry.setAttribute(
-    'uv',
-    new THREE.Float32BufferAttribute(uvs, 2)
-  )
-
-  geometry.setIndex(indices)
-  geometry.computeVertexNormals()
-
-  const mesh = new THREE.Mesh(
-    geometry,
-    material
-  )
-  mesh.receiveShadow = true
-
-  return mesh
-}
-
-
 // ============================================
 // CREATE HIGHWAY LEVEL
 // ============================================
@@ -529,66 +432,45 @@ export async function createHighwayLevel(
 
 
   // ============================================
-  // BUILD CONTINUOUS ROAD SURFACE
+  // GLB VISUAL ROAD (race coordinates remain independent)
   // ============================================
 
-  const roadMaterial =
-    new THREE.MeshStandardMaterial({
-      color: 0x181818,
-      roughness: 0.65,
-      metalness: 0.15,
-    })
+  // Await before cars/controllers are created. A failed asset load uses the
+  // existing level-load error path rather than starting a race without a road.
+  highway.add(await loadHighwayRoad({
+    roadWidth: ROAD_WIDTH,
+    arcLengths,
+    sampleAtDistance: distance => getPositionAlongPath(
+      roadPathPoints, arcLengths, distance
+    ),
+  }))
 
-  const lineMaterial =
-    new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-    })
+
+  // ============================================
+  // CITY ENVIRONMENT
+  // ============================================
+
+  // Loaded once and cloned by every section, never per section. Scenery only:
+  // a missing model still leaves a complete, playable highway.
+  let cityBuildings = null
+
+  try {
+
+    cityBuildings = await loadCityBuildings()
+
+  } catch (error) {
+
+    console.warn(
+      'Failed to load street_city_buildings_8.glb:',
+      error
+    )
+
+  }
 
   const barrierMaterial =
     new THREE.MeshStandardMaterial({
       color: 0x777777,
     })
-
-  const roadMesh = createRoadMesh(
-    roadPathPoints,
-    arcLengths,
-    ROAD_WIDTH,
-    roadMaterial
-  )
-  highway.add(roadMesh)
-
-
-  // ============================================
-  // CONTINUOUS CENTER LINES
-  // ============================================
-
-  const lineSampleStep = 6
-  for (
-    let d = 0;
-    d < totalRoadLength;
-    d += lineSampleStep
-  ) {
-    const sample = getPositionAlongPath(
-      roadPathPoints,
-      arcLengths,
-      d
-    )
-
-    const line = new THREE.Mesh(
-      new THREE.BoxGeometry(
-        0.15,
-        0.03,
-        4
-      ),
-      lineMaterial
-    )
-
-    line.position.copy(sample.position)
-    line.position.y = 0.12
-    line.rotation.y = sample.angle
-    highway.add(line)
-  }
-
 
   // ============================================
   // CONTINUOUS BARRIERS
@@ -663,7 +545,7 @@ export async function createHighwayLevel(
   // PLAYER CAR
   // ============================================
 
-  const playerCar = createPlayerCar()
+  const [playerCar, ghostCar] = await loadHighwayCars(highway)
 
   const startSample = getPositionAlongPath(
     roadPathPoints,
@@ -678,13 +560,13 @@ export async function createHighwayLevel(
   )
 
   highway.add(playerCar)
+  playerCar.rotation.y = startSample.angle
+  seatCarVisuals(playerCar)
 
 
   // ============================================
   // GHOST CAR
   // ============================================
-
-  const ghostCar = createGhostCar()
 
   ghostCar.position.set(
     startSample.position.x - 2,
@@ -693,6 +575,8 @@ export async function createHighwayLevel(
   )
 
   highway.add(ghostCar)
+  ghostCar.rotation.y = startSample.angle
+  seatCarVisuals(ghostCar)
 
 
   // ============================================
@@ -896,94 +780,7 @@ export async function createHighwayLevel(
     totalRoadLength: totalRoadLength,
 
     obstacles: obstacles,
+
+    cityBuildings: cityBuildings,
   }
-}
-
-
-// ============================================
-// PLAYER CAR
-// ============================================
-
-function createPlayerCar() {
-  const car = new THREE.Group()
-
-  const body =
-    new THREE.Mesh(
-      new THREE.BoxGeometry(
-        1.8,
-        0.6,
-        4
-      ),
-      new THREE.MeshStandardMaterial({
-        color: 0xaa0000,
-      })
-    )
-
-  body.position.y = 0.6
-  body.castShadow = true
-  car.add(body)
-
-  const roof =
-    new THREE.Mesh(
-      new THREE.BoxGeometry(
-        1.4,
-        0.5,
-        1.8
-      ),
-      new THREE.MeshStandardMaterial({
-        color: 0x660000,
-      })
-    )
-
-  roof.position.set(0, 1.05, 0)
-  roof.castShadow = true
-  car.add(roof)
-
-  return car
-}
-
-
-// ============================================
-// GHOST CAR
-// ============================================
-
-function createGhostCar() {
-  const ghostCar = new THREE.Group()
-
-  const ghostMaterial =
-    new THREE.MeshStandardMaterial({
-      color: 0x44dddd,
-      transparent: true,
-      opacity: 0.5,
-      emissive: 0x228888,
-      emissiveIntensity: 1.5,
-    })
-
-  const body =
-    new THREE.Mesh(
-      new THREE.BoxGeometry(
-        1.8,
-        0.6,
-        4
-      ),
-      ghostMaterial
-    )
-
-  body.position.y = 0.6
-  ghostCar.add(body)
-
-  const roof =
-    new THREE.Mesh(
-      new THREE.BoxGeometry(
-        1.4,
-        0.5,
-        1.8
-      ),
-      ghostMaterial.clone()
-    )
-
-  roof.position.set(0, 1.05, 0)
-  ghostCar.add(roof)
-
-  return ghostCar
 }

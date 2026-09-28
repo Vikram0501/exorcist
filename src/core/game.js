@@ -36,9 +36,6 @@ import { HighwayRaceController }
 import { HighwayEnvironmentManager }
   from '../levels/highway/environment.js'
 
-import { GLTFLoader }
-  from 'three/addons/loaders/GLTFLoader.js'
-
 import {
   getDoorColliders,
   loadHouse,
@@ -160,8 +157,6 @@ export class Game {
     this.highwayRace = null
 
     this.highwayEnvironment = null
-
-    this.treeTemplates = null
 
     this.ghostNameUI = null
 
@@ -361,8 +356,6 @@ export class Game {
       'resize',
       () => this.onResize()
     )
-
-    this.loadTreeAssets()
   }
 
 
@@ -409,98 +402,6 @@ export class Game {
     this.player.reset(this.spawnPoint, this.spawnYaw)
 
     return true
-  }
-
-
-
-  // ============================================
-  // TREE ASSET LOADING
-  // ============================================
-
-  async loadTreeAssets() {
-
-    try {
-
-      const loader = new GLTFLoader()
-
-      const gltf =
-        await loader.loadAsync(
-          '/models/deadtrees.glb'
-        )
-
-      this.treeTemplates =
-        this.prepareTreeTemplates(
-          gltf.scene
-        )
-
-      console.log(
-        'Loaded',
-        this.treeTemplates.length,
-        'tree variations from GLB'
-      )
-
-    } catch (err) {
-
-      console.warn(
-        'Failed to load deadtrees.glb, using fallback:',
-        err
-      )
-
-      this.treeTemplates = []
-
-    }
-  }
-
-
-  prepareTreeTemplates(root) {
-
-    const templates = []
-
-    root.traverse((child) => {
-
-      if (!child.isMesh) return
-
-      const geo =
-        child.geometry.clone()
-
-      const m = new THREE.Matrix4()
-      m.compose(
-        new THREE.Vector3(0, 0, 0),
-        child.quaternion,
-        child.scale
-      )
-      geo.applyMatrix4(m)
-
-      geo.computeBoundingBox()
-      const box = geo.boundingBox
-
-      const cx =
-        (box.max.x + box.min.x) / 2
-      const cz =
-        (box.max.z + box.min.z) / 2
-      geo.translate(-cx, 0, -cz)
-      geo.translate(0, -box.min.y, 0)
-
-      const mat =
-        child.material.clone()
-      mat.roughness = 0.9
-      mat.metalness = 0.1
-
-      const mesh =
-        new THREE.Mesh(geo, mat)
-      mesh.castShadow = true
-      mesh.receiveShadow = true
-
-      const height =
-        box.max.y - box.min.y
-
-      templates.push({
-        mesh,
-        height,
-      })
-    })
-
-    return templates
   }
 
 
@@ -1141,6 +1042,7 @@ if (this.loaded) {
             arcLengths,
             totalRoadLength,
             obstacles,
+            cityBuildings,
           }) => {
 
           // A newer level was selected
@@ -1345,8 +1247,7 @@ if (this.loaded) {
                 highwayGroup: model,
                 playerCar: playerCar,
                 moonLight: moonLight,
-                treeTemplates:
-                  this.treeTemplates,
+                cityBuildings: cityBuildings,
                 roadPath:
                   this.levelData.roadPath,
                 arcLengths:
