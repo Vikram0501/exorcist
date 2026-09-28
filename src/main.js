@@ -32,8 +32,8 @@ function resetLevelButtons() {
   `
 
   playBtn.disabled = false
-  trainBtn.disabled = true
-  level3Btn.disabled = true
+  trainBtn.disabled = false
+  level3Btn.disabled = false
 }
 
 // ============================================
@@ -217,6 +217,25 @@ window.addEventListener(
       )
 
     }
+
+  }
+)
+
+
+document.addEventListener(
+  'click',
+  (e) => {
+
+    if (
+      !game.loaded ||
+      game.input.isLocked ||
+      game.currentLevel === 'house'
+    ) return
+
+    if (e.target.closest('button')) return
+
+    overlay.classList.add('hidden')
+    game.input.lock()
 
   }
 )

@@ -47,6 +47,8 @@ import {
 } from '../levels/house/index.js'
 
 import { loadTrain } from '../levels/train/index.js'
+import { toggleCarriageLightDebug } from '../levels/train/lighting.js'
+import { createFlashlight } from '../levels/shared/lighting.js'
 
 
 const DOOR_INTERACTION_RANGE = 3
@@ -172,6 +174,12 @@ export class Game {
     this.obstacles = null
 
     this.trainTerrain = null
+
+    this.carriageLightControllers = null
+
+    this.carriageLightDebug = false
+
+    this.debugPositionEl = null
 
 
     // ============================================
@@ -558,6 +566,16 @@ export class Game {
       else if (this.input.isLocked) this.openEvidenceBook()
     }
 
+    if (
+      this.currentLevel === 'train' &&
+      this.input.consumePressed('KeyT')
+    ) {
+
+      if (this.flashlight) {
+        this.flashlight.intensity = this.flashlight.intensity > 0 ? 0 : 1.5
+      }
+    }
+
 
 
     // ----------------------------------------
@@ -772,6 +790,27 @@ if (this.loaded) {
 
     }
 
+    if (
+      this.currentLevel === 'train' &&
+      this.carriageLightControllers
+    ) {
+
+      for (const ctrl of this.carriageLightControllers) {
+        ctrl.update(dt)
+      }
+
+    }
+
+    if (
+      this.currentLevel === 'train' &&
+      this.carriageLightDebug &&
+      this.debugPositionEl
+    ) {
+      const p = this.camera.position
+      this.debugPositionEl.textContent =
+        `Pos  X: ${p.x.toFixed(2)}  Y: ${p.y.toFixed(2)}  Z: ${p.z.toFixed(2)}`
+    }
+
 
     const door =
       this.getLookedAtDoor()
@@ -883,6 +922,38 @@ if (this.loaded) {
 
         }
       )
+
+    }
+
+
+    // Toggle carriage light debug (train level)
+    if (
+      this.currentLevel === 'train' &&
+      this.input.consumePressed('KeyK')
+    ) {
+
+      this.carriageLightDebug =
+        !this.carriageLightDebug
+
+      if (this.carriageLightControllers) {
+        toggleCarriageLightDebug(
+          this.carriageLightControllers,
+          this.carriageLightDebug
+        )
+      }
+
+      if (this.carriageLightDebug) {
+        if (!this.debugPositionEl) {
+          this.debugPositionEl = document.createElement('div')
+          this.debugPositionEl.style.cssText =
+            'position:fixed;top:10px;left:10px;color:#0f0;font:14px/1.4 monospace;' +
+            'background:rgba(0,0,0,0.6);padding:6px 10px;border-radius:4px;z-index:9999;pointer-events:none;'
+          document.body.appendChild(this.debugPositionEl)
+        }
+        this.debugPositionEl.style.display = 'block'
+      } else if (this.debugPositionEl) {
+        this.debugPositionEl.style.display = 'none'
+      }
 
     }
 
@@ -1022,6 +1093,8 @@ if (this.loaded) {
     this.currentLevel =
       levelName
 
+    this.player.configureForLevel(levelName)
+
 
     this.levelRoot =
       new THREE.Group()
@@ -1060,6 +1133,8 @@ if (this.loaded) {
             finishZ,
             ghostName,
             trainTerrain,
+            carriages,
+            controllers,
             investigationItems,
             moonLight,
             roadPath,
@@ -1124,6 +1199,12 @@ if (this.loaded) {
           this.trainTerrain =
             trainTerrain || null
 
+          this.trainCarriages =
+            carriages || null
+
+          this.carriageLightControllers =
+            controllers || null
+
 
           // ======================================
           // HIGHWAY
@@ -1158,6 +1239,15 @@ if (this.loaded) {
 
             this.highwayController.obstacles =
               obstacles
+            
+              this.highwayController.onCrash = 
+              () => {
+                this.showGameOver(
+                  ghostName,
+                  false,
+                  true
+                )
+              }
 
             this.highwayRace =
               new HighwayRaceController(
@@ -1281,6 +1371,11 @@ if (this.loaded) {
               this.spawnYaw
             )
 
+          }
+
+          // Train level: attach flashlight to camera.
+          if (levelName === 'train') {
+            this.flashlight = createFlashlight(this.camera)
           }
 
 
@@ -1466,6 +1561,24 @@ if (this.loaded) {
 
     }
 
+    this.trainCarriages = null
+
+    this.carriageLightControllers = null
+
+    this.carriageLightDebug = false
+
+    if (this.debugPositionEl) {
+      this.debugPositionEl.remove()
+      this.debugPositionEl = null
+    }
+
+    if (this.flashlight) {
+      this.camera.remove(this.flashlight)
+      this.camera.remove(this.flashlight.target)
+      this.flashlight.dispose()
+      this.flashlight = null
+    }
+
     if (this.levelRoot) {
 
       disposeLevel(
@@ -1494,6 +1607,10 @@ if (this.loaded) {
     this.levelData = null
 
     this.trainTerrain = null
+
+    this.carriageLightControllers = null
+
+    this.carriageLightDebug = false
 
     this.loaded = false
 
@@ -2677,7 +2794,8 @@ if (this.loaded) {
 
   showGameOver(
     ghostName,
-    wrongName
+    wrongName,
+    crashed = false
   ) {
 
     this.levelState = 'GAME_OVER'
@@ -2763,7 +2881,12 @@ if (this.loaded) {
     const goMsg =
       document.createElement('div')
 
-    if (wrongName) {
+    if (crashed) {
+
+      goMsg.textContent =
+        'YOU CRASHED ON THE HIGHWAY.'
+
+    } else if (wrongName) {
 
       goMsg.textContent =
         'WRONG NAME.'
@@ -2805,19 +2928,52 @@ if (this.loaded) {
     el.appendChild(goMsg2)
 
 
-    const goHint =
-      document.createElement('div')
+    const restartBtn =
+      document.createElement('button')
 
-    goHint.textContent =
-      'Press 3 to try again'
+    restartBtn.textContent =
+      'TRY AGAIN'
 
-    goHint.style.color = '#666666'
+    restartBtn.style.padding =
+      '12px 32px'
 
-    goHint.style.fontSize = '14px'
+    restartBtn.style.fontSize =
+      '16px'
 
-    goHint.style.letterSpacing = '1px'
+    restartBtn.style.fontFamily =
+      'monospace'
 
-    el.appendChild(goHint)
+    restartBtn.style.fontWeight =
+      'bold'
+
+    restartBtn.style.background =
+      '#aa1111'
+
+    restartBtn.style.color =
+      '#ffffff'
+
+    restartBtn.style.border =
+      '2px solid #ff3333'
+
+    restartBtn.style.borderRadius =
+      '6px'
+
+    restartBtn.style.cursor =
+      'pointer'
+
+    restartBtn.style.letterSpacing =
+      '2px'
+
+    restartBtn.addEventListener(
+      'click',
+      () => {
+
+        this.restartHighway()
+
+      }
+    )
+
+    el.appendChild(restartBtn)
 
 
     document.body.appendChild(el)
@@ -2842,6 +2998,21 @@ if (this.loaded) {
     }
 
     this.gameOverEl = null
+
+  }
+  
+  restartHighway() {
+
+    if (this.currentLevel !== 'highway') {
+      return
+    }
+
+    this.hideGameOver()
+
+    // Force loadLevel() to actually reload the highway.
+    this.loaded = false
+
+    this.loadLevel('highway')
 
   }
 

@@ -162,9 +162,11 @@ spawn yaw, model size, doors, investigation items, collider data, and helper arr
 Shared first-person controller wrapping the camera. It owns velocity, grounded
 state, fly mode, rotation, movement, and collision resolution.
 
-Current tuning: radius 0.35, eye height 1, walk speed 4.8, sprint speed 8,
+House tuning: radius 0.35, eye height 1, walk speed 4.8, sprint speed 8,
 acceleration 45, gravity -20, jump velocity 7.5, and step height 0.5.
 The pursuing house ghost moves at 5.6 units per second in `house/pursuit.js`.
+`configureForLevel()` preserves the newer train defaults separately: radius 0.2,
+walk 3, sprint 5, acceleration 20, and jump 5; eye height remains 1.
 
 `update(dt, colliders)` applies rotation and desired velocity, then chooses
 fly movement, Octree capsule collision, or the shared AABB movement path.

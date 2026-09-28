@@ -1,20 +1,18 @@
 import * as THREE from 'three'
 import { Capsule } from 'three/addons/math/Capsule.js'
 
-const PLAYER_RADIUS = 0.35
+const DEFAULT_MOVEMENT = { radius: 0.2, walk: 3, sprint: 5, acceleration: 20, jump: 5 }
+const HOUSE_MOVEMENT = { radius: 0.35, walk: 4.8, sprint: 8, acceleration: 45, jump: 7.5 }
 const EYE_HEIGHT = 1
-const WALK_SPEED = 4.8
-const SPRINT_SPEED = 8
-const ACCEL = 45
 const DAMPING = 10
 const GRAVITY = -20
-const JUMP_VELOCITY = 7.5
 const STEP_HEIGHT = 0.5
 
 export class Player {
   constructor(camera, input) {
     this.camera = camera
     this.input = input
+    this.movement = DEFAULT_MOVEMENT
     this.velocity = new THREE.Vector3()
     this.position = camera.position
     this.position.set(20, EYE_HEIGHT, 25)
@@ -27,6 +25,10 @@ export class Player {
         this.velocity.y = 0
       }
     })
+  }
+
+  configureForLevel(levelName) {
+    this.movement = levelName === 'house' ? HOUSE_MOVEMENT : DEFAULT_MOVEMENT
   }
 
   reset(spawn, yaw = 0) {
@@ -220,7 +222,7 @@ export class Player {
         this.position.x,
 
         feetY +
-        PLAYER_RADIUS,
+        this.movement.radius,
 
         this.position.z
 
@@ -233,7 +235,7 @@ export class Player {
         this.position.x,
 
         this.position.y -
-        PLAYER_RADIUS,
+        this.movement.radius,
 
         this.position.z
 
@@ -243,7 +245,7 @@ export class Player {
     return new Capsule(
       start,
       end,
-      PLAYER_RADIUS
+      this.movement.radius
     )
 
   }
@@ -420,17 +422,17 @@ export class Player {
     if (wish.lengthSq() > 0) wish.normalize()
 
     const sprinting = this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight')
-    const speed = sprinting ? SPRINT_SPEED : WALK_SPEED
+    const speed = sprinting ? this.movement.sprint : this.movement.walk
 
     const targetVx = wish.x * speed
     const targetVz = wish.z * speed
 
-    const blend = 1 - Math.exp(-ACCEL * dt)
+    const blend = 1 - Math.exp(-this.movement.acceleration * dt)
     this.velocity.x += (targetVx - this.velocity.x) * blend
     this.velocity.z += (targetVz - this.velocity.z) * blend
 
     if (this.flying) {
-      const flySpeed = sprinting ? SPRINT_SPEED : WALK_SPEED
+      const flySpeed = sprinting ? this.movement.sprint : this.movement.walk
       if (this.input.isDown('Space')) {
         this.velocity.y = flySpeed
       } else if (this.input.isDown('KeyC')) {
@@ -440,7 +442,7 @@ export class Player {
       }
     } else {
       if (this.input.isDown('Space') && this.isGrounded) {
-        this.velocity.y = JUMP_VELOCITY
+        this.velocity.y = this.movement.jump
         this.isGrounded = false
       }
     }
@@ -468,10 +470,10 @@ export class Player {
       const dz = this.position.z - nearestZ
       const distSq = dx * dx + dz * dz
 
-      if (distSq < PLAYER_RADIUS * PLAYER_RADIUS) {
+      if (distSq < this.movement.radius * this.movement.radius) {
         if (distSq > 1e-8) {
           const dist = Math.sqrt(distSq)
-          const push = Math.min((PLAYER_RADIUS - dist) / dist, 2)
+          const push = Math.min((this.movement.radius - dist) / dist, 2)
           this.position.x += dx * push
           this.position.z += dz * push
         } else {
@@ -479,10 +481,10 @@ export class Player {
           const toCenterZ = this.position.z - (c.minZ + c.maxZ) / 2
           if (Math.abs(toCenterX) > Math.abs(toCenterZ)) {
             this.position.x =
-              toCenterX > 0 ? c.maxX + PLAYER_RADIUS : c.minX - PLAYER_RADIUS
+              toCenterX > 0 ? c.maxX + this.movement.radius : c.minX - this.movement.radius
           } else {
             this.position.z =
-              toCenterZ > 0 ? c.maxZ + PLAYER_RADIUS : c.minZ - PLAYER_RADIUS
+              toCenterZ > 0 ? c.maxZ + this.movement.radius : c.minZ - this.movement.radius
           }
         }
       }
@@ -557,10 +559,10 @@ export class Player {
 
   overlapsCollider(c) {
     return (
-      this.position.x > c.minX - PLAYER_RADIUS &&
-      this.position.x < c.maxX + PLAYER_RADIUS &&
-      this.position.z > c.minZ - PLAYER_RADIUS &&
-      this.position.z < c.maxZ + PLAYER_RADIUS
+      this.position.x > c.minX - this.movement.radius &&
+      this.position.x < c.maxX + this.movement.radius &&
+      this.position.z > c.minZ - this.movement.radius &&
+      this.position.z < c.maxZ + this.movement.radius
     )
   }
 

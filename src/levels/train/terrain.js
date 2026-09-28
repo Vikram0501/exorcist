@@ -2,14 +2,15 @@ import * as THREE from 'three'
 
 
 const SEGMENT_COUNT = 3
+const SEGMENT_LENGTH = 40
 const WRAP_BUFFER = 20
 
 
-function createGroundLayer(trainSize) {
+function createGroundLayer() {
   const group = new THREE.Group()
   group.name = 'terrain_ground'
 
-  const segLen = trainSize.z + WRAP_BUFFER
+  const segLen = SEGMENT_LENGTH + WRAP_BUFFER
   const width = 60
 
   const mat = new THREE.MeshBasicMaterial({
@@ -47,11 +48,11 @@ function createGroundLayer(trainSize) {
 }
 
 
-function createHillsLayer(trainSize) {
+function createHillsLayer() {
   const group = new THREE.Group()
   group.name = 'terrain_hills'
 
-  const segLen = trainSize.z + WRAP_BUFFER
+  const segLen = SEGMENT_LENGTH + WRAP_BUFFER
   const offset = 18
 
   for (let i = 0; i < SEGMENT_COUNT; i++) {
@@ -92,11 +93,11 @@ function createHillsLayer(trainSize) {
 }
 
 
-function createMountainsLayer(trainSize) {
+function createMountainsLayer() {
   const group = new THREE.Group()
   group.name = 'terrain_mountains'
 
-  const segLen = trainSize.z + WRAP_BUFFER
+  const segLen = SEGMENT_LENGTH + WRAP_BUFFER
   const offset = 45
 
   for (let i = 0; i < SEGMENT_COUNT; i++) {
@@ -139,13 +140,11 @@ function createMountainsLayer(trainSize) {
 }
 
 
-export function createTrainTerrain(level, trainBox) {
-  const size = trainBox.getSize(new THREE.Vector3())
-
+export function createTrainTerrain(level) {
   const layers = [
-    createGroundLayer(size),
-    createHillsLayer(size),
-    createMountainsLayer(size),
+    createGroundLayer(),
+    createHillsLayer(),
+    createMountainsLayer(),
   ]
 
   const terrainGroup = new THREE.Group()
@@ -157,11 +156,7 @@ export function createTrainTerrain(level, trainBox) {
 
   level.add(terrainGroup)
 
-  let elapsed = 0
-
   function update(dt) {
-    elapsed += dt
-
     for (const layer of layers) {
       const { group, segLen, speed } = layer
       const totalLen = segLen * SEGMENT_COUNT

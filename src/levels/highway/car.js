@@ -43,6 +43,8 @@ export class HighwayCarController {
     this.brakesWorking = true;
 
     this.obstacles = null;
+    this.onCrash = null;
+    this.hasCrashed = false;  
 
 
     this.onKeyDown = (event) => {
@@ -185,11 +187,25 @@ export class HighwayCarController {
         )
 
       if (hit) {
-        this.pathProgress =
-          hit.progress - 2.5
+
+        this.pathProgress = hit.progress - 2.5
         this.speed = 0
+        this.canDrive = false
+
+        if (!this.hasCrashed) {
+
+          this.hasCrashed = true
+
+          if (this.onCrash) {
+            this.onCrash(hit)
+          }
+
+        }
+
       } else {
+
         this.pathProgress = newProgress
+
       }
     } else {
       this.pathProgress = newProgress
@@ -441,8 +457,9 @@ export class HighwayCarController {
     }
 
     if (enabled) {
-
+      
         this.brakesWorking = true
+        this.hasCrashed = false;
 
     }
 
