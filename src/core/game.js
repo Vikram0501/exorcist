@@ -19,6 +19,7 @@ import {
 
 import {
   disposeObstacles,
+  updateObstacles,
 } from "../levels/highway/obstacles.js"
 
 import {
@@ -35,6 +36,11 @@ import { HighwayRaceController }
 
 import { HighwayEnvironmentManager }
   from '../levels/highway/environment.js'
+
+import {
+  disposeHighwayAtmosphere,
+  loadHighwayAtmosphere,
+} from '../levels/highway/atmosphere.js'
 
 import {
   getDoorColliders,
@@ -158,6 +164,8 @@ export class Game {
 
     this.highwayEnvironment = null
 
+    this.highwayAtmosphere = null
+
     this.ghostNameUI = null
 
     this.collectibles = []
@@ -217,6 +225,8 @@ export class Game {
     this.exorcismParticles = []
 
     this.exorcismBgOriginal = null
+
+    this.exorcismBgIntensityOriginal = null
 
     this.exorcismAmbientOriginal = null
 
@@ -546,6 +556,18 @@ if (this.loaded) {
             )
 
           }
+
+        }
+
+        if (
+          this.obstacles &&
+          this.obstacles.length > 0
+        ) {
+
+          updateObstacles(
+            this.obstacles,
+            dt
+          )
 
         }
 
@@ -1019,7 +1041,7 @@ if (this.loaded) {
       .load(levelRoot)
 
       .then(
-          ({
+          async ({
             colliders,
             colliderHelpers,
             lightHelpers,
@@ -1043,6 +1065,7 @@ if (this.loaded) {
             totalRoadLength,
             obstacles,
             cityBuildings,
+            streetlights,
           }) => {
 
           // A newer level was selected
@@ -1124,6 +1147,36 @@ if (this.loaded) {
           }
 
           this.obstacles = obstacles
+
+
+          // Apocalyptic sky before any controller captures the background.
+          this.highwayAtmosphere =
+            await loadHighwayAtmosphere(
+              this.scene,
+              this.renderer
+            )
+
+          // A newer level was selected while the sky was loading: never
+          // leak the red sky onto it.
+          if (
+            loadId !==
+            this.levelLoadId
+          ) {
+
+            disposeHighwayAtmosphere(
+              this.scene,
+              this.highwayAtmosphere
+            )
+
+            this.highwayAtmosphere = null
+
+            disposeLevel(
+              levelRoot
+            )
+
+            return false
+
+          }
 
 
           this.ghostNameUI =
@@ -1248,6 +1301,7 @@ if (this.loaded) {
                 playerCar: playerCar,
                 moonLight: moonLight,
                 cityBuildings: cityBuildings,
+                streetlights: streetlights,
                 roadPath:
                   this.levelData.roadPath,
                 arcLengths:
@@ -1415,6 +1469,19 @@ if (this.loaded) {
       this.highwayEnvironment.dispose()
 
       this.highwayEnvironment = null
+
+    }
+
+    // Level 3 sky lives on the shared scene, so dispose it explicitly here;
+    // the generic background reset below must never leak the texture.
+    if (this.highwayAtmosphere) {
+
+      disposeHighwayAtmosphere(
+        this.scene,
+        this.highwayAtmosphere
+      )
+
+      this.highwayAtmosphere = null
 
     }
 
@@ -2957,10 +3024,20 @@ if (this.loaded) {
     }
 
 
-    // Save original scene values
+    // Save original scene values.
+    // A Level 3 sky texture is kept by reference (never mutated); colors
+    // are cloned as before.
 
-    this.exorcismBgOriginal =
-      this.scene.background.clone()
+    if (this.scene.background?.isTexture) {
+      this.exorcismBgOriginal =
+        this.scene.background
+    } else {
+      this.exorcismBgOriginal =
+        this.scene.background.clone()
+    }
+
+    this.exorcismBgIntensityOriginal =
+      this.scene.backgroundIntensity ?? 1
 
 
     // Find the directional light
@@ -3182,7 +3259,9 @@ if (this.loaded) {
     )
 
 
-    // Scene background → warm dawn
+    // Scene background → warm dawn.
+    // A sky texture cannot be lerped per-channel, so it dims in place
+    // while the fog transition below carries the mood shift.
 
     if (t > 2 && t < 7) {
 
@@ -3195,20 +3274,26 @@ if (this.loaded) {
       const orig =
         this.exorcismBgOriginal
 
-      const r =
-        orig.r +
-        (0.12 - orig.r) * p
+      let r = 0.12
+      let g = 0.08
+      let b = 0.04
 
-      const g =
-        orig.g +
-        (0.08 - orig.g) * p
+      if (orig?.isTexture) {
 
-      const b =
-        orig.b +
-        (0.04 - orig.b) * p
+        this.scene.backgroundIntensity =
+          (this.exorcismBgIntensityOriginal ?? 1) *
+          (1 - p * 0.85)
 
-      this.scene.background =
-        new THREE.Color(r, g, b)
+      } else if (orig) {
+
+        r = orig.r + (0.12 - orig.r) * p
+        g = orig.g + (0.08 - orig.g) * p
+        b = orig.b + (0.04 - orig.b) * p
+
+        this.scene.background =
+          new THREE.Color(r, g, b)
+
+      }
 
 
       // Transition fog with background
@@ -3466,8 +3551,25 @@ if (this.loaded) {
 
     if (this.exorcismBgOriginal) {
 
-      this.scene.background =
-        this.exorcismBgOriginal.clone()
+      if (this.exorcismBgOriginal.isTexture) {
+        this.scene.background =
+          this.exorcismBgOriginal
+      } else {
+        this.scene.background =
+          this.exorcismBgOriginal.clone()
+      }
+
+    }
+
+    if (
+      this.exorcismBgIntensityOriginal !==
+        null &&
+      this.exorcismBgIntensityOriginal !==
+        undefined
+    ) {
+
+      this.scene.backgroundIntensity =
+        this.exorcismBgIntensityOriginal
 
     }
 
@@ -3500,6 +3602,8 @@ if (this.loaded) {
     }
 
     this.exorcismBgOriginal = null
+
+    this.exorcismBgIntensityOriginal = null
 
     this.exorcismLightRef = null
 

@@ -7,7 +7,8 @@ export const HIGHWAY_MODEL_SCALE = 1 // Asset: 20 long × 14 wide in game units.
 const ROAD_SAMPLE_STEP = 2 // Subdivide the four-vertex asset to follow bends.
 const START_RUNOFF_SEGMENTS = 1 // Ground behind the starting cars/chase camera.
 const ROAD_ANISOTROPY = 8
-const ROAD_ROUGHNESS = 0.92
+const ROAD_ROUGHNESS = 0.85 // Slight sheen so the asphalt catches the red
+  // sky and streetlight pools without turning glossy.
 
 export async function loadHighwayRoad(options) {
   const gltf = await new GLTFLoader().loadAsync(HIGHWAY_MODEL_URL)

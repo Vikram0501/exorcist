@@ -7,6 +7,8 @@ import { createHighwayLevel } from '../../src/levels/highway/index.js'
 import { HIGHWAY_MODEL_URL } from '../../src/levels/highway/road.js'
 import { PLAYER_MODEL_URL, GHOST_MODEL_URL } from '../../src/levels/highway/cars.js'
 import { CITY_MODEL_URL } from '../../src/levels/highway/city.js'
+import { STREETLIGHT_MODEL_URL } from '../../src/levels/highway/streetlights.js'
+import { OBSTACLE_MODEL_URLS } from '../../src/levels/highway/obstacles.js'
 import { HighwayEnvironmentManager } from '../../src/levels/highway/environment.js'
 
 const MODEL_URLS = [
@@ -14,6 +16,8 @@ const MODEL_URLS = [
   PLAYER_MODEL_URL,
   GHOST_MODEL_URL,
   CITY_MODEL_URL,
+  STREETLIGHT_MODEL_URL,
+  ...OBSTACLE_MODEL_URLS,
 ]
 
 const PATH_SAMPLE_STEP = 1
@@ -69,7 +73,7 @@ function createEnvironment(level, playerCar) {
 test('the city surrounds both sides of the road and leaves the highway clear', async () => {
   await withLevel(async (loadCount) => {
     const level = await createHighwayLevel(new THREE.Group())
-    assert.equal(loadCount(), 4, 'road, cars and city each load exactly once')
+    assert.equal(loadCount(), 8, 'road, cars, city, streetlights and obstacles each load exactly once')
 
     const template = level.cityBuildings
     assert.ok(template, 'the level hands back the prepared city template')

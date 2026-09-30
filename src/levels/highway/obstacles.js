@@ -1,4 +1,7 @@
 import * as THREE from 'three'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { clone as cloneSkinnedModel }
+  from 'three/addons/utils/SkeletonUtils.js'
 
 
 // ============================================
@@ -24,6 +27,140 @@ const MAX_SPACING = 130
 const ROAD_HALF_WIDTH = 6.5
 const LATERAL_MIN = -3.5
 const LATERAL_MAX = 3.5
+
+
+// ============================================
+// OBSTACLE MODEL DEFINITIONS
+// ============================================
+
+// One entry per visual, cycled in order by obstacle index. Collision boxes
+// are tuned to each visual so hits stay fair relative to what the player
+// sees. Both zombie sources face +Z natively (toes ahead of feet), while an
+// obstacle group's +Z points along the direction of travel, so zombies get
+// a half-turn to face oncoming traffic. The wire fence already spans local
+// X, which lies across the road, so it needs no extra yaw.
+const OBSTACLE_MODEL_DEFS = [
+  {
+    key: 'zombie',
+    url: '/models/zombie.glb',
+    targetHeight: 2.2,
+    yaw: Math.PI,
+    halfWidth: 0.7,
+    halfDepth: 0.7,
+    animate: true,
+  },
+  {
+    key: 'scientist',
+    url: '/models/zombie_doom_scientist.glb',
+    targetHeight: 2.1,
+    yaw: Math.PI,
+    halfWidth: 1.0,
+    halfDepth: 0.6,
+    animate: false,
+  },
+  {
+    key: 'barbed',
+    url: '/models/barbed_wire.glb',
+    targetWidth: 4.0,
+    yaw: 0,
+    halfWidth: 2.0,
+    halfDepth: 0.8,
+    animate: false,
+  },
+]
+
+
+export const OBSTACLE_MODEL_URLS =
+  OBSTACLE_MODEL_DEFS.map((def) => def.url)
+
+
+// ============================================
+// GLB LOADING (once per Level 3 load)
+// ============================================
+
+export async function loadObstacleModels() {
+  const loader = new GLTFLoader()
+
+  const results = await Promise.allSettled(
+    OBSTACLE_MODEL_DEFS.map(
+      async (def) => {
+        const gltf = await loader.loadAsync(def.url)
+        return prepareObstacleTemplate(def, gltf)
+      }
+    )
+  )
+
+  const failed = results.find(
+    (result) => result.status === 'rejected'
+  )
+
+  if (failed) {
+    for (const result of results) {
+      if (result.status !== 'fulfilled') continue
+      disposeObstacleTemplate(result.value)
+    }
+    throw failed.reason
+  }
+
+  return results.map((result) => result.value)
+}
+
+
+// The source hierarchy is kept intact (skinned meshes must stay bound to
+// their skeleton), so a template is the loaded scene with shadows enabled
+// plus its measured footprint and clips. Clones share geometry/materials.
+function prepareObstacleTemplate(def, gltf) {
+  const scene = gltf.scene
+
+  scene.updateMatrixWorld(true)
+
+  const box = new THREE.Box3().setFromObject(scene)
+
+  scene.traverse((object) => {
+    if (object.isMesh) {
+      object.castShadow = true
+      object.receiveShadow = true
+    }
+  })
+
+  const size = box.getSize(new THREE.Vector3())
+
+  const scale = def.targetWidth !== undefined
+    ? def.targetWidth / size.x
+    : def.targetHeight / size.y
+
+  return {
+    key: def.key,
+    def,
+    scene,
+    box,
+    scale,
+    // Lifts the model's lowest point onto the road surface.
+    yOffset: -box.min.y * scale,
+    clips: gltf.animations,
+  }
+}
+
+
+function disposeObstacleTemplate(template) {
+  template.scene.traverse((object) => {
+    if (object.isMesh) {
+      object.geometry.dispose()
+    }
+    if (object.material) {
+      const materials = Array.isArray(object.material)
+        ? object.material
+        : [object.material]
+      for (const material of materials) {
+        if (!material) continue
+        for (const value of Object.values(material)) {
+          if (value?.isTexture) value.dispose()
+        }
+        material.dispose()
+      }
+    }
+  })
+}
 
 
 // ============================================
@@ -100,97 +237,36 @@ function getPositionOnRoad(
 
 
 // ============================================
-// OBSTACLE TYPE DEFINITIONS
+// BUILD OBSTACLE VISUAL
 // ============================================
 
-const OBSTACLE_TYPES = [
-  {
-    name: 'crate',
-    width: 2.2,
-    depth: 2.2,
-    height: 1.8,
-    color: 0x8B5E3C,
-    emissive: 0x3A2510,
-  },
-  {
-    name: 'barricade',
-    width: 4.0,
-    depth: 1.0,
-    height: 1.2,
-    color: 0xCC6600,
-    emissive: 0x442200,
-  },
-  {
-    name: 'concrete',
-    width: 2.0,
-    depth: 3.0,
-    height: 1.4,
-    color: 0x666666,
-    emissive: 0x222222,
-  },
-  {
-    name: 'wreckedCar',
-    width: 2.0,
-    depth: 4.0,
-    height: 1.6,
-    color: 0x334455,
-    emissive: 0x111822,
-  },
-]
-
-
-// ============================================
-// BUILD OBSTACLE MESH
-// ============================================
-
-function buildObstacleMesh(type) {
+function buildObstacleVisual(template, obstacleIndex) {
   const group = new THREE.Group()
+  group.name = `obstacle_${template.key}`
 
-  const bodyMat =
-    new THREE.MeshStandardMaterial({
-      color: type.color,
-      roughness: 0.8,
-      metalness: 0.2,
-      emissive: type.emissive,
-      emissiveIntensity: 0.3,
-    })
+  const visual = new THREE.Group()
+  visual.scale.setScalar(template.scale)
+  visual.rotation.y = template.def.yaw
+  visual.position.y = template.yOffset
+  group.add(visual)
 
-  const body =
-    new THREE.Mesh(
-      new THREE.BoxGeometry(
-        type.width,
-        type.height,
-        type.depth
-      ),
-      bodyMat
-    )
+  // SkeletonUtils.clone rebinds skinned meshes to a fresh skeleton so each
+  // zombie animates independently; plain meshes clone cheaply the same way.
+  // Geometry/materials stay shared with the template.
+  const model = cloneSkinnedModel(template.scene)
+  visual.add(model)
 
-  body.position.y = type.height * 0.5
-  body.castShadow = true
-  body.receiveShadow = true
-  group.add(body)
+  let mixer = null
 
-  if (type.name === 'barricade') {
-    const stripeMat =
-      new THREE.MeshBasicMaterial({
-        color: 0xFFFFFF,
-      })
-
-    const stripe =
-      new THREE.Mesh(
-        new THREE.BoxGeometry(
-          type.width * 0.9,
-          0.15,
-          type.depth * 0.5
-        ),
-        stripeMat
-      )
-
-    stripe.position.y = type.height * 0.6
-    group.add(stripe)
+  if (template.def.animate && template.clips.length > 0) {
+    mixer = new THREE.AnimationMixer(model)
+    const action = mixer.clipAction(template.clips[0])
+    // Stagger the loop so grouped zombies do not move in lockstep.
+    action.time = (obstacleIndex * 1.7) % template.clips[0].duration
+    action.play()
   }
 
-  return group
+  return { group, mixer }
 }
 
 
@@ -199,6 +275,7 @@ function buildObstacleMesh(type) {
 // ============================================
 
 export function createObstacles(
+  templates,
   roadPath,
   arcLengths,
   totalRoadLength,
@@ -209,6 +286,8 @@ export function createObstacles(
   let currentProgress = MIN_PROGRESS
   const maxProgress =
     totalRoadLength - FINISH_BUFFER
+
+  let obstacleIndex = 0
 
   while (currentProgress < maxProgress) {
     const spacing =
@@ -222,13 +301,10 @@ export function createObstacles(
       break
     }
 
-    const typeIndex =
-      Math.floor(
-        Math.random() *
-          OBSTACLE_TYPES.length
-      )
-    const type =
-      OBSTACLE_TYPES[typeIndex]
+    // Cycle the three visuals in order: zombie, scientist, barbed wire.
+    const template =
+      templates[obstacleIndex % templates.length]
+    const def = template.def
 
     const lateralOffset =
       LATERAL_MIN +
@@ -253,30 +329,54 @@ export function createObstacles(
       roadSample.position.z +
       perpZ * lateralOffset
 
-    const mesh =
-      buildObstacleMesh(type)
+    const { group, mixer } = buildObstacleVisual(
+      template,
+      obstacleIndex
+    )
 
-    mesh.position.set(
+    group.position.set(
       worldX,
       0,
       worldZ
     )
-    mesh.rotation.y = dir
-    highwayGroup.add(mesh)
+    group.rotation.y = dir
+    highwayGroup.add(group)
 
     const obstacle = {
-      mesh: mesh,
+      mesh: group,
       progress: currentProgress,
       lateralOffset: lateralOffset,
-      halfWidth: type.width * 0.5,
-      halfDepth: type.depth * 0.5,
+      halfWidth: def.halfWidth,
+      halfDepth: def.halfDepth,
       hit: false,
+      modelKey: template.key,
+      mixer: mixer,
     }
 
     obstacles.push(obstacle)
+    obstacleIndex++
   }
 
   return obstacles
+}
+
+
+// ============================================
+// UPDATE OBSTACLES (zombie animation)
+// ============================================
+
+export function updateObstacles(obstacles, dt) {
+  for (
+    let i = 0;
+    i < obstacles.length;
+    i++
+  ) {
+    const mixer = obstacles[i].mixer
+
+    if (mixer) {
+      mixer.update(dt)
+    }
+  }
 }
 
 
@@ -403,16 +503,30 @@ export function disposeObstacles(obstacles) {
   ) {
     const obs = obstacles[i]
 
+    if (obs.mixer) {
+      obs.mixer.stopAllAction()
+      obs.mixer.uncacheRoot(obs.mesh)
+      obs.mixer = null
+    }
+
     if (obs.mesh.parent) {
       obs.mesh.parent.remove(obs.mesh)
     }
 
+    // Cloned visuals share the template's geometry/materials; dispose calls
+    // are idempotent and the whole set is discarded with the level.
     obs.mesh.traverse((child) => {
       if (child.geometry) {
         child.geometry.dispose()
       }
       if (child.material) {
-        child.material.dispose()
+        if (Array.isArray(child.material)) {
+          child.material.forEach(
+            (m) => m && m.dispose()
+          )
+        } else {
+          child.material.dispose()
+        }
       }
     })
   }

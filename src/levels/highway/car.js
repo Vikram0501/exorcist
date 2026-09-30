@@ -3,6 +3,13 @@ import { checkPlayerObstacleCollision }
   from './obstacles.js'
 
 
+// Chase-camera composition: ~15% closer and a touch lower than the original
+// 8-back/+4-high framing, so car and zombie detail reads better while the
+// forward road view (look-ahead below) still dominates.
+export const CAMERA_DISTANCE = 6.8
+export const CAMERA_HEIGHT = 3.6
+
+
 export class HighwayCarController {
 
   constructor(
@@ -77,8 +84,8 @@ export class HighwayCarController {
     this.updateCarPosition()
     this.camera.position.set(
       this.car.position.x,
-      this.car.position.y + 4,
-      this.car.position.z + 8
+      this.car.position.y + CAMERA_HEIGHT,
+      this.car.position.z + CAMERA_DISTANCE
     )
 
   }
@@ -412,15 +419,15 @@ export class HighwayCarController {
     // Camera behind the car (opposite of travel direction)
 
     const behindX =
-      this.car.position.x - dir.x * 8
+      this.car.position.x - dir.x * CAMERA_DISTANCE
     const behindZ =
-      this.car.position.z - dir.y * 8
+      this.car.position.z - dir.y * CAMERA_DISTANCE
 
 
     const targetPosition =
       new THREE.Vector3(
         behindX,
-        this.car.position.y + 4,
+        this.car.position.y + CAMERA_HEIGHT,
         behindZ
       )
 

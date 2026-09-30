@@ -109,6 +109,12 @@ export class HighwayRaceController {
     this.frozen = false
 
 
+    // The brake-cut flicker below overwrites the scene background for a
+    // beat; capture Level 3's sky (texture or color) so it can be restored
+    // instead of falling back to the shared default.
+    this.skyBackground = scene.background
+
+
     // ============================================
     // COUNTDOWN DISPLAY
     // ============================================
@@ -475,7 +481,7 @@ export class HighwayRaceController {
             } else {
 
                 this.scene.background =
-                    new THREE.Color(0x1a1a2e)
+                    this.skyBackground
 
             }
 
