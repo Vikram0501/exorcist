@@ -5,9 +5,9 @@ import * as THREE from 'three'
 // CONSTANTS
 // ============================================
 
-const FOG_COLOR = 0x0a0e14
-const FOG_DENSITY_BASE = 0.012
-const FOG_DENSITY_FAR = 0.022
+const FOG_COLOR = 0x160809
+const FOG_DENSITY_BASE = 0.014
+const FOG_DENSITY_FAR = 0.026
 
 const HEADLIGHT_COLOR = 0xFFF4D0
 const HEADLIGHT_INTENSITY = 45
@@ -62,6 +62,33 @@ const CITY_DRAW_DISTANCE = 140
 const CITY_END_CUSHION = 18
 const CITY_TANGENT_HALF = 4
 const CITY_SIDES = [-1, 1]
+
+// Streetlight poles follow the same path-frame convention as the barriers
+// and city: each pole origin sits on the path plus a lateral offset, with
+// the lamp arm yawed toward the road. The baked template's arm extends
+// along local +X, so rotation.y = frame.angle faces +X at the road for the
+// +1 side and +PI turns it around for the -1 side.
+const STREETLIGHT_OFFSET = 9
+const STREETLIGHT_SPACING = 40
+const STREETLIGHT_STAGGER = 20
+const STREETLIGHT_START = 15
+const STREETLIGHT_END_CUSHION = 10
+const STREETLIGHT_MIN_CLEARANCE = 8
+const STREETLIGHT_DRAW_DISTANCE = 140
+const STREETLIGHT_Y_OFFSET = 0
+const STREETLIGHT_SIDES = [-1, 1]
+
+// Pooled local illumination for the lamp corridor: a few shadowless red
+// point lights reassigned to the nearest poles ahead of the player, so the
+// road reads as pools of light in the dark. Never one light per pole.
+const STREETLIGHT_POOL_COUNT = 3
+const STREETLIGHT_POOL_COLOR = 0xff5533
+const STREETLIGHT_POOL_INTENSITY = 45
+const STREETLIGHT_POOL_DISTANCE = 28
+const STREETLIGHT_POOL_DECAY = 1.8
+const STREETLIGHT_POOL_HEIGHT = 5.2
+const STREETLIGHT_POOL_RESCAN = 0.4
+const STREETLIGHT_POOL_RANGE = 130
 
 
 // ============================================
@@ -294,6 +321,7 @@ export class HighwayEnvironmentManager {
     playerCar,
     moonLight,
     cityBuildings,
+    streetlights,
     roadPath,
     arcLengths,
   }) {
@@ -304,6 +332,7 @@ export class HighwayEnvironmentManager {
     this.moonLight = moonLight
 
     this.cityTemplate = cityBuildings || null
+    this.streetlightTemplate = streetlights || null
     this.roadPath = roadPath || []
     this.arcLengths = arcLengths || []
 
@@ -318,11 +347,19 @@ export class HighwayEnvironmentManager {
     this.leftCone = null
     this.rightCone = null
 
+    this.fillLight = null
+    this.rimLight = null
+
     this.mistLayers = []
     this.mistLayerData = []
 
     this.cityGroup = null
     this.citySections = []
+
+    this.streetlightGroup = null
+    this.streetlightPoles = []
+    this.streetlightPool = []
+    this.streetlightPoolTimer = 0
 
     this.sharedMaterials = []
 
@@ -338,8 +375,11 @@ export class HighwayEnvironmentManager {
 
     this.setupFog()
     this.setupHeadlights()
+    this.setupCrimsonHemi()
+    this.setupCinematicLights()
     this.setupShoulders()
     this.setupCity()
+    this.setupStreetlights()
     this.setupGroundMist()
     this.setupSilhouettes()
     this.setupRoadsideClutter()
@@ -525,6 +565,54 @@ export class HighwayEnvironmentManager {
     this.rightTarget = right.target
     this.rightCone = right.cone
     this.rightBulb = right.bulb
+  }
+
+
+  // ============================================
+  // CRIMSON SKY FILL
+  // ============================================
+
+  // Faint red sky-bounce so building faces and zombie sides keep detail
+  // instead of crushing to black. No shadows, fixed cost.
+  setupCrimsonHemi() {
+
+    const hemi = new THREE.HemisphereLight(
+      0x74444c,
+      0x0d0a09,
+      0.45
+    )
+    hemi.name = 'crimsonSkyFill'
+
+    this.group.add(hemi)
+  }
+
+
+  // ============================================
+  // CINEMATIC FILL + RIM
+  // ============================================
+
+  // Two shadowless directionals that follow the player: a desaturated warm
+  // fill from the camera side recovers texture detail (faces, bodywork,
+  // facades, wire), while a low crimson rim from down-road edges zombies
+  // and cars against the dark. Neither casts shadows; fixed per-frame cost.
+  setupCinematicLights() {
+
+    this.fillLight = new THREE.DirectionalLight(
+      0xbfb6ae,
+      0.55
+    )
+    this.fillLight.name = 'neutralFill'
+
+    this.rimLight = new THREE.DirectionalLight(
+      0xd42a2a,
+      0.9
+    )
+    this.rimLight.name = 'redRim'
+
+    this.group.add(this.fillLight)
+    this.group.add(this.fillLight.target)
+    this.group.add(this.rimLight)
+    this.group.add(this.rimLight.target)
   }
 
 
@@ -869,6 +957,132 @@ export class HighwayEnvironmentManager {
       perpX: -dirZ,
       perpZ: dirX,
     }
+  }
+
+
+  // ============================================
+  // STREETLIGHTS
+  // ============================================
+
+  // Built once here: the race only toggles visibility. Poles clone one
+  // prepared template, so geometry/materials are shared across the corridor
+  // and disposed by the normal group traversal. Placement walks each side of
+  // the path at a fixed arc-distance pitch with the two sides staggered, so
+  // lamps read as a deliberate corridor rather than scattered props.
+  setupStreetlights() {
+
+    if (!this.streetlightTemplate) return
+
+    const totalLength =
+      this.arcLengths[this.arcLengths.length - 1]
+
+    if (!totalLength) return
+
+    this.streetlightGroup = new THREE.Group()
+    this.streetlightGroup.name = 'streetlightEnvironment'
+    this.group.add(this.streetlightGroup)
+
+    for (const side of STREETLIGHT_SIDES) {
+
+      // The right side starts half a pitch later so poles alternate.
+      let distance = STREETLIGHT_START +
+        (side > 0 ? STREETLIGHT_STAGGER : 0)
+      let index = 0
+
+      while (
+        distance <
+        totalLength - STREETLIGHT_END_CUSHION
+      ) {
+
+        this.addStreetlightPole(side, index, distance)
+
+        distance += STREETLIGHT_SPACING
+        index += 1
+
+      }
+
+    }
+
+    console.log(
+      'Streetlight environment:',
+      this.streetlightPoles.length,
+      'poles'
+    )
+
+    this.setupStreetlightPool()
+  }
+
+
+  // A fixed pool of shadowless lights; the update pass reassigns them to
+  // the nearest poles ahead of the player a few times per second.
+  setupStreetlightPool() {
+
+    for (
+      let i = 0;
+      i < STREETLIGHT_POOL_COUNT;
+      i++
+    ) {
+
+      const light = new THREE.PointLight(
+        STREETLIGHT_POOL_COLOR,
+        STREETLIGHT_POOL_INTENSITY,
+        STREETLIGHT_POOL_DISTANCE,
+        STREETLIGHT_POOL_DECAY
+      )
+      light.name = `streetlightPool_${i}`
+      light.position.set(0, -10, 0)
+
+      this.group.add(light)
+      this.streetlightPool.push(light)
+
+    }
+
+    this.streetlightPoolTimer = STREETLIGHT_POOL_RESCAN
+  }
+
+
+  addStreetlightPole(side, index, distance) {
+
+    const frame = this.getCityFrame(distance)
+
+    const pole = this.streetlightTemplate.clone()
+
+    pole.name =
+      `streetlight_${side > 0 ? 'right' : 'left'}_${index}`
+    pole.userData.streetlightSide = side
+    pole.userData.streetlightDistance = distance
+    pole.rotation.y =
+      frame.angle + (side > 0 ? 0 : Math.PI)
+    pole.position.set(
+      frame.x + frame.perpX * side * STREETLIGHT_OFFSET,
+      STREETLIGHT_Y_OFFSET,
+      frame.z + frame.perpZ * side * STREETLIGHT_OFFSET
+    )
+
+    this.streetlightGroup.add(pole)
+    pole.updateMatrixWorld(true)
+
+    // Curves shift the analytic offset slightly; nudge outward until the
+    // pole base clears the road, barriers and steering envelope.
+    for (let attempt = 0; attempt < 3; attempt++) {
+
+      const clearance = this.distanceToPath(
+        pole.position.x, pole.position.z
+      )
+
+      if (clearance >= STREETLIGHT_MIN_CLEARANCE) break
+
+      pole.position.x +=
+        frame.perpX * side *
+        (STREETLIGHT_MIN_CLEARANCE - clearance)
+      pole.position.z +=
+        frame.perpZ * side *
+        (STREETLIGHT_MIN_CLEARANCE - clearance)
+      pole.updateMatrixWorld(true)
+
+    }
+
+    this.streetlightPoles.push(pole)
   }
 
 
@@ -1428,6 +1642,8 @@ export class HighwayEnvironmentManager {
     this.updateHeadlights(time)
     this.updateGroundMist(dt, time)
     this.updateCity()
+    this.updateStreetlights()
+    this.updateStreetlightPool(dt)
     this.updateShadowFollowing()
     this.updateSilhouettes(dt, time)
     this.updateDisturbances(dt, time)
@@ -1613,20 +1829,124 @@ export class HighwayEnvironmentManager {
   }
 
 
+  updateStreetlights() {
+
+    if (this.streetlightPoles.length === 0) return
+
+    const playerZ = this.playerCar.position.z
+
+    for (const pole of this.streetlightPoles) {
+
+      pole.visible =
+        Math.abs(pole.position.z - playerZ) <=
+        STREETLIGHT_DRAW_DISTANCE
+
+    }
+  }
+
+
+  updateStreetlightPool(dt) {
+
+    if (this.streetlightPool.length === 0) return
+    if (this.streetlightPoles.length === 0) return
+
+    this.streetlightPoolTimer += dt
+
+    if (
+      this.streetlightPoolTimer <
+      STREETLIGHT_POOL_RESCAN
+    ) {
+      return
+    }
+
+    this.streetlightPoolTimer = 0
+
+    const player = this.playerCar.position
+
+    // Nearest poles ahead of the player, so light pools open up down the
+    // road instead of sitting behind the car.
+    const ahead = []
+
+    for (const pole of this.streetlightPoles) {
+
+      const dz = player.z - pole.position.z
+
+      if (dz < -10 || dz > STREETLIGHT_POOL_RANGE) continue
+
+      const dx = pole.position.x - player.x
+      ahead.push({ pole, near: dx * dx + dz * dz })
+
+    }
+
+    ahead.sort((a, b) => a.near - b.near)
+
+    for (
+      let i = 0;
+      i < this.streetlightPool.length;
+      i++
+    ) {
+
+      const light = this.streetlightPool[i]
+      const slot = ahead[i]
+
+      if (!slot) {
+        light.position.set(0, -10, 0)
+        continue
+      }
+
+      light.position.set(
+        slot.pole.position.x,
+        STREETLIGHT_POOL_HEIGHT,
+        slot.pole.position.z
+      )
+
+    }
+  }
+
+
   updateShadowFollowing() {
 
-    if (!this.moonLight) return
-
+    const px = this.playerCar.position.x
     const pz =
       this.playerCar.position.z
 
-    this.moonLight.position.set(
-      -30, 35, pz - 90
-    )
+    if (this.moonLight) {
 
-    this.moonLight.target.position.set(
-      0, 0, pz
-    )
+      this.moonLight.position.set(
+        -30, 35, pz - 90
+      )
+
+      this.moonLight.target.position.set(
+        0, 0, pz
+      )
+
+    }
+
+    // Fill rides the camera side so approaching faces and bodywork catch
+    // neutral light; rim stays low down-road so dark shapes edge in red.
+    if (this.fillLight) {
+
+      this.fillLight.position.set(
+        px + 10, 18, pz + 30
+      )
+
+      this.fillLight.target.position.set(
+        px, 0, pz - 20
+      )
+
+    }
+
+    if (this.rimLight) {
+
+      this.rimLight.position.set(
+        px - 15, 10, pz - 130
+      )
+
+      this.rimLight.target.position.set(
+        px, 1, pz - 20
+      )
+
+    }
   }
 
 
@@ -1871,9 +2191,16 @@ export class HighwayEnvironmentManager {
     this.mistLayerData = []
     this.silhouetteMeshes = []
     this.silhouetteData = []
+    this.fillLight = null
+    this.rimLight = null
     this.cityGroup = null
     this.citySections = []
     this.cityTemplate = null
+    this.streetlightGroup = null
+    this.streetlightPoles = []
+    this.streetlightTemplate = null
+    this.streetlightPool = []
+    this.streetlightPoolTimer = 0
 
     this.scene.fog = null
   }

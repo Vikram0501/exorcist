@@ -2,7 +2,8 @@ import * as THREE from 'three'
 import { loadHighwayRoad, seatCarVisuals } from './road.js'
 import { loadHighwayCars } from './cars.js'
 import { loadCityBuildings } from './city.js'
-import { createObstacles }
+import { loadStreetlightTemplate } from './streetlights.js'
+import { createObstacles, loadObstacleModels }
   from './obstacles.js'
 
 
@@ -401,17 +402,22 @@ export async function createHighwayLevel(
 
 
   // ============================================
-  // LIGHTING
+  // LIGHTING (apocalyptic red-grade, gameplay-safe)
   // ============================================
 
+  // Faint crimson fill: lifts zombies and obstacles without washing the
+  // scene. The warm headlights stay the neutral contrast that guides the
+  // player down the road.
   const ambientLight =
-    new THREE.AmbientLight(0x111122, 0.4)
+    new THREE.AmbientLight(0x33141a, 0.5)
   highway.add(ambientLight)
 
+  // Blood-red key light, still shadow-casting so buildings read as dark
+  // silhouettes and the asphalt keeps its shading.
   const moonLight =
     new THREE.DirectionalLight(
-      0x5577aa,
-      1.8
+      0x8f2f3d,
+      1.5
     )
   moonLight.position.set(-30, 35, -90)
   moonLight.castShadow = true
@@ -462,6 +468,24 @@ export async function createHighwayLevel(
 
     console.warn(
       'Failed to load street_city_buildings_8.glb:',
+      error
+    )
+
+  }
+
+  // Streetlight poles: scenery only, same policy as the city. One template
+  // load serves the whole corridor; a missing model leaves the highway
+  // complete without lamps.
+  let streetlights = null
+
+  try {
+
+    streetlights = await loadStreetlightTemplate()
+
+  } catch (error) {
+
+    console.warn(
+      'Failed to load street_lamp.glb:',
       error
     )
 
@@ -723,8 +747,13 @@ export async function createHighwayLevel(
   // ROAD OBSTACLES
   // ============================================
 
+  // Gameplay visuals: a failed asset load uses the existing level-load error
+  // path rather than starting a race with missing colliders.
+  const obstacleTemplates = await loadObstacleModels()
+
   const obstacles =
     createObstacles(
+      obstacleTemplates,
       roadPathPoints,
       arcLengths,
       totalRoadLength,
@@ -782,5 +811,7 @@ export async function createHighwayLevel(
     obstacles: obstacles,
 
     cityBuildings: cityBuildings,
+
+    streetlights: streetlights,
   }
 }

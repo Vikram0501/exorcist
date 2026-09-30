@@ -9,10 +9,12 @@ import { PLAYER_MODEL_URL, GHOST_MODEL_URL, HIGHWAY_CAR_TARGET_LENGTH, loadHighw
 import { HighwayCarController } from '../../src/levels/highway/car.js'
 import { HighwayRaceController } from '../../src/levels/highway/race.js'
 import { CITY_MODEL_URL } from '../../src/levels/highway/city.js'
+import { STREETLIGHT_MODEL_URL } from '../../src/levels/highway/streetlights.js'
+import { OBSTACLE_MODEL_URLS } from '../../src/levels/highway/obstacles.js'
 
 test('actual GLB covers the unchanged race path, including seams, cars and finish', async () => {
   const assets = new Map(await Promise.all(
-    [HIGHWAY_MODEL_URL, PLAYER_MODEL_URL, GHOST_MODEL_URL, CITY_MODEL_URL].map(async url =>
+    [HIGHWAY_MODEL_URL, PLAYER_MODEL_URL, GHOST_MODEL_URL, CITY_MODEL_URL, STREETLIGHT_MODEL_URL, ...OBSTACLE_MODEL_URLS].map(async url =>
       [url, await readFile(new URL(`../../public${url}`, import.meta.url))])
   ))
   const originalLoad = GLTFLoader.prototype.loadAsync
@@ -36,8 +38,8 @@ test('actual GLB covers the unchanged race path, including seams, cars and finis
   }
   try {
     const level = await createHighwayLevel(new THREE.Group())
-    // Highway, player car, ghost car and the Level 3 city, each loaded once.
-    assert.equal(loads, 4)
+    // Highway, player car, ghost car, city, streetlights and 3 obstacles.
+    assert.equal(loads, 8)
     for (const [root, ghost] of [[level.playerCar, false], [level.ghostCar, true]]) {
       assert.equal(root.children.length, 1)
       const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(root.children[0].quaternion)
