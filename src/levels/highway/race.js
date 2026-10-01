@@ -108,6 +108,12 @@ export class HighwayRaceController {
 
     this.frozen = false
 
+    // Level 3 race audio (countdown voice). Assigned by game.js
+    // after construction; the countdown itself stays untouched.
+    this.highwayAudio = null
+
+    this.countdownAudioStarted = false
+
 
     // The brake-cut flicker below overwrites the scene background for a
     // beat; capture Level 3's sky (texture or color) so it can be restored
@@ -287,6 +293,16 @@ export class HighwayRaceController {
 
     if (!this.finishedCountdown) {
 
+        // Start the "3, 2, 1, GO" voice once with the visual
+        // countdown. Guarded so update loops never restart it.
+        if (!this.countdownAudioStarted) {
+
+            this.countdownAudioStarted = true
+
+            this.highwayAudio?.playCountdown()
+
+        }
+
         this.time += dt
 
 
@@ -346,6 +362,8 @@ export class HighwayRaceController {
 
         this.countdownElement.style.display =
             'none'
+
+        this.highwayAudio?.restoreMusicAfterCountdown()
 
         }
 
