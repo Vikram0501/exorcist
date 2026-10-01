@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { Input } from './input.js'
 import { Player } from './player.js'
 import { HauntedHouseAudio } from '../levels/house/audio.js'
+import { HighwayAudio } from '../levels/highway/audio.js'
 import { HouseStory } from '../levels/house/story.js'
 import { HouseStoryView } from '../levels/house/story-view.js'
 
@@ -134,6 +135,7 @@ export class Game {
     )
 
     this.houseAudio = new HauntedHouseAudio()
+    this.highwayAudio = new HighwayAudio()
     this.houseStory = null
     this.houseStoryView = null
 
@@ -380,6 +382,7 @@ export class Game {
 
     // A click is required by browsers before Web Audio may play.
     this.houseAudio.unlock()
+    this.highwayAudio.unlock()
 
 
     // Lock mouse immediately from the button click.
@@ -571,12 +574,29 @@ if (this.loaded) {
 
         }
 
+        // Player-only car sound: driven by the human player's
+        // actual forward-driving state (never the ghost's).
+        if (this.highwayController) {
+          const driving =
+            this.input.isLocked &&
+            this.highwayController.canDrive &&
+            Boolean(
+              this.highwayController.keys?.['KeyW'],
+            ) &&
+            this.highwayController.speed > 0.5
+
+          this.highwayAudio?.setPlayerDriving(driving)
+        } else {
+          this.highwayAudio?.setPlayerDriving(false)
+        }
+
       } else {
 
         // FINISH_CHECK, NAME_PUZZLE,
         // EXORCISM, GAME_OVER, COMPLETE
 
         this.updateLevelState(dt)
+        this.highwayAudio?.setPlayerDriving(false)
 
       }
 
@@ -1220,6 +1240,9 @@ if (this.loaded) {
             this.highwayRace.obstacles =
               obstacles
 
+            this.highwayRace.highwayAudio =
+              this.highwayAudio
+
             this.highwayRace.onFinish =
               (winner, name) => {
 
@@ -1307,6 +1330,10 @@ if (this.loaded) {
                 arcLengths:
                   this.levelData.arcLengths,
               })
+
+            // Level 3 background music: single looping instance,
+            // started once per activation (never per frame).
+            this.highwayAudio.setHighwayActive(true)
 
           }
 
@@ -1412,6 +1439,7 @@ if (this.loaded) {
     this.houseStoryView = null
 
     this.houseAudio.setHouseActive(false)
+    this.highwayAudio?.setHighwayActive(false)
 
     // Clean up finale state
 
