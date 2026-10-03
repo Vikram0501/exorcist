@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { asTrack } from './track.js'
 
 
 const PICKUP_RADIUS = 2.5
@@ -8,71 +9,15 @@ const ROAD_HALF_WIDTH = 6.5
 
 
 function getPositionOnRoad(
-  roadPath,
+  roadPathOrTrack,
   arcLengths,
   distance
 ) {
-  const totalLength =
-    arcLengths[arcLengths.length - 1]
-
-  if (distance <= 0) {
-    return {
-      position: roadPath[0].clone(),
-      angle: 0,
-    }
-  }
-
-  if (distance >= totalLength) {
-    const last = roadPath.length - 1
-    return {
-      position: roadPath[last].clone(),
-      angle: 0,
-    }
-  }
-
-  let segIndex = 0
-  for (
-    let i = 0;
-    i < arcLengths.length - 1;
-    i++
-  ) {
-    if (
-      distance >= arcLengths[i] &&
-      distance < arcLengths[i + 1]
-    ) {
-      segIndex = i
-      break
-    }
-  }
-
-  const segLength =
-    arcLengths[segIndex + 1] -
-    arcLengths[segIndex]
-  const t =
-    segLength > 0
-      ? (distance - arcLengths[segIndex]) /
-        segLength
-      : 0
-
-  const p0 = roadPath[segIndex]
-  const p1 = roadPath[segIndex + 1]
-
-  const position = new THREE.Vector3(
-    p0.x + (p1.x - p0.x) * t,
-    0,
-    p0.z + (p1.z - p0.z) * t
-  )
-
-  const dx = p1.x - p0.x
-  const dz = p1.z - p0.z
-  const len = Math.sqrt(dx * dx + dz * dz)
-
-  const angle =
-    len > 0.001
-      ? Math.atan2(dx, dz)
-      : 0
-
-  return { position, angle }
+  // Delegates to the shared Track (same note as obstacles.js: positions
+  // unchanged, yaw now blended and valid at endpoints).
+  const track = asTrack(roadPathOrTrack, arcLengths)
+  const frame = track.sampleAt(distance)
+  return { position: frame.position, angle: frame.angle, lateral: frame.lateral }
 }
 
 
@@ -222,6 +167,10 @@ class LetterPickup {
       position
     )
 
+    // Bob anchor rides the elevation: LetterPickup bobs around the
+    // track height at spawn, not a hardcoded world Y.
+    this.baseY = position.y
+
     highway.add(this.mesh)
   }
 
@@ -234,7 +183,7 @@ class LetterPickup {
       dt * 1.5
 
     this.mesh.position.y =
-      0.2 +
+      (this.baseY ?? 0.2) +
       Math.sin(
         performance.now() * 0.003
       ) *
@@ -389,7 +338,9 @@ export function createCollectibles(
       new THREE.Vector3(
         roadSample.position.x +
           perpX * lateralOffset,
-        0.2,
+        roadSample.position.y +
+          roadSample.lateral.y * lateralOffset +
+          0.2,
         roadSample.position.z +
           perpZ * lateralOffset
       )

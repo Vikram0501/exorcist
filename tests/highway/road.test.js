@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { createHighwayLevel } from '../../src/levels/highway/index.js'
-import { HIGHWAY_SURFACE_Y, HIGHWAY_MODEL_URL } from '../../src/levels/highway/road.js'
+import { HIGHWAY_SURFACE_Y, HIGHWAY_MODEL_URL, ROAD_SAMPLE_STEP } from '../../src/levels/highway/road.js'
 import { PLAYER_MODEL_URL, GHOST_MODEL_URL, HIGHWAY_CAR_TARGET_LENGTH, loadHighwayCars } from '../../src/levels/highway/cars.js'
 import { HighwayCarController } from '../../src/levels/highway/car.js'
 import { HighwayRaceController } from '../../src/levels/highway/race.js'
@@ -33,7 +33,7 @@ test('actual GLB covers the unchanged race path, including seams, cars and finis
   }
   globalThis.window = { addEventListener() {}, removeEventListener() {} }
   globalThis.document = {
-    createElement: () => ({ style: {}, remove() {} }),
+    createElement: (tag) => ({ style: {}, remove() {}, width: 0, height: 0, getContext: () => new Proxy({}, { get: () => () => {}, set: () => true }) }),
     body: { appendChild() {} },
   }
   try {
@@ -58,29 +58,71 @@ test('actual GLB covers the unchanged race path, including seams, cars and finis
       assert.equal(meshes, 2)
       root.updateMatrixWorld(true)
       const box = new THREE.Box3().setFromObject(root)
-      assert.ok(Math.abs(box.getSize(new THREE.Vector3()).z - HIGHWAY_CAR_TARGET_LENGTH) < 1e-5)
+      // 1e-3: the smooth CatmullRom start tangent is ~8e-5 rad off-axis
+      // (correct curve behaviour), which grows the yawed bounding box by
+      // ~1e-4. This still validates the 4 m car scaling, not exact axis
+      // alignment.
+      assert.ok(Math.abs(box.getSize(new THREE.Vector3()).z - HIGHWAY_CAR_TARGET_LENGTH) < 1e-3)
       const center = box.getCenter(new THREE.Vector3())
-      assert.ok(Math.abs(center.x - root.position.x) < 1e-5)
-      assert.ok(Math.abs(center.z - root.position.z) < 1e-5)
+      assert.ok(Math.abs(center.x - root.position.x) < 1e-3)
+      assert.ok(Math.abs(center.z - root.position.z) < 1e-3)
     }
-    assert.ok(Math.abs(level.totalRoadLength - 952.6585091144439) < 1e-6)
-    assert.equal(level.finishZ, -880)
+    assert.ok(Math.abs(level.totalRoadLength - 1207.48571328137) < 1e-6)
+    assert.ok(Math.abs(level.finishZ - -1055.9217938457568) < 1e-6)
     assert.deepEqual(level.colliders, [])
     const road = level.model.getObjectByName('highwayRoadGLB')
     assert.equal(road.userData.segmentLength, 20)
-    assert.equal(road.children.length, 49)
+    // 61 twenty-metre tiles over the ~1207 m route, plus the
+    // start-runoff tile.
+    assert.equal(road.children.length, 62)
     assert.equal(road.children.at(-1).userData.endDistance, level.totalRoadLength)
     assert.equal(new Set(road.children.map(tile => tile.material)).size, 1)
     assert.ok(road.children[0].material.isMeshStandardMaterial)
     assert.ok(road.children[0].material.map)
 
     for (let i = 0; i < road.children.length; i++) {
-      const geo = road.children[i].geometry
+      const tile = road.children[i]
+      const geo = tile.geometry
       const p = geo.getAttribute('position')
       const n = geo.getAttribute('normal')
+      // Rebuild the tile's exact row distances (mirrors road.js: fixed
+      // 1.5 m steps plus endpoints, sorted) to prove every vertex rides
+      // the elevated centreline. 1e-4 absorbs Float32 storage rounding
+      // at heights ~16 m.
+      const step = ROAD_SAMPLE_STEP
+      const start = tile.userData.startDistance
+      const end = tile.userData.endDistance
+      const rows = [start, end]
+      for (let d = start + step; d < end; d += step) rows.push(d)
+      rows.sort((a, b) => a - b)
+      assert.equal(p.count, rows.length * 2)
       for (let v = 0; v < p.count; v++) {
-        assert.ok(Math.abs(p.getY(v) - HIGHWAY_SURFACE_Y) < 1e-6)
-        assert.ok(n.getY(v) > 0.999, 'upward-facing surface')
+        // Start runoff (d < 0) extrapolates backward along the launch
+        // tangent, mirroring road.js. The cross-section is banked: each
+        // side sits at centreline + cross-slope at its lateral offset.
+        // The GLB quad is symmetric, so both side assignments are tried.
+        const d = rows[Math.floor(v / 2)]
+        const frame = d < 0
+          ? level.track.sampleAt(0)
+          : level.track.sampleAt(d)
+        const expected = [7, -7].map((off) => {
+          const baseY = d < 0
+            ? frame.position.y + frame.tangent.y * d
+            : frame.position.y
+          return (
+            baseY + frame.lateral.y * off + frame.up.y * HIGHWAY_SURFACE_Y
+          )
+        })
+        const best = Math.min(
+          ...expected.map((e) => Math.abs(p.getY(v) - e))
+        )
+        assert.ok(
+          best < 1e-4,
+          `vertex rides banked elevation, got ${p.getY(v)}`
+        )
+        // Banked normals tilt with the road: up to ~10 deg banking keeps
+        // normal.y above cos(11.5 deg).
+        assert.ok(n.getY(v) > 0.98, 'banked surface, no kinks/flips')
       }
       if (i === 0) continue
       const prev = road.children[i - 1].geometry.getAttribute('position')
@@ -99,36 +141,67 @@ test('actual GLB covers the unchanged race path, including seams, cars and finis
       level.ghostName, null, new THREE.Scene(), level.roadPath, level.arcLengths, level.totalRoadLength)
     road.updateMatrixWorld(true)
     const ray = new THREE.Raycaster(undefined, new THREE.Vector3(0, -1, 0))
-    const checkGround = object => {
-      ray.ray.origin.copy(object.position).y = 10
+    const checkGround = (object, sExact, dExact) => {
+      // Ray starts above the car (the road climbs to +16 m, so a fixed
+      // y = 10 origin would start underneath the asphalt on the crest).
+      ray.ray.origin.copy(object.position)
+      ray.ray.origin.y = object.position.y + 10
       const hits = ray.intersectObject(road, true)
       assert.ok(hits.length, `no asphalt under ${object.position.toArray()}`)
-      assert.ok(Math.abs(hits[0].point.y - HIGHWAY_SURFACE_Y) < 1e-6)
+      // Mesh check against the exact placement coordinates (the
+      // toTrack solver carries sub-metre s-tolerance on straights, which
+      // grade would turn into height noise). 1e-2 absorbs mesh chordal
+      // error between the 1.0 m road rows.
+      const meshY = level.track.toWorld(
+        sExact,
+        dExact,
+        HIGHWAY_SURFACE_Y
+      ).y
+      assert.ok(
+        Math.abs(hits[0].point.y - meshY) < 1e-2,
+        `asphalt at road height, got ${hits[0].point.y}, want ${meshY}`
+      )
       object.updateMatrixWorld(true)
-      assert.ok(Math.abs(new THREE.Box3().setFromObject(object).min.y - HIGHWAY_SURFACE_Y) < 1e-6)
+      // Origin check against the EXACT placement coordinates (no solver
+      // involved): 0.2 ride height along the banked frame.
+      const seatY = level.track.toWorld(sExact, dExact, 0.2).y
+      assert.ok(
+        Math.abs(object.position.y - seatY) < 1e-3,
+        'car origin rides the elevated road'
+      )
+      // Grade pitch plus bank roll can dip bodywork corners below the
+      // plane, so the body box only bounds gross floating/sinking.
+      assert.ok(
+        Math.abs(new THREE.Box3().setFromObject(object).min.y - meshY) < 0.25,
+        'car body rests on the asphalt'
+      )
     }
-    // Dense sampling, path vertices and finish test both smoothed player and
-    // unsmoothed ghost normals, including the full allowed steering envelope.
-    const samples = new Set([...level.arcLengths, race.finishDistance])
-    for (let d = 0; d < level.totalRoadLength; d += 0.5) samples.add(d)
+    // Dense fixed-step sampling covers both smoothed player and ghost
+    // placement over the full allowed steering envelope. (The legacy
+    // arc-length vertex set is now a uniform CatmullRom LUT, so stepping
+    // the track directly is the meaningful coverage.)
+    const samples = new Set([race.finishDistance])
+    for (let d = 0; d < level.totalRoadLength; d += 1) samples.add(d)
     for (const d of samples) {
-      car.pathProgress = d
       for (const lateral of [-5.5, 2, 5.5]) {
-        car.lateralOffset = lateral
-        car.updateCarPosition()
-        checkGround(car.car)
+        // Physics-driven pose: place the car from track coordinates with
+        // tangent-aligned heading, then verify real asphalt underneath.
+        car.placeAt(d, lateral)
+        checkGround(car.car, d, lateral)
       }
-      // The existing ghost uses angle=0 at the exact terminal path point;
-      // finish is 60 units earlier, so test its driven interval only.
+      // Ghost drives the same interval it can finish on (finish sits 60
+      // units before the end of the track).
       if (d > 0 && d <= race.finishDistance) {
         race.ghostPathProgress = d
         race.updateGhost(0)
-        checkGround(race.ghostCar)
+        checkGround(
+          race.ghostCar,
+          race.ghostPathProgress,
+          race.ghostLateralOffset
+        )
       }
     }
-    car.pathProgress = 0
-    car.lateralOffset = 2
-    car.updateCarPosition()
+    car.placeAt(0, 2)
     car.updateCamera()
     assert.ok(camera.position.y > HIGHWAY_SURFACE_Y)
     assert.ok(camera.position.z > car.car.position.z)
@@ -146,14 +219,16 @@ test('actual GLB covers the unchanged race path, including seams, cars and finis
 
     const results = []
     race.onFinish = winner => results.push(winner)
-    car.pathProgress = race.finishDistance - 1
+    car.placeAt(race.finishDistance - 1, 0)
     race.ghostPathProgress = race.finishDistance - 1
     race.checkFinish()
     assert.equal(race.raceFinished, false)
     for (const winner of ['player', 'ghost']) {
       race.raceFinished = false
-      car.pathProgress = race.finishDistance + (winner === 'player' ? 0 : -1)
-      race.ghostPathProgress = race.finishDistance + (winner === 'ghost' ? 0 : -1)
+      // ±1 m margins: derived track progress carries sub-metre solver
+      // tolerance, so sit clearly across the line instead of exactly on it.
+      car.placeAt(race.finishDistance + (winner === 'player' ? 1 : -1), 0)
+      race.ghostPathProgress = race.finishDistance + (winner === 'ghost' ? 1 : -1)
       race.checkFinish()
       assert.equal(race.winner, winner)
       assert.equal(car.canDrive, false)

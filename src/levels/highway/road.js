@@ -4,7 +4,10 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 export const HIGHWAY_MODEL_URL = '/models/highway.glb'
 export const HIGHWAY_SURFACE_Y = 0.05 // Original driving surface elevation.
 export const HIGHWAY_MODEL_SCALE = 1 // Asset: 20 long × 14 wide in game units.
-const ROAD_SAMPLE_STEP = 2 // Subdivide the four-vertex asset to follow bends.
+// Dense fixed-step rows follow the smooth CatmullRom bends directly; no
+// control-vertex inclusions are needed since the Track sampling itself is
+// continuous.
+export const ROAD_SAMPLE_STEP = 1.0
 const START_RUNOFF_SEGMENTS = 1 // Ground behind the starting cars/chase camera.
 const ROAD_ANISOTROPY = 8
 const ROAD_ROUGHNESS = 0.85 // Slight sheen so the asphalt catches the red
@@ -32,12 +35,14 @@ export async function loadHighwayRoad(options) {
   }
 }
 
-// This asset is a textured quad, not a complete environment. Subdivide copies
-// of its geometry/UVs and bend them onto the existing race path. Adjacent tiles
-// share exact cross-sections: no overlapping surfaces or procedural underlay.
+// This asset is a textured quad, not a complete environment. Rows sampled
+// from the smooth Track every ~1.5 m bend the copies onto the race curves.
+// Adjacent tiles share exact cross-sections: no overlapping surfaces or
+// procedural underlay.
 export function createHighwayRoad(scene, {
-  sampleAtDistance, arcLengths, roadWidth,
+  sampleAtDistance, arcLengths, roadWidth, track,
 }) {
+  void track
   scene.updateMatrixWorld(true)
   const meshes = []
   scene.traverse(object => { if (object.isMesh) meshes.push(object) })
@@ -102,13 +107,11 @@ export function createHighwayRoad(scene, {
   for (let tile = -START_RUNOFF_SEGMENTS; tile < count; tile++) {
     const start = tile * length
     const end = Math.min(start + length, totalLength)
-    // Include path vertices so no triangle shortcuts a polyline corner.
+    // Fixed-step rows: Track sampling is continuous, so no extra vertices
+    // are needed at control points.
     const distances = new Set([start, end])
     for (let d = start + ROAD_SAMPLE_STEP; d < end; d += ROAD_SAMPLE_STEP) {
       distances.add(d)
-    }
-    for (const d of arcLengths) {
-      if (d > start && d < end) distances.add(d)
     }
     const rows = [...distances].sort((a, b) => a - b)
     const vertices = [], uvs = [], indices = []
@@ -117,15 +120,28 @@ export function createHighwayRoad(scene, {
       const sample = sampleAtDistance(Math.max(0, d))
       const position = sample.position.clone()
       if (d < 0) {
-        position.x += sample.direction.x * d
-        position.z += sample.direction.y * d
+        // Start runoff: extend the launch straight backward along the
+        // full 3D tangent so the extra tile matches road pitch, not just
+        // plan position.
+        position.x += sample.tangent.x * d
+        position.y += sample.tangent.y * d
+        position.z += sample.tangent.z * d
       }
       for (let side = 0; side < 2; side++) {
         const lateral = ((side === 0 ? box.max.z : box.min.z) - center.z) * HIGHWAY_MODEL_SCALE
+        // Banked cross-section: centreline plus the banked lateral axis,
+        // with the surface offset along the banked up. Normals recomputed
+        // below follow the banking automatically.
         vertices.push(
-          position.x - sample.direction.y * lateral,
-          HIGHWAY_SURFACE_Y,
-          position.z + sample.direction.x * lateral,
+          position.x +
+            sample.lateral.x * lateral +
+            sample.up.x * HIGHWAY_SURFACE_Y,
+          position.y +
+            sample.lateral.y * lateral +
+            sample.up.y * HIGHWAY_SURFACE_Y,
+          position.z +
+            sample.lateral.z * lateral +
+            sample.up.z * HIGHWAY_SURFACE_Y
         )
         const texcoord = corners[side][0].clone().lerp(corners[side][1], (d - start) / length)
         uvs.push(texcoord.x, texcoord.y)

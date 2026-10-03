@@ -42,7 +42,7 @@ async function withLevel(run) {
   }
   globalThis.window = { addEventListener() {}, removeEventListener() {} }
   globalThis.document = {
-    createElement: () => ({ style: {}, remove() {} }),
+    createElement: (tag) => ({ style: {}, remove() {}, width: 0, height: 0, getContext: () => new Proxy({}, { get: () => () => {}, set: () => true }) }),
     body: { appendChild() {} },
   }
 
@@ -110,12 +110,15 @@ test('obstacles cycle zombie, scientist and barbed wire with working collision',
       })
       assert.ok(meshes > 0, 'obstacle has no visual meshes')
 
-      // Visuals sit on the road surface, never buried.
+      // Visuals sit on the banked road surface, never buried.
       obs.mesh.updateMatrixWorld(true)
       const box = new THREE.Box3().setFromObject(obs.mesh)
+      const frame = level.track.sampleAt(obs.progress)
+      const roadBase =
+        frame.position.y + frame.lateral.y * obs.lateralOffset
       assert.ok(
-        Math.abs(box.min.y) < 0.05,
-        `${obs.modelKey} floats or sinks: min.y=${box.min.y.toFixed(3)}`
+        Math.abs(box.min.y - roadBase) < 0.05,
+        `${obs.modelKey} floats or sinks: min.y=${box.min.y.toFixed(3)} vs road ${roadBase.toFixed(3)}`
       )
 
       // Readable-but-fair scale: imposing zombies, road-blocking wire.

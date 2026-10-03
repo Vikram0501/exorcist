@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { asTrack, FRAME_TANGENT_HALF } from './track.js'
 
 
 // ============================================
@@ -41,6 +42,7 @@ const HORROR_BUILD_END_Z = -800
 const CITY_MODEL_SCALE = 1.5
 const CITY_Y_OFFSET = -0.15 // Outer ground top: keeps bases out of the air.
 const CITY_SAFE_ROAD_CLEARANCE = 17
+const CITY_OPEN_SECTION_CLEARANCE = 27
 const CITY_CLEARANCE_VARIATION = 1.5
 const CITY_CLEARANCE_TOLERANCE = 0.02
 const CITY_FOOTPRINT_STEP = 1
@@ -60,7 +62,7 @@ const CITY_SPACING_VARIATION_TIGHT = 0.7
 const CITY_SCALE_VARIATION = 0.02
 const CITY_DRAW_DISTANCE = 140
 const CITY_END_CUSHION = 18
-const CITY_TANGENT_HALF = 4
+// Tangent half-window moved to track.js (FRAME_TANGENT_HALF); kept in sync.
 const CITY_SIDES = [-1, 1]
 
 // Streetlight poles follow the same path-frame convention as the barriers
@@ -69,8 +71,9 @@ const CITY_SIDES = [-1, 1]
 // along local +X, so rotation.y = frame.angle faces +X at the road for the
 // +1 side and +PI turns it around for the -1 side.
 const STREETLIGHT_OFFSET = 9
-const STREETLIGHT_SPACING = 40
-const STREETLIGHT_STAGGER = 20
+const STREETLIGHT_SPACING_STRAIGHT = 40
+const STREETLIGHT_SPACING_CORNER = 20
+const STREETLIGHT_CORNER_BANK = (3.5 * Math.PI) / 180
 const STREETLIGHT_START = 15
 const STREETLIGHT_END_CUSHION = 10
 const STREETLIGHT_MIN_CLEARANCE = 8
@@ -324,6 +327,7 @@ export class HighwayEnvironmentManager {
     streetlights,
     roadPath,
     arcLengths,
+    track,
   }) {
 
     this.scene = scene
@@ -333,8 +337,11 @@ export class HighwayEnvironmentManager {
 
     this.cityTemplate = cityBuildings || null
     this.streetlightTemplate = streetlights || null
-    this.roadPath = roadPath || []
-    this.arcLengths = arcLengths || []
+    // Single source of truth for path sampling. Accepts a Track or
+    // legacy (roadPath, arcLengths); legacy fields kept for compat.
+    this.track = track || asTrack(roadPath, arcLengths)
+    this.roadPath = this.track.points
+    this.arcLengths = this.track.arcLengths
 
     this.group = new THREE.Group()
     this.group.name = 'highwayEnvironment'
@@ -393,61 +400,11 @@ export class HighwayEnvironmentManager {
   // ============================================
 
   getPathSample(distance) {
-    const points = this.roadPath
-    const arcLengths = this.arcLengths
-    if (
-      !points ||
-      !points.length ||
-      !arcLengths
-    ) {
+    // Delegates to the shared Track (positions unchanged).
+    if (!this.track) {
       return new THREE.Vector3(0, 0, -465)
     }
-
-    const totalLength =
-      arcLengths[arcLengths.length - 1]
-
-    if (distance <= 0) {
-      return points[0].clone()
-    }
-
-    if (distance >= totalLength) {
-      return points[
-        points.length - 1
-      ].clone()
-    }
-
-    let segIndex = 0
-    for (
-      let i = 0;
-      i < arcLengths.length - 1;
-      i++
-    ) {
-      if (
-        distance >= arcLengths[i] &&
-        distance < arcLengths[i + 1]
-      ) {
-        segIndex = i
-        break
-      }
-    }
-
-    const segLength =
-      arcLengths[segIndex + 1] -
-      arcLengths[segIndex]
-    const t =
-      segLength > 0
-        ? (distance - arcLengths[segIndex]) /
-          segLength
-        : 0
-
-    const p0 = points[segIndex]
-    const p1 = points[segIndex + 1]
-
-    return new THREE.Vector3(
-      p0.x + (p1.x - p0.x) * t,
-      0,
-      p0.z + (p1.z - p0.z) * t
-    )
+    return this.track.sampleAt(distance).position.clone()
   }
 
 
@@ -617,32 +574,58 @@ export class HighwayEnvironmentManager {
 
 
   // ============================================
-  // SHOULDERS
+  // SHOULDERS (track-following ribbons)
   // ============================================
+
+  // Flat ribbons hugging the smooth bends: inner asphalt edge plus outer
+  // ground, mirroring the historical straight-slab layout (shoulders span
+  // lateral 7..20, outer ground 23.5..43.5) so only curvature changes.
+  buildTrackRibbon(innerD, outerD, y, material, step = 4) {
+    const totalLength = this.track.totalLength
+    const rows = Math.max(2, Math.ceil(totalLength / step) + 1)
+    const vertices = new Float32Array(rows * 2 * 3)
+    const uvs = new Float32Array(rows * 2 * 2)
+    const indices = []
+
+    for (let row = 0; row < rows; row++) {
+      const s = Math.min(row * step, totalLength)
+      const inner = this.track.toWorld(s, innerD, y)
+      const outer = this.track.toWorld(s, outerD, y)
+      vertices.set([inner.x, inner.y, inner.z], row * 6)
+      vertices.set([outer.x, outer.y, outer.z], row * 6 + 3)
+      uvs.set([0, s / 10], row * 4)
+      uvs.set([1, s / 10], row * 4 + 2)
+      if (row > 0) {
+        const base = (row - 1) * 2
+        indices.push(base, base + 2, base + 1, base + 1, base + 2, base + 3)
+      }
+    }
+
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3))
+    geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
+    geometry.setIndex(indices)
+    geometry.computeVertexNormals()
+    geometry.computeBoundingBox()
+    geometry.computeBoundingSphere()
+
+    const mesh = new THREE.Mesh(geometry, material)
+    mesh.receiveShadow = true
+    return mesh
+  }
 
   setupShoulders() {
 
     const mat = buildShoulderMaterial()
     this.sharedMaterials.push(mat)
 
-    const shoulderGeo =
-      new THREE.BoxGeometry(13, 0.15, ROAD_LENGTH)
-
-    const leftShoulder =
-      new THREE.Mesh(shoulderGeo, mat)
-    leftShoulder.position.set(
-      -13.5, -0.12, ROAD_CENTER_Z
-    )
-    leftShoulder.receiveShadow = true
-    this.group.add(leftShoulder)
-
-    const rightShoulder =
-      new THREE.Mesh(shoulderGeo, mat)
-    rightShoulder.position.set(
-      13.5, -0.12, ROAD_CENTER_Z
-    )
-    rightShoulder.receiveShadow = true
-    this.group.add(rightShoulder)
+    for (const side of [1, -1]) {
+      const shoulder = this.buildTrackRibbon(
+        side * 7, side * 20, -0.12, mat
+      )
+      shoulder.material.side = THREE.DoubleSide
+      this.group.add(shoulder)
+    }
 
     const outerMat =
       new THREE.MeshStandardMaterial({
@@ -652,24 +635,13 @@ export class HighwayEnvironmentManager {
       })
     this.sharedMaterials.push(outerMat)
 
-    const outerGeo =
-      new THREE.BoxGeometry(20, 0.1, ROAD_LENGTH)
-
-    const leftOuter =
-      new THREE.Mesh(outerGeo, outerMat)
-    leftOuter.position.set(
-      -33.5, -0.2, ROAD_CENTER_Z
-    )
-    leftOuter.receiveShadow = true
-    this.group.add(leftOuter)
-
-    const rightOuter =
-      new THREE.Mesh(outerGeo, outerMat)
-    rightOuter.position.set(
-      33.5, -0.2, ROAD_CENTER_Z
-    )
-    rightOuter.receiveShadow = true
-    this.group.add(rightOuter)
+    for (const side of [1, -1]) {
+      const outer = this.buildTrackRibbon(
+        side * 23.5, side * 43.5, -0.2, outerMat
+      )
+      outer.material.side = THREE.DoubleSide
+      this.group.add(outer)
+    }
   }
 
 
@@ -756,7 +728,21 @@ export class HighwayEnvironmentManager {
       )
     )
 
-    const clearance = CITY_SAFE_ROAD_CLEARANCE + hashRange(
+    // Composition varies by track section: open vistas at the crest,
+    // downhill reveal, hero corner and fast run (the road silhouette
+    // stays visible), tighter urban walls elsewhere. Never below the
+    // safe road clearance the tests enforce.
+    const progress01 =
+      this.track.getProgress01(distance)
+    const openSection =
+      (progress01 > 0.30 && progress01 < 0.42) || // crest
+      (progress01 > 0.44 && progress01 < 0.56) || // downhill reveal
+      (progress01 > 0.62 && progress01 < 0.76) || // hero drift corner
+      (progress01 > 0.78 && progress01 < 0.90) // fast run
+    const baseClearance = openSection
+      ? CITY_OPEN_SECTION_CLEARANCE
+      : CITY_SAFE_ROAD_CLEARANCE
+    const clearance = baseClearance + hashRange(
       index * 5.1 + side * 7.9,
       0,
       CITY_CLEARANCE_VARIATION
@@ -769,9 +755,13 @@ export class HighwayEnvironmentManager {
     section.rotation.y =
       frame.angle + (parity === 1 ? Math.PI : 0)
     section.scale.setScalar(scale)
+    // Base rides the elevation: the offset is relative to the track
+    // height at this distance, not a hardcoded world Y.
+    const cityGroundY =
+      this.track.sampleAt(distance).position.y
     section.position.set(
       frame.x,
-      CITY_Y_OFFSET,
+      cityGroundY + CITY_Y_OFFSET,
       frame.z
     )
 
@@ -781,6 +771,22 @@ export class HighwayEnvironmentManager {
     this.settleCitySection(
       section, box, frame, side, clearance
     )
+
+    // Cross-slope seating: blocks sit wide of the centreline, so re-seat
+    // the base on the banked cross-section at the settled lateral
+    // offset. The block itself stays world-upright: buildings never tilt.
+    {
+      const anchor = this.track.sampleAt(distance)
+      const dx = section.position.x - anchor.position.x
+      const dz = section.position.z - anchor.position.z
+      const dActual =
+        dx * anchor.lateral.x + dz * anchor.lateral.z
+      section.position.y =
+        anchor.position.y +
+        anchor.lateral.y * dActual +
+        CITY_Y_OFFSET
+      section.updateMatrixWorld(true)
+    }
 
     this.citySections.push(section)
   }
@@ -894,55 +900,28 @@ export class HighwayEnvironmentManager {
   // Exact distance to the path polyline: sampling it would blur the corners
   // the block has to stay away from.
   distanceToPath(x, z) {
-
-    const points = this.roadPath
-    let nearest = Infinity
-
-    for (let i = 1; i < points.length; i++) {
-
-      const a = points[i - 1]
-      const b = points[i]
-
-      const dx = b.x - a.x
-      const dz = b.z - a.z
-      const lengthSq = dx * dx + dz * dz
-
-      const t = lengthSq > 0
-        ? ((x - a.x) * dx + (z - a.z) * dz) / lengthSq
-        : 0
-      const along = t < 0 ? 0 : t > 1 ? 1 : t
-
-      const px = a.x + dx * along - x
-      const pz = a.z + dz * along - z
-      const distance = Math.sqrt(px * px + pz * pz)
-
-      if (distance < nearest) {
-        nearest = distance
-      }
-
-    }
-
-    return nearest
+    // Delegates to the shared Track (mathematics unchanged).
+    return this.track.distanceToPath(x, z)
   }
 
 
   // Path position, travel yaw and the perpendicular both sides are measured
   // against, taken from the same convention as the barriers and cars.
   getCityFrame(distance) {
-
-    const totalLength =
-      this.arcLengths[this.arcLengths.length - 1]
+    // Routed through the shared Track. Tangent window (±4 m) and
+    // perpendicular convention preserved exactly.
+    const totalLength = this.track.totalLength
 
     const tangentAt = Math.min(
-      Math.max(distance, CITY_TANGENT_HALF),
-      totalLength - CITY_TANGENT_HALF
+      Math.max(distance, FRAME_TANGENT_HALF),
+      totalLength - FRAME_TANGENT_HALF
     )
 
     const behind =
-      this.getPathSample(tangentAt - CITY_TANGENT_HALF)
+      this.track.sampleAt(tangentAt - FRAME_TANGENT_HALF).position
     const ahead =
-      this.getPathSample(tangentAt + CITY_TANGENT_HALF)
-    const origin = this.getPathSample(distance)
+      this.track.sampleAt(tangentAt + FRAME_TANGENT_HALF).position
+    const origin = this.track.sampleAt(distance).position
 
     const dx = ahead.x - behind.x
     const dz = ahead.z - behind.z
@@ -982,24 +961,34 @@ export class HighwayEnvironmentManager {
     this.streetlightGroup.name = 'streetlightEnvironment'
     this.group.add(this.streetlightGroup)
 
-    for (const side of STREETLIGHT_SIDES) {
+    // Rhythmic placement: tighter pitch through corners (lamps trace
+    // the bends), wider on fast straights, outside-of-corner emphasis
+    // where the banking reads. Never fully symmetric: the varying pitch
+    // keeps the corridor apocalyptic, not runway-like.
+    let distance = STREETLIGHT_START
+    let index = 0
+    let straightSide = -1
 
-      // The right side starts half a pitch later so poles alternate.
-      let distance = STREETLIGHT_START +
-        (side > 0 ? STREETLIGHT_STAGGER : 0)
-      let index = 0
+    while (
+      distance <
+      totalLength - STREETLIGHT_END_CUSHION
+    ) {
 
-      while (
-        distance <
-        totalLength - STREETLIGHT_END_CUSHION
-      ) {
+      const bank = this.track.sampleBank(distance)
+      const inCorner =
+        Math.abs(bank) > STREETLIGHT_CORNER_BANK
+      // Cornered bends get lamps on the outer side so each curve reads
+      // as a sweeping line of light; straights keep alternating sides.
+      const side = inCorner
+        ? (bank >= 0 ? 1 : -1)
+        : (straightSide = -straightSide)
 
-        this.addStreetlightPole(side, index, distance)
+      this.addStreetlightPole(side, index, distance)
 
-        distance += STREETLIGHT_SPACING
-        index += 1
-
-      }
+      distance += inCorner
+        ? STREETLIGHT_SPACING_CORNER
+        : STREETLIGHT_SPACING_STRAIGHT
+      index += 1
 
     }
 
@@ -1053,9 +1042,12 @@ export class HighwayEnvironmentManager {
     pole.userData.streetlightDistance = distance
     pole.rotation.y =
       frame.angle + (side > 0 ? 0 : Math.PI)
+    // Base rides the elevation like the city blocks above.
+    const poleGroundY =
+      this.track.sampleAt(distance).position.y
     pole.position.set(
       frame.x + frame.perpX * side * STREETLIGHT_OFFSET,
-      STREETLIGHT_Y_OFFSET,
+      poleGroundY + STREETLIGHT_Y_OFFSET,
       frame.z + frame.perpZ * side * STREETLIGHT_OFFSET
     )
 
@@ -1080,6 +1072,21 @@ export class HighwayEnvironmentManager {
         (STREETLIGHT_MIN_CLEARANCE - clearance)
       pole.updateMatrixWorld(true)
 
+    }
+
+    // Cross-slope seating at the final (nudged) lateral offset. The pole
+    // itself stays world-upright like the buildings.
+    {
+      const anchor = this.track.sampleAt(distance)
+      const dx = pole.position.x - anchor.position.x
+      const dz = pole.position.z - anchor.position.z
+      const dActual =
+        dx * anchor.lateral.x + dz * anchor.lateral.z
+      pole.position.y =
+        anchor.position.y +
+        anchor.lateral.y * dActual +
+        STREETLIGHT_Y_OFFSET
+      pole.updateMatrixWorld(true)
     }
 
     this.streetlightPoles.push(pole)
@@ -1315,9 +1322,15 @@ export class HighwayEnvironmentManager {
     let railIndex = 0
     let postIndex = 0
 
+    // Track-relative patches spread over the full length (previously the
+    // straight-Z layout only covered the opening stretch). Damage pattern
+    // hashes are preserved.
+    const totalLength = this.track.totalLength
     const patchCount = 12
     const patchLength = 12
-    const patchGap = 22
+    const patchGap =
+      (totalLength - 30 - patchCount * patchLength) /
+      Math.max(1, patchCount - 1)
 
     for (
       let patch = 0;
@@ -1325,9 +1338,8 @@ export class HighwayEnvironmentManager {
       patch++
     ) {
 
-      const patchStartZ =
-        ROAD_MAX_Z - 15 -
-        patch * (patchLength + patchGap)
+      const patchStartS =
+        15 + patch * (patchLength + patchGap)
 
       const segments =
         2 + Math.floor(
@@ -1341,8 +1353,7 @@ export class HighwayEnvironmentManager {
         j++
       ) {
 
-        const z =
-          patchStartZ - j * 4.2
+        const s = patchStartS + j * 4.2
 
         const damaged =
           hash(patch * 90.2 + j) > 0.7
@@ -1355,80 +1366,62 @@ export class HighwayEnvironmentManager {
             )
           : 0
 
-        dummy.position.set(
-          -7.6, 0.35, z
-        )
-        dummy.rotation.set(tiltX, 0, 0)
-        dummy.scale.set(1, 1, 1)
-        dummy.updateMatrix()
+        for (const side of [-1, 1]) {
+          if (railIndex >= GUARDRAIL_COUNT) break
 
-        railMesh.setMatrixAt(
-          railIndex, dummy.matrix
-        )
-        railIndex++
+          const frame = this.track.sampleAt(s)
+          const railPos = this.track.toWorld(s, side * 7.6, 0.35)
 
-        dummy.position.set(
-          -7.6, 0.5, z + 2
-        )
-        dummy.rotation.set(0, 0, 0)
-        dummy.scale.set(1, 1, 1)
-        dummy.updateMatrix()
-        postMesh.setMatrixAt(
-          postIndex, dummy.matrix
-        )
-        postIndex++
-
-        dummy.position.set(
-          -7.6, 0.5, z - 2
-        )
-        dummy.updateMatrix()
-        postMesh.setMatrixAt(
-          postIndex, dummy.matrix
-        )
-        postIndex++
-
-        if (
-          railIndex < GUARDRAIL_COUNT
-        ) {
-
-          dummy.position.set(
-            7.6, 0.35, z
-          )
-          dummy.rotation.set(
-            -tiltX * 0.5, 0, 0
-          )
+          dummy.position.copy(railPos)
+          // Road-attached: roll with the banking (Euler XYZ applies Z
+          // before Y, so this is roll about travel, then yaw). Posts
+          // below stay world-vertical.
+          dummy.rotation.set(tiltX, frame.angle, frame.bank)
           dummy.scale.set(1, 1, 1)
           dummy.updateMatrix()
+
           railMesh.setMatrixAt(
             railIndex, dummy.matrix
           )
           railIndex++
 
-          dummy.position.set(
-            7.6, 0.5, z + 2
-          )
-          dummy.rotation.set(0, 0, 0)
-          dummy.scale.set(1, 1, 1)
-          dummy.updateMatrix()
-          postMesh.setMatrixAt(
-            postIndex, dummy.matrix
-          )
-          postIndex++
-
-          dummy.position.set(
-            7.6, 0.5, z - 2
-          )
-          dummy.updateMatrix()
-          postMesh.setMatrixAt(
-            postIndex, dummy.matrix
-          )
-          postIndex++
+          for (const ds of [-2, 2]) {
+            if (postIndex >= GUARDRAIL_COUNT * 2) break
+            const postFrame = this.track.sampleAt(s + ds)
+            const postPos = this.track.toWorld(
+              s + ds, side * 7.6, 0.5
+            )
+            void postFrame
+            dummy.position.copy(postPos)
+            dummy.rotation.set(0, 0, 0)
+            dummy.scale.set(1, 1, 1)
+            dummy.updateMatrix()
+            postMesh.setMatrixAt(
+              postIndex, dummy.matrix
+            )
+            postIndex++
+          }
         }
       }
     }
 
     railMesh.instanceMatrix.needsUpdate = true
     postMesh.instanceMatrix.needsUpdate = true
+    // Hide unused instances below the ground instead of leaving identity
+    // matrices at the origin.
+    {
+      const hide = new THREE.Object3D()
+      hide.position.set(0, -50, 0)
+      hide.updateMatrix()
+      for (let i = railIndex; i < GUARDRAIL_COUNT; i++) {
+        railMesh.setMatrixAt(i, hide.matrix)
+      }
+      for (let i = postIndex; i < GUARDRAIL_COUNT * 2; i++) {
+        postMesh.setMatrixAt(i, hide.matrix)
+      }
+      railMesh.instanceMatrix.needsUpdate = true
+      postMesh.instanceMatrix.needsUpdate = true
+    }
     this.group.add(railMesh)
     this.group.add(postMesh)
   }
@@ -1443,20 +1436,29 @@ export class HighwayEnvironmentManager {
     this.sharedMaterials.push(bodyMat)
     this.sharedMaterials.push(roofMat)
 
+    // frac: normalized station on the previous highway (s_old / legacy
+    // total), so the wreck rhythm survives geometry changes. d keeps the
+    // historical left/right lateral placement.
     const positions = [
-      { x: -11, z: -50, rotY: 0.15, s: 0.9 },
-      { x: 13, z: -110, rotY: -0.25, s: 1.0 },
-      { x: -15, z: -170, rotY: 0.4, s: 0.85 },
-      { x: 12, z: -220, rotY: -0.1, s: 0.95 },
-      { x: -13, z: -280, rotY: 0.3, s: 0.88 },
-      { x: 14, z: -340, rotY: -0.35, s: 0.92 },
-      { x: -12, z: -420, rotY: 0.2, s: 0.87 },
-      { x: 15, z: -500, rotY: -0.3, s: 0.93 },
-      { x: -14, z: -580, rotY: 0.25, s: 0.9 },
-      { x: 11, z: -660, rotY: -0.2, s: 0.86 },
-      { x: -13, z: -740, rotY: 0.35, s: 0.91 },
-      { x: 14, z: -820, rotY: -0.15, s: 0.88 },
+      { frac: 60 / 952.6585091144439, d: -11, rotY: 0.15, s: 0.9 },
+      { frac: 120 / 952.6585091144439, d: 13, rotY: -0.25, s: 1.0 },
+      { frac: 180 / 952.6585091144439, d: -15, rotY: 0.4, s: 0.85 },
+      { frac: 230 / 952.6585091144439, d: 12, rotY: -0.1, s: 0.95 },
+      { frac: 290 / 952.6585091144439, d: -13, rotY: 0.3, s: 0.88 },
+      { frac: 350 / 952.6585091144439, d: 14, rotY: -0.35, s: 0.92 },
+      // Deliberate storytelling: wreck on the outer edge of the
+      // downhill reveal (a left, so outer is +d).
+      { frac: 430 / 952.6585091144439, d: 13, rotY: 0.45, s: 0.87 },
+      { frac: 510 / 952.6585091144439, d: 15, rotY: -0.3, s: 0.93 },
+      { frac: 590 / 952.6585091144439, d: -14, rotY: 0.25, s: 0.9 },
+      // Deliberate storytelling: wreck on the outer edge at the hero
+      // drift corner apex approach (a right, so outer is -d).
+      { frac: 670 / 952.6585091144439, d: -12, rotY: 0.35, s: 0.86 },
+      { frac: 750 / 952.6585091144439, d: -13, rotY: 0.35, s: 0.91 },
+      { frac: 830 / 952.6585091144439, d: 14, rotY: -0.15, s: 0.88 },
     ]
+
+    const totalLength = this.track.totalLength
 
     for (
       let i = 0;
@@ -1471,8 +1473,11 @@ export class HighwayEnvironmentManager {
           bodyMat, roofMat
         )
 
-      car.position.set(pos.x, 0, pos.z)
-      car.rotation.y = pos.rotY
+      const station = pos.frac * totalLength
+      const frame = this.track.sampleAt(station)
+      const world = this.track.toWorld(station, pos.d, 0)
+      car.position.copy(world)
+      car.rotation.y = frame.angle + pos.rotY
       car.scale.setScalar(pos.s)
 
       car.traverse((child) => {
@@ -1506,6 +1511,8 @@ export class HighwayEnvironmentManager {
 
     const dummy = new THREE.Object3D()
 
+    const totalLength = this.track.totalLength
+
     for (
       let i = 0;
       i < MILE_MARKER_COUNT;
@@ -1515,19 +1522,24 @@ export class HighwayEnvironmentManager {
       const side =
         hash(i * 31.1) > 0.5 ? 1 : -1
 
-      const x =
+      const d =
         side *
         (7.8 + hash(i * 32.2) * 2)
 
-      const z =
-        ROAD_MAX_Z - 5 - i * 23
+      // Evenly spaced stations over the full track (previously every 23 m
+      // in world Z on the near-straight layout).
+      const s =
+        5 + (i / MILE_MARKER_COUNT) * (totalLength - 10)
+
+      const frame = this.track.sampleAt(s)
+      const world = this.track.toWorld(s, d, 0.45)
 
       const tilt =
         hashRange(i * 33.3, -0.2, 0.2)
 
-      dummy.position.set(x, 0.45, z)
+      dummy.position.copy(world)
       dummy.rotation.set(
-        tilt, 0,
+        tilt, frame.angle,
         hashRange(i * 34.4, -0.12, 0.12)
       )
       dummy.scale.set(1, 1, 1)
@@ -1564,6 +1576,11 @@ export class HighwayEnvironmentManager {
 
     const dummy = new THREE.Object3D()
 
+    // Track-relative scatter (previously uniform in world Z with raw X
+    // offsets, which the bends would drag onto the asphalt). Hash streams
+    // preserved so the debris pattern keeps its character.
+    const totalLength = this.track.totalLength
+
     for (
       let i = 0;
       i < DEBRIS_COUNT;
@@ -1573,13 +1590,14 @@ export class HighwayEnvironmentManager {
       const side =
         hash(i * 95.1) > 0.5 ? 1 : -1
 
-      const x =
+      const d =
         side *
         (7.5 + hash(i * 95.2) * 12)
 
-      const z =
-        ROAD_MAX_Z -
-        hash(i * 95.3) * ROAD_LENGTH
+      const s =
+        hash(i * 95.3) * totalLength
+
+      const world = this.track.toWorld(s, d, 0.07)
 
       const scaleX =
         hashRange(i * 95.4, 0.3, 1.5)
@@ -1587,7 +1605,7 @@ export class HighwayEnvironmentManager {
       const rotY =
         hash(i * 95.5) * Math.PI * 2
 
-      dummy.position.set(x, 0.07, z)
+      dummy.position.copy(world)
       dummy.rotation.set(
         hashRange(i * 95.6, -0.3, 0.3),
         rotY,
@@ -1651,55 +1669,87 @@ export class HighwayEnvironmentManager {
   }
 
 
+  // Forward-facing lighting follows the car's actual heading (which tracks
+  // the local Track tangent until true steering lands), so the beams stay
+  // on the highway through bends instead of assuming forward = -Z.
+  carForward(into) {
+    const fwd = into || new THREE.Vector3()
+    if (this.playerCar) {
+      fwd.set(0, 0, 1).applyQuaternion(this.playerCar.quaternion)
+      fwd.y = 0
+      if (fwd.lengthSq() > 1e-8) {
+        fwd.normalize()
+        return fwd
+      }
+    }
+    return fwd.set(0, 0, -1)
+  }
+
+  carRight(into) {
+    const right = into || new THREE.Vector3()
+    const fwd = this.carForward(new THREE.Vector3())
+    // Right of forward on the ground plane (forward × up).
+    right.set(-fwd.z, 0, fwd.x)
+    if (right.lengthSq() < 1e-8) right.set(1, 0, 0)
+    return right.normalize()
+  }
+
   updateHeadlights(time) {
 
     const pos = this.playerCar.position
-    const frontZ = pos.z - 2
-    const targetZ = pos.z - 35
+    const fwd = this.carForward(new THREE.Vector3())
+    const right = this.carRight(new THREE.Vector3())
+
+    // Cone geometry points down -Y natively with the historical -PI/2 X
+    // tilt; yaw that tilt so the beam follows the car heading.
+    const yaw = Math.atan2(fwd.x, fwd.z) + Math.PI
+    const tilt = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(1, 0, 0), -Math.PI / 2
+    )
+    const yawQ = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 1, 0), yaw
+    )
+    const coneQuat = yawQ.multiply(tilt)
 
     const flicker =
       1 + Math.sin(time * 8.7) * 0.01 +
       Math.sin(time * 13.3) * 0.008
 
-    const leftX = pos.x - 0.6
-    const rightX = pos.x + 0.6
     const lightY = pos.y + 0.4
+    const leftBase = pos.clone().addScaledVector(right, -0.6)
+    const rightBase = pos.clone().addScaledVector(right, 0.6)
 
     this.leftLight.position.set(
-      leftX, lightY, frontZ
-    )
+      leftBase.x, lightY, leftBase.z
+    ).addScaledVector(fwd, 2)
     this.leftLight.intensity =
       HEADLIGHT_INTENSITY * flicker
     this.leftTarget.position.set(
-      leftX, pos.y, targetZ
-    )
+      leftBase.x, pos.y, leftBase.z
+    ).addScaledVector(fwd, 35)
     this.leftCone.position.set(
-      leftX, lightY, frontZ - 17.5
-    )
-    this.leftCone.rotation.set(
-      -Math.PI / 2, 0, 0
-    )
+      leftBase.x, lightY, leftBase.z
+    ).addScaledVector(fwd, 19.5)
+    this.leftCone.quaternion.copy(coneQuat)
     this.leftBulb.position.set(
-      leftX, lightY, frontZ
-    )
+      leftBase.x, lightY, leftBase.z
+    ).addScaledVector(fwd, 2)
 
     this.rightLight.position.set(
-      rightX, lightY, frontZ
-    )
+      rightBase.x, lightY, rightBase.z
+    ).addScaledVector(fwd, 2)
     this.rightLight.intensity =
       HEADLIGHT_INTENSITY * flicker
     this.rightTarget.position.set(
-      rightX, pos.y, targetZ
-    )
+      rightBase.x, pos.y, rightBase.z
+    ).addScaledVector(fwd, 35)
     this.rightCone.position.set(
-      rightX, lightY, frontZ - 17.5
-    )
-    this.rightCone.rotation.set(
-      -Math.PI / 2, 0, 0
-    )
+      rightBase.x, lightY, rightBase.z
+    ).addScaledVector(fwd, 19.5)
+    this.rightCone.quaternion.copy(coneQuat)
     this.rightBulb.position.set(
-      rightX, lightY, frontZ
-    )
+      rightBase.x, lightY, rightBase.z
+    ).addScaledVector(fwd, 2)
   }
 
 

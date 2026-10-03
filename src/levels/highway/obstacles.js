@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { clone as cloneSkinnedModel }
   from 'three/addons/utils/SkeletonUtils.js'
+import { asTrack } from './track.js'
 
 
 // ============================================
@@ -164,75 +165,25 @@ function disposeObstacleTemplate(template) {
 
 
 // ============================================
-// GET POSITION ALONG ROAD PATH
+// GET POSITION ALONG ROAD PATH (delegates to Track)
 // ============================================
+//
+// Previously a local segment-lerp with unblended angles and angle 0 at
+// the endpoints. Now routed through the shared Track so obstacle yaw
+// matches the player/ghost frames. World positions are unchanged.
 
 function getPositionOnRoad(
-  roadPath,
+  roadPathOrTrack,
   arcLengths,
   distance
 ) {
-  const totalLength =
-    arcLengths[arcLengths.length - 1]
-
-  if (distance <= 0) {
-    return {
-      position: roadPath[0].clone(),
-      angle: 0,
-    }
+  const track = asTrack(roadPathOrTrack, arcLengths)
+  const frame = track.sampleAt(distance)
+  return {
+    position: frame.position,
+    angle: frame.angle,
+    lateral: frame.lateral,
   }
-
-  if (distance >= totalLength) {
-    const last = roadPath.length - 1
-    return {
-      position: roadPath[last].clone(),
-      angle: 0,
-    }
-  }
-
-  let segIndex = 0
-  for (
-    let i = 0;
-    i < arcLengths.length - 1;
-    i++
-  ) {
-    if (
-      distance >= arcLengths[i] &&
-      distance < arcLengths[i + 1]
-    ) {
-      segIndex = i
-      break
-    }
-  }
-
-  const segLength =
-    arcLengths[segIndex + 1] -
-    arcLengths[segIndex]
-  const t =
-    segLength > 0
-      ? (distance - arcLengths[segIndex]) /
-        segLength
-      : 0
-
-  const p0 = roadPath[segIndex]
-  const p1 = roadPath[segIndex + 1]
-
-  const position = new THREE.Vector3(
-    p0.x + (p1.x - p0.x) * t,
-    0,
-    p0.z + (p1.z - p0.z) * t
-  )
-
-  const dx = p1.x - p0.x
-  const dz = p1.z - p0.z
-  const len = Math.sqrt(dx * dx + dz * dz)
-
-  const angle =
-    len > 0.001
-      ? Math.atan2(dx, dz)
-      : 0
-
-  return { position, angle }
 }
 
 
@@ -336,7 +287,10 @@ export function createObstacles(
 
     group.position.set(
       worldX,
-      0,
+      // Banked cross-slope height at the obstacle's own lateral offset,
+      // so feet stay planted when the road rolls.
+      roadSample.position.y +
+        roadSample.lateral.y * lateralOffset,
       worldZ
     )
     group.rotation.y = dir
@@ -453,7 +407,8 @@ export function checkPlayerObstacleCollision(
   obstacles,
   currentProgress,
   newProgress,
-  lateralOffset
+  lateralOffset,
+  excludeSet = null
 ) {
   for (
     let i = 0;
@@ -461,6 +416,16 @@ export function checkPlayerObstacleCollision(
     i++
   ) {
     const obs = obstacles[i]
+
+    // Already consumed (the ghost keeps racing after a hit, so it
+    // must not re-trigger the same obstacle; player hits end the run
+    // and never reach a second check).
+    if (
+      excludeSet &&
+      excludeSet.has(obs)
+    ) {
+      continue
+    }
 
     // Only check obstacles between current
     // and new progress (ahead of the car)
