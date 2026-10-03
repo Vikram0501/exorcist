@@ -5,6 +5,14 @@ import { loadCityBuildings } from './city.js'
 import { loadStreetlightTemplate } from './streetlights.js'
 import { createObstacles, loadObstacleModels }
   from './obstacles.js'
+import { createRacecraft }
+  from './racecraft.js'
+import {
+  ROAD_PATH_POINTS,
+  ROAD_WIDTH,
+  FINISH_DISTANCE_BUFFER,
+  createDefaultTrack,
+} from './track.js'
 
 
 const GHOST_NAMES = [
@@ -222,171 +230,12 @@ export function removeGhostNameUI(el) {
 
 
 // ============================================
-// ROAD PATH SYSTEM
+// ROAD PATH SYSTEM (single source of truth: track.js)
 // ============================================
-
-const ROAD_PATH_POINTS = [
-  new THREE.Vector3(0, 0, 10),
-  new THREE.Vector3(0, 0, -50),
-  new THREE.Vector3(0, 0, -130),
-  new THREE.Vector3(0, 0, -190),
-  new THREE.Vector3(6, 0, -260),
-  new THREE.Vector3(12, 0, -330),
-  new THREE.Vector3(8, 0, -400),
-  new THREE.Vector3(0, 0, -460),
-  new THREE.Vector3(-8, 0, -530),
-  new THREE.Vector3(-14, 0, -600),
-  new THREE.Vector3(-8, 0, -670),
-  new THREE.Vector3(0, 0, -730),
-  new THREE.Vector3(0, 0, -800),
-  new THREE.Vector3(0, 0, -870),
-  new THREE.Vector3(0, 0, -940),
-]
-
-const ROAD_WIDTH = 14
-
-
-function buildArcLengthTable(points) {
-  const arcLengths = [0]
-  for (let i = 1; i < points.length; i++) {
-    const dx =
-      points[i].x - points[i - 1].x
-    const dz =
-      points[i].z - points[i - 1].z
-    arcLengths.push(
-      arcLengths[i - 1] +
-        Math.sqrt(dx * dx + dz * dz)
-    )
-  }
-  return arcLengths
-}
-
-
-function getDirectionAtPoint(
-  points,
-  index
-) {
-  const p0 =
-    points[Math.max(0, index - 1)]
-  const p1 = points[index]
-  const p2 =
-    points[
-      Math.min(points.length - 1, index + 1)
-    ]
-
-  const dx = p2.x - p0.x
-  const dz = p2.z - p0.z
-  const len = Math.sqrt(dx * dx + dz * dz)
-
-  if (len < 0.001) {
-    return new THREE.Vector2(0, -1)
-  }
-
-  return new THREE.Vector2(
-    dx / len,
-    dz / len
-  )
-}
-
-
-function getPositionAlongPath(
-  points,
-  arcLengths,
-  distance
-) {
-  const totalLength =
-    arcLengths[arcLengths.length - 1]
-
-  if (distance <= 0) {
-    const dir = getDirectionAtPoint(
-      points,
-      0
-    )
-    return {
-      position: points[0].clone(),
-      direction: dir.clone(),
-      angle: Math.atan2(dir.x, dir.y),
-    }
-  }
-
-  if (distance >= totalLength) {
-    const last = points.length - 1
-    const dir = getDirectionAtPoint(
-      points,
-      last
-    )
-    return {
-      position: points[last].clone(),
-      direction: dir.clone(),
-      angle: Math.atan2(dir.x, dir.y),
-    }
-  }
-
-  let segIndex = 0
-  for (
-    let i = 0;
-    i < arcLengths.length - 1;
-    i++
-  ) {
-    if (
-      distance >= arcLengths[i] &&
-      distance < arcLengths[i + 1]
-    ) {
-      segIndex = i
-      break
-    }
-  }
-
-  const segLength =
-    arcLengths[segIndex + 1] -
-    arcLengths[segIndex]
-  const t =
-    segLength > 0
-      ? (distance - arcLengths[segIndex]) /
-        segLength
-      : 0
-
-  const p0 = points[segIndex]
-  const p1 = points[segIndex + 1]
-
-  const position = new THREE.Vector3(
-    p0.x + (p1.x - p0.x) * t,
-    0,
-    p0.z + (p1.z - p0.z) * t
-  )
-
-  const dir = getDirectionAtPoint(
-    points,
-    segIndex
-  )
-
-  const dir1 = getDirectionAtPoint(
-    points,
-    segIndex + 1
-  )
-
-  const blendedDir = new THREE.Vector2(
-    dir.x + (dir1.x - dir.x) * t,
-    dir.y + (dir1.y - dir.y) * t
-  )
-  const blendLen = Math.sqrt(
-    blendedDir.x * blendedDir.x +
-      blendedDir.y * blendedDir.y
-  )
-  if (blendLen > 0.001) {
-    blendedDir.x /= blendLen
-    blendedDir.y /= blendLen
-  }
-
-  return {
-    position,
-    direction: blendedDir,
-    angle: Math.atan2(
-      blendedDir.x,
-      blendedDir.y
-    ),
-  }
-}
+//
+// ROAD_PATH_POINTS, ROAD_WIDTH and arc-length sampling live in track.js.
+// They are re-exported here for compatibility with existing imports/tests.
+export { ROAD_PATH_POINTS, ROAD_WIDTH } from './track.js'
 
 
 // ============================================
@@ -426,15 +275,15 @@ export async function createHighwayLevel(
 
 
   // ============================================
-  // ROAD PATH
+  // ROAD PATH (single source of truth: Track)
   // ============================================
 
-  const roadPathPoints = ROAD_PATH_POINTS
-  const arcLengths = buildArcLengthTable(
-    roadPathPoints
-  )
-  const totalRoadLength =
-    arcLengths[arcLengths.length - 1]
+  const track = createDefaultTrack()
+  // Legacy compat: existing consumers/tests read these fields. `track`
+  // is authoritative for all new sampling.
+  const roadPathPoints = track.points
+  const arcLengths = track.arcLengths
+  const totalRoadLength = track.totalLength
 
 
   // ============================================
@@ -446,9 +295,7 @@ export async function createHighwayLevel(
   highway.add(await loadHighwayRoad({
     roadWidth: ROAD_WIDTH,
     arcLengths,
-    sampleAtDistance: distance => getPositionAlongPath(
-      roadPathPoints, arcLengths, distance
-    ),
+    sampleAtDistance: distance => track.sampleAt(distance),
   }))
 
 
@@ -509,16 +356,11 @@ export async function createHighwayLevel(
     d < totalRoadLength;
     d += barrierSampleStep
   ) {
-    const sample = getPositionAlongPath(
-      roadPathPoints,
-      arcLengths,
-      d
-    )
+    const sample = track.sampleAt(d)
 
-    const dir = sample.direction
-    const perpX = -dir.y
-    const perpZ = dir.x
-
+    // Banked placement: toWorld carries the lateral/up frame, so the
+    // barrier base sits on the banked shoulder cross-section. Roll about
+    // the travel axis (Euler XYZ applies Z before Y) matches road bank.
     const leftBarrier = new THREE.Mesh(
       new THREE.BoxGeometry(
         0.4,
@@ -527,14 +369,10 @@ export async function createHighwayLevel(
       ),
       barrierMaterial
     )
-    leftBarrier.position.set(
-      sample.position.x +
-        perpX * barrierOffset,
-      0.5,
-      sample.position.z +
-        perpZ * barrierOffset
+    leftBarrier.position.copy(
+      track.toWorld(d, barrierOffset, 0.5)
     )
-    leftBarrier.rotation.y = sample.angle
+    leftBarrier.rotation.set(0, sample.angle, sample.bank)
     highway.add(leftBarrier)
 
     const rightBarrier = new THREE.Mesh(
@@ -545,14 +383,10 @@ export async function createHighwayLevel(
       ),
       barrierMaterial
     )
-    rightBarrier.position.set(
-      sample.position.x -
-        perpX * barrierOffset,
-      0.5,
-      sample.position.z -
-        perpZ * barrierOffset
+    rightBarrier.position.copy(
+      track.toWorld(d, -barrierOffset, 0.5)
     )
-    rightBarrier.rotation.y = sample.angle
+    rightBarrier.rotation.set(0, sample.angle, sample.bank)
     highway.add(rightBarrier)
   }
 
@@ -562,7 +396,7 @@ export async function createHighwayLevel(
   // ============================================
 
   const finishDistance =
-    totalRoadLength - 60
+    track.getFinishDistance(FINISH_DISTANCE_BUFFER)
 
 
   // ============================================
@@ -571,15 +405,11 @@ export async function createHighwayLevel(
 
   const [playerCar, ghostCar] = await loadHighwayCars(highway)
 
-  const startSample = getPositionAlongPath(
-    roadPathPoints,
-    arcLengths,
-    0
-  )
+  const startSample = track.sampleAt(0)
 
   playerCar.position.set(
     startSample.position.x + 2,
-    0.2,
+    startSample.position.y + 0.2,
     startSample.position.z
   )
 
@@ -594,7 +424,7 @@ export async function createHighwayLevel(
 
   ghostCar.position.set(
     startSample.position.x - 2,
-    0.2,
+    startSample.position.y + 0.2,
     startSample.position.z
   )
 
@@ -608,11 +438,7 @@ export async function createHighwayLevel(
   // ============================================
 
   const startLineSample =
-    getPositionAlongPath(
-      roadPathPoints,
-      arcLengths,
-      3
-    )
+    track.sampleAt(3)
 
   const startLine =
     new THREE.Mesh(
@@ -629,7 +455,7 @@ export async function createHighwayLevel(
   startLine.position.copy(
     startLineSample.position
   )
-  startLine.position.y = 0.13
+  startLine.position.y += 0.13
   startLine.rotation.y =
     startLineSample.angle
 
@@ -641,11 +467,7 @@ export async function createHighwayLevel(
   // ============================================
 
   const finishSample =
-    getPositionAlongPath(
-      roadPathPoints,
-      arcLengths,
-      finishDistance
-    )
+    track.sampleAt(finishDistance)
 
   const finishZ = finishSample.position.z
 
@@ -666,7 +488,7 @@ export async function createHighwayLevel(
   finishStrip.position.copy(
     finishSample.position
   )
-  finishStrip.position.y = 0.14
+  finishStrip.position.y += 0.14
   finishStrip.rotation.y =
     finishSample.angle
 
@@ -692,7 +514,7 @@ export async function createHighwayLevel(
   leftPost.position.set(
     finishSample.position.x +
       perpXf * 6.5,
-    2.5,
+    finishSample.position.y + 2.5,
     finishSample.position.z +
       perpZf * 6.5
   )
@@ -705,7 +527,7 @@ export async function createHighwayLevel(
   rightPost.position.set(
     finishSample.position.x -
       perpXf * 6.5,
-    2.5,
+    finishSample.position.y + 2.5,
     finishSample.position.z -
       perpZf * 6.5
   )
@@ -726,9 +548,11 @@ export async function createHighwayLevel(
 
   topBar.position.set(
     finishSample.position.x,
-    5,
+    finishSample.position.y + 5,
     finishSample.position.z
   )
+  topBar.rotation.y =
+    finishSample.angle
 
   finishLine.add(topBar)
 
@@ -762,6 +586,22 @@ export async function createHighwayLevel(
 
 
   // ============================================
+  // RACECRAFT DRESSING (procedural, no gameplay)
+  // ============================================
+
+  // Synchronous procedural pass over the finished track: worn road
+  // markings, reflective studs, curve lamps, danger-corner barrier caps
+  // and text-free start/finish paint. Lives under the highway group so
+  // level disposal covers it.
+  const racecraft =
+    createRacecraft({
+      track,
+      highway,
+      finishDistance,
+    })
+
+
+  // ============================================
   // RETURN DATA EXPECTED BY game.js
   // ============================================
 
@@ -788,7 +628,7 @@ export async function createHighwayLevel(
 
     spawn: new THREE.Vector3(
       startSample.position.x,
-      2,
+      startSample.position.y + 2,
       startSample.position.z + 8
     ),
 
@@ -802,6 +642,10 @@ export async function createHighwayLevel(
 
     ambientLight: ambientLight,
 
+    // Authoritative track. Legacy roadPath/arcLengths/totalRoadLength/
+    // finishZ are kept for compatibility (tests + existing consumers).
+    track: track,
+
     roadPath: roadPathPoints,
 
     arcLengths: arcLengths,
@@ -813,5 +657,7 @@ export async function createHighwayLevel(
     cityBuildings: cityBuildings,
 
     streetlights: streetlights,
+
+    racecraft: racecraft,
   }
 }

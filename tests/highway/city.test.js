@@ -45,7 +45,7 @@ async function withLevel(run) {
   }
   globalThis.window = { addEventListener() {}, removeEventListener() {} }
   globalThis.document = {
-    createElement: () => ({ style: {}, remove() {} }),
+    createElement: (tag) => ({ style: {}, remove() {}, width: 0, height: 0, getContext: () => new Proxy({}, { get: () => () => {}, set: () => true }) }),
     body: { appendChild() {} },
   }
 

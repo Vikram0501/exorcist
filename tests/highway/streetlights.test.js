@@ -41,7 +41,7 @@ async function withLevel(run) {
   }
   globalThis.window = { addEventListener() {}, removeEventListener() {} }
   globalThis.document = {
-    createElement: () => ({ style: {}, remove() {} }),
+    createElement: (tag) => ({ style: {}, remove() {}, width: 0, height: 0, getContext: () => new Proxy({}, { get: () => () => {}, set: () => true }) }),
     body: { appendChild() {} },
   }
 
@@ -110,9 +110,21 @@ test('streetlights line both sides of the highway with shared resources', async 
 
     level.model.updateMatrixWorld(true)
 
-    // Every pole base stays grounded and clear of the drivable road.
+    // Every pole base stays grounded on the banked roadside and clear
+    // of the drivable road (same raw-dot lateral the placement uses).
     for (const pole of poles) {
-      assert.equal(pole.position.y, 0, `${pole.name} grounded`)
+      const anchor = environment.track.sampleAt(
+        pole.userData.streetlightDistance
+      )
+      const dx = pole.position.x - anchor.position.x
+      const dz = pole.position.z - anchor.position.z
+      const dActual = dx * anchor.lateral.x + dz * anchor.lateral.z
+      const expectedBase =
+        anchor.position.y + anchor.lateral.y * dActual
+      assert.ok(
+        Math.abs(pole.position.y - expectedBase) < 1e-6,
+        `${pole.name} grounded at ${pole.position.y}, want ${expectedBase}`
+      )
       const clearance = environment.distanceToPath(
         pole.position.x, pole.position.z
       )

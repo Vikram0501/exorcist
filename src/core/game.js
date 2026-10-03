@@ -29,6 +29,10 @@ import {
   disposeRoadSigns,
 } from "../levels/highway/signs.js"
 
+import {
+  updateRacecraft,
+} from "../levels/highway/racecraft.js"
+
 import { HighwayCarController }
   from '../levels/highway/car.js'
 
@@ -173,6 +177,8 @@ export class Game {
     this.collectibles = []
 
     this.roadSigns = []
+
+    this.racecraft = null
 
     this.roadSignTime = 0
 
@@ -521,6 +527,19 @@ if (this.loaded) {
 
       }
 
+      // Racing-dressing lamp flicker (shared materials only).
+
+      if (
+        this.racecraft
+      ) {
+
+        updateRacecraft(
+          this.racecraft,
+          this.roadSignTime
+        )
+
+      }
+
 
       // State-dependent updates
 
@@ -575,15 +594,15 @@ if (this.loaded) {
         }
 
         // Player-only car sound: driven by the human player's
-        // actual forward-driving state (never the ghost's).
+        // actual physical driving state (never the ghost's). Any drive
+        // input while moving counts, including controlled reverse.
         if (this.highwayController) {
+          const keys = this.highwayController.keys || {}
           const driving =
             this.input.isLocked &&
             this.highwayController.canDrive &&
-            Boolean(
-              this.highwayController.keys?.['KeyW'],
-            ) &&
-            this.highwayController.speed > 0.5
+            Boolean(keys['KeyW'] || keys['KeyS']) &&
+            Math.abs(this.highwayController.speed) > 0.5
 
           this.highwayAudio?.setPlayerDriving(driving)
         } else {
@@ -1083,9 +1102,11 @@ if (this.loaded) {
             roadPath,
             arcLengths,
             totalRoadLength,
+            track,
             obstacles,
             cityBuildings,
             streetlights,
+            racecraft,
           }) => {
 
           // A newer level was selected
@@ -1159,8 +1180,11 @@ if (this.loaded) {
             levelName === 'highway'
           ) {
 
-            // Store level data for highway controllers
+            // Store level data for highway controllers.
+            // `track` is authoritative; roadPath/arcLengths/totalRoadLength
+            // are legacy compat mirrors of track.points/track.arcLengths.
           this.levelData = {
+            track: track || null,
             roadPath,
             arcLengths,
             totalRoadLength,
@@ -1208,7 +1232,8 @@ if (this.loaded) {
               new HighwayCarController(
                 playerCar,
                 this.camera,
-                this.levelData.roadPath,
+                this.levelData.track ||
+                  this.levelData.roadPath,
                 this.levelData.arcLengths
               )
 
@@ -1232,7 +1257,8 @@ if (this.loaded) {
                 ghostName,
                 this.ghostNameUI,
                 this.scene,
-                this.levelData.roadPath,
+                this.levelData.track ||
+                  this.levelData.roadPath,
                 this.levelData.arcLengths,
                 this.levelData.totalRoadLength
               )
@@ -1299,7 +1325,8 @@ if (this.loaded) {
                 ghostName,
                 model,
                 this.ghostNameUI,
-                this.levelData.roadPath,
+                this.levelData.track ||
+                  this.levelData.roadPath,
                 this.levelData.arcLengths,
                 this.levelData.totalRoadLength
               )
@@ -1307,8 +1334,14 @@ if (this.loaded) {
             this.roadSigns =
               createRoadSigns(
                 ghostName,
-                model
+                model,
+                this.levelData.track
               )
+
+            // Procedural racing dressing (already built into the level
+            // model by createHighwayLevel); only the flicker handle is
+            // kept here. Geometry disposal rides level disposal.
+            this.racecraft = racecraft || null
 
             this.roadSignTime = 0
 
@@ -1325,6 +1358,7 @@ if (this.loaded) {
                 moonLight: moonLight,
                 cityBuildings: cityBuildings,
                 streetlights: streetlights,
+                track: this.levelData.track,
                 roadPath:
                   this.levelData.roadPath,
                 arcLengths:
@@ -1538,6 +1572,8 @@ if (this.loaded) {
       )
 
     }
+
+    this.racecraft = null
 
     if (this.obstacles) {
 
@@ -2755,18 +2791,8 @@ if (this.loaded) {
     const raw =
       this.nameInput.value || ''
 
-    const answer =
-      raw
-        .trim()
-        .replace(/\s+/g, ' ')
-        .toUpperCase()
 
-
-    const correct =
-      this.pendingGhostName
-
-
-    if (answer === correct) {
+    if (isGhostNameCorrect(raw, this.pendingGhostName)) {
 
       this.hideNamePuzzle()
 
@@ -3823,6 +3849,30 @@ if (this.loaded) {
   }
 }
 
+
+
+// ============================================
+// LEVEL 3 — GHOST NAME ANSWER COMPARISON
+// ============================================
+
+// Normalizes a typed ghost-name answer: outer whitespace trimmed,
+// interior whitespace runs collapsed to single spaces, uppercased.
+// Interior single spaces are MEANINGFUL and preserved, so "owen grave"
+// stays "OWEN GRAVE" and never becomes "OWENGRAVE".
+export function normalizeGhostNameAnswer(raw) {
+  return (raw || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase()
+}
+
+// True when the player's typed answer names the ghost. Both sides go
+// through the same normalization, so case and outer/extra whitespace
+// never punish a correct multi-word name.
+export function isGhostNameCorrect(rawAnswer, ghostName) {
+  return normalizeGhostNameAnswer(rawAnswer) ===
+    normalizeGhostNameAnswer(ghostName)
+}
 
 
 // ============================================

@@ -1,20 +1,27 @@
 import * as THREE from 'three'
+import { LEGACY_TOTAL_ROAD_LENGTH } from './track.js'
 
 
-const SIGN_POSITIONS = [
-  { z: -40, side: 'left', tier: 'early' },
-  { z: -70, side: 'right', tier: 'early' },
-  { z: -130, side: 'left', tier: 'middle' },
-  { z: -160, side: 'right', tier: 'middle' },
-  { z: -190, side: 'left', tier: 'middle' },
-  { z: -240, side: 'right', tier: 'late' },
-  { z: -270, side: 'left', tier: 'late' },
-  { z: -300, side: 'right', tier: 'late' },
-  { z: -400, side: 'left', tier: 'late' },
-  { z: -500, side: 'right', tier: 'late' },
-  { z: -600, side: 'left', tier: 'late' },
-  { z: -700, side: 'right', tier: 'late' },
-  { z: -800, side: 'left', tier: 'late' },
+// Track-relative sign stations. legacyS is the distance along the previous
+// ~952.66 m highway (10 - z on the old near-straight layout); placement
+// normalizes through the legacy total so clue pacing survives geometry
+// changes. d is lateral offset from the track centre.
+const SIGN_OFFSET = 8
+
+const SIGN_STATIONS = [
+  { legacyS: 50, side: 'left', tier: 'early' },
+  { legacyS: 80, side: 'right', tier: 'early' },
+  { legacyS: 140, side: 'left', tier: 'middle' },
+  { legacyS: 170, side: 'right', tier: 'middle' },
+  { legacyS: 200, side: 'left', tier: 'middle' },
+  { legacyS: 250, side: 'right', tier: 'late' },
+  { legacyS: 280, side: 'left', tier: 'late' },
+  { legacyS: 310, side: 'right', tier: 'late' },
+  { legacyS: 410, side: 'left', tier: 'late' },
+  { legacyS: 510, side: 'right', tier: 'late' },
+  { legacyS: 610, side: 'left', tier: 'late' },
+  { legacyS: 710, side: 'right', tier: 'late' },
+  { legacyS: 810, side: 'left', tier: 'late' },
 ]
 
 
@@ -362,7 +369,8 @@ function createSignMesh(
   line1,
   line2,
   position,
-  highway
+  highway,
+  faceTarget = null
 ) {
   const group =
     new THREE.Group()
@@ -454,11 +462,17 @@ function createSignMesh(
 
   group.position.copy(position)
 
-  group.lookAt(
-    0,
-    group.position.y,
-    position.z - 10
-  )
+  if (faceTarget) {
+    // Track-relative: face oncoming traffic along the local tangent.
+    group.lookAt(faceTarget)
+  } else {
+    // Legacy straight-road fallback (no Track available).
+    group.lookAt(
+      0,
+      group.position.y,
+      position.z - 10
+    )
+  }
 
   group.userData.originalEmissive =
     boardMaterial.emissiveIntensity
@@ -477,7 +491,8 @@ function createSignMesh(
 
 export function createRoadSigns(
   ghostName,
-  highway
+  highway,
+  track = null
 ) {
   const hints =
     buildRoadSignHints(ghostName)
@@ -486,20 +501,37 @@ export function createRoadSigns(
 
   for (
     let i = 0;
-    i < SIGN_POSITIONS.length;
+    i < SIGN_STATIONS.length;
     i++
   ) {
-    const spot = SIGN_POSITIONS[i]
+    const spot = SIGN_STATIONS[i]
 
     const sideOffset =
-      spot.side === 'left' ? -8 : 8
+      spot.side === 'left' ? -SIGN_OFFSET : SIGN_OFFSET
 
-    const position =
-      new THREE.Vector3(
-        sideOffset,
-        0,
-        spot.z
-      )
+    let position
+    let faceTarget = null
+
+    if (track) {
+      // Track-relative placement: pacing normalized through the legacy
+      // total so clue order/progression is unchanged on new geometry.
+      const s =
+        (spot.legacyS / LEGACY_TOTAL_ROAD_LENGTH) *
+        track.totalLength
+      const frame = track.sampleAt(s)
+      position = track.toWorld(s, sideOffset)
+      // Face oncoming traffic: look back up the track along the tangent.
+      faceTarget = position.clone().addScaledVector(frame.tangent, -10)
+      faceTarget.y = position.y
+    } else {
+      // Legacy fallback: old near-straight layout (10 - s = z).
+      position =
+        new THREE.Vector3(
+          sideOffset,
+          0,
+          10 - spot.legacyS
+        )
+    }
 
     let cluePool
 
@@ -521,7 +553,8 @@ export function createRoadSigns(
         clue.line1,
         clue.line2,
         position,
-        highway
+        highway,
+        faceTarget
       )
 
     signGroup.userData.tier =
