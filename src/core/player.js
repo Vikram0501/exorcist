@@ -7,6 +7,22 @@ const EYE_HEIGHT = 1
 const DAMPING = 10
 const GRAVITY = -20
 const STEP_HEIGHT = 0.5
+const BVH_COLLISION_EPSILON = 0.0001
+
+const BVH_WORLD_BOX = new THREE.Box3()
+const BVH_LOCAL_BOX = new THREE.Box3()
+const BVH_LOCAL_SEGMENT = new THREE.Line3()
+const BVH_LOCAL_RAY = new THREE.Ray()
+const BVH_LOCAL_TRIANGLE_POINT = new THREE.Vector3()
+const BVH_LOCAL_CAPSULE_POINT = new THREE.Vector3()
+const BVH_LOCAL_NORMAL = new THREE.Vector3()
+const BVH_LOCAL_CENTER = new THREE.Vector3()
+const BVH_LOCAL_TRIANGLE_CENTER = new THREE.Vector3()
+const BVH_WORLD_NORMAL = new THREE.Vector3()
+const BVH_WORLD_RAY_ORIGIN = new THREE.Vector3()
+const BVH_LOCAL_RAY_ORIGIN = new THREE.Vector3()
+const BVH_LOCAL_RAY_DIRECTION = new THREE.Vector3()
+const BVH_STEP_DIRECTION = new THREE.Vector3()
 
 export class Player {
   constructor(camera, input) {
@@ -75,6 +91,12 @@ export class Player {
       colliders.find(
         (collider) =>
           collider.type === 'octree'
+      )
+
+    const meshBvhCollider =
+      colliders.find(
+        (collider) =>
+          collider.type === 'meshBvh'
       )
 
 
@@ -155,6 +177,93 @@ export class Player {
           )
       }
 
+
+      this.isGrounded =
+        groundedThisFrame
+    }
+
+    else if (meshBvhCollider) {
+
+      this.velocity.y +=
+        GRAVITY * dt
+
+      const travelDistance =
+        this.velocity.length() * dt
+
+      const substeps = Math.max(
+        1,
+        Math.min(
+          8,
+          Math.ceil(
+            travelDistance / 0.12
+          )
+        )
+      )
+
+      const subDt = dt / substeps
+      const wasGrounded = this.isGrounded
+      let groundedThisFrame = false
+
+      for (
+        let step = 0;
+        step < substeps;
+        step++
+      ) {
+
+        this.move(subDt)
+
+        const collision =
+          this.getMeshBvhCollision(
+            meshBvhCollider
+          )
+
+        const stepped =
+          (wasGrounded || groundedThisFrame) &&
+          collision &&
+          Math.abs(collision.normal.y) < 0.25 &&
+          this.tryStepUpMeshBvh(
+            meshBvhCollider
+          )
+
+        const grounded =
+          this.collideWithMeshBvh(
+            meshBvhCollider,
+            5
+          )
+
+        groundedThisFrame =
+          groundedThisFrame ||
+          grounded ||
+          stepped
+      }
+
+      if (
+        !groundedThisFrame &&
+        wasGrounded &&
+        this.velocity.y <= 0
+      ) {
+
+        groundedThisFrame =
+          this.snapToMeshBvhGround(
+            meshBvhCollider,
+            meshBvhCollider.snapDistance
+          )
+      }
+
+      if (
+        this.position.y <
+        EYE_HEIGHT
+      ) {
+
+        this.position.y =
+          EYE_HEIGHT
+
+        if (this.velocity.y < 0) {
+          this.velocity.y = 0
+        }
+
+        groundedThisFrame = true
+      }
 
       this.isGrounded =
         groundedThisFrame
@@ -395,6 +504,333 @@ export class Player {
       return true
     }
 
+
+    this.position.y =
+      originalY
+
+    return false
+  }
+
+  collideWithMeshBvh(
+    collider,
+    maxIterations = 4
+  ) {
+
+    let grounded = false
+
+    for (
+      let iteration = 0;
+      iteration < maxIterations;
+      iteration++
+    ) {
+
+      const result =
+        this.getMeshBvhCollision(
+          collider
+        )
+
+      if (!result) {
+        break
+      }
+
+      const normal =
+        result.normal
+
+      if (
+        normal.y > 0.25 &&
+        this.velocity.y <= 0
+      ) {
+
+        grounded = true
+
+        if (this.velocity.y < 0) {
+          this.velocity.y = 0
+        }
+      }
+
+      const velocityIntoSurface =
+        this.velocity.dot(
+          normal
+        )
+
+      if (velocityIntoSurface < 0) {
+        this.velocity.addScaledVector(
+          normal,
+          -velocityIntoSurface
+        )
+      }
+
+      this.position.addScaledVector(
+        normal,
+        result.depth + BVH_COLLISION_EPSILON
+      )
+    }
+
+    return grounded
+  }
+
+  getMeshBvhCollision(collider) {
+    const capsule = this.getCollisionCapsule()
+    const capsuleRadius = this.movement.radius
+    let deepest = null
+
+    BVH_WORLD_BOX
+      .setFromPoints([
+        capsule.start,
+        capsule.end,
+      ])
+      .expandByScalar(
+        capsuleRadius
+      )
+
+    for (const instance of collider.instances) {
+      if (!instance.bounds.intersectsBox(BVH_WORLD_BOX)) continue
+
+      const scale =
+        instance.matrixWorld.getMaxScaleOnAxis()
+      const localRadius =
+        capsuleRadius / scale
+
+      BVH_LOCAL_SEGMENT.start
+        .copy(capsule.start)
+        .applyMatrix4(instance.inverseMatrix)
+      BVH_LOCAL_SEGMENT.end
+        .copy(capsule.end)
+        .applyMatrix4(instance.inverseMatrix)
+
+      BVH_LOCAL_BOX
+        .setFromPoints([
+          BVH_LOCAL_SEGMENT.start,
+          BVH_LOCAL_SEGMENT.end,
+        ])
+        .expandByScalar(
+          localRadius
+        )
+
+      instance.bvh.shapecast({
+        intersectsBounds: bounds =>
+          bounds.intersectsBox(BVH_LOCAL_BOX),
+        intersectsTriangle: triangle => {
+          const distance =
+            triangle.closestPointToSegment(
+              BVH_LOCAL_SEGMENT,
+              BVH_LOCAL_TRIANGLE_POINT,
+              BVH_LOCAL_CAPSULE_POINT,
+            )
+
+          if (distance >= localRadius) return false
+
+          BVH_LOCAL_NORMAL
+            .copy(BVH_LOCAL_CAPSULE_POINT)
+            .sub(BVH_LOCAL_TRIANGLE_POINT)
+
+          if (distance > 1e-8) {
+            BVH_LOCAL_NORMAL.multiplyScalar(1 / distance)
+          } else {
+            triangle.getNormal(BVH_LOCAL_NORMAL)
+            BVH_LOCAL_CENTER
+              .copy(BVH_LOCAL_SEGMENT.start)
+              .add(BVH_LOCAL_SEGMENT.end)
+              .multiplyScalar(0.5)
+            BVH_LOCAL_TRIANGLE_CENTER
+              .copy(triangle.a)
+              .add(triangle.b)
+              .add(triangle.c)
+              .multiplyScalar(1 / 3)
+            if (
+              BVH_LOCAL_NORMAL.dot(
+                BVH_LOCAL_CENTER.sub(BVH_LOCAL_TRIANGLE_CENTER)
+              ) < 0
+            ) {
+              BVH_LOCAL_NORMAL.negate()
+            }
+          }
+
+          BVH_WORLD_NORMAL
+            .copy(BVH_LOCAL_NORMAL)
+            .transformDirection(instance.matrixWorld)
+
+          const depth =
+            (localRadius - distance) * scale
+
+          if (!deepest || depth > deepest.depth) {
+            deepest = {
+              depth,
+              normal: BVH_WORLD_NORMAL.clone(),
+            }
+          }
+
+          return false
+        },
+      })
+    }
+
+    return deepest
+  }
+
+  tryStepUpMeshBvh(collider) {
+    if (
+      Math.hypot(
+        this.velocity.x,
+        this.velocity.z
+      ) < 0.001
+    ) {
+      return false
+    }
+
+    const feetY =
+      this.position.y - EYE_HEIGHT
+    const previousX = this.position.x
+    const previousZ = this.position.z
+
+    BVH_STEP_DIRECTION
+      .set(
+        this.velocity.x,
+        0,
+        this.velocity.z,
+      )
+      .normalize()
+
+    this.position.addScaledVector(
+      BVH_STEP_DIRECTION,
+      this.movement.radius + BVH_COLLISION_EPSILON
+    )
+
+    const surfaceY =
+      this.findMeshBvhGround(
+        collider,
+        feetY,
+        collider.stepHeight
+      )
+
+    this.position.x = previousX
+    this.position.z = previousZ
+
+    if (
+      surfaceY === null ||
+      surfaceY <= feetY + BVH_COLLISION_EPSILON ||
+      surfaceY > feetY + collider.stepHeight
+    ) {
+      return false
+    }
+
+    const previousY = this.position.y
+    this.position.y = surfaceY + EYE_HEIGHT
+
+    const collision =
+      this.getMeshBvhCollision(
+        collider
+      )
+
+    if (
+      collision &&
+      collision.normal.y < 0.25
+    ) {
+      this.position.y = previousY
+      return false
+    }
+
+    return true
+  }
+
+  findMeshBvhGround(
+    collider,
+    feetY,
+    maxStep
+  ) {
+    const originY = feetY + maxStep + BVH_COLLISION_EPSILON
+    let highest = null
+
+    BVH_WORLD_RAY_ORIGIN.set(
+      this.position.x,
+      originY,
+      this.position.z,
+    )
+
+    for (const instance of collider.instances) {
+      if (
+        this.position.x < instance.bounds.min.x - this.movement.radius ||
+        this.position.x > instance.bounds.max.x + this.movement.radius ||
+        this.position.z < instance.bounds.min.z - this.movement.radius ||
+        this.position.z > instance.bounds.max.z + this.movement.radius
+      ) continue
+
+      const scale =
+        instance.matrixWorld.getMaxScaleOnAxis()
+
+      BVH_LOCAL_RAY_ORIGIN
+        .copy(BVH_WORLD_RAY_ORIGIN)
+        .applyMatrix4(instance.inverseMatrix)
+      BVH_LOCAL_RAY_DIRECTION
+        .set(0, -1, 0)
+        .transformDirection(instance.inverseMatrix)
+      BVH_LOCAL_RAY.set(
+        BVH_LOCAL_RAY_ORIGIN,
+        BVH_LOCAL_RAY_DIRECTION,
+      )
+
+      const hit = instance.bvh.raycastFirst(
+        BVH_LOCAL_RAY,
+        THREE.DoubleSide,
+        0,
+        (maxStep + BVH_COLLISION_EPSILON) / scale,
+      )
+
+      if (!hit) continue
+
+      const surfaceY =
+        originY - hit.distance * scale
+
+      if (
+        surfaceY > feetY + BVH_COLLISION_EPSILON &&
+        surfaceY <= feetY + maxStep + BVH_COLLISION_EPSILON &&
+        (highest === null || surfaceY > highest)
+      ) {
+        highest = surfaceY
+      }
+    }
+
+    return highest
+  }
+
+  snapToMeshBvhGround(
+    collider,
+    snapDistance
+  ) {
+    const originalY =
+      this.position.y
+
+    this.position.y -=
+      snapDistance
+
+    const result =
+      this.getMeshBvhCollision(
+        collider
+      )
+
+    this.position.y =
+      originalY
+
+    if (
+      !result ||
+      result.normal.y <= 0.25
+    ) {
+      return false
+    }
+
+    this.position.y -=
+      snapDistance
+
+    const grounded =
+      this.collideWithMeshBvh(
+        collider,
+        5
+      )
+
+    if (grounded) {
+      this.velocity.y = 0
+      return true
+    }
 
     this.position.y =
       originalY
