@@ -21,6 +21,11 @@ const respawnBtn =
 
 const trainBtn = document.getElementById('trainBtn')
 const level3Btn = document.getElementById('highwayBtn')
+const controlsBtn = document.getElementById('controlsBtn')
+const controlsDialog = document.getElementById('controlsDialog')
+
+controlsBtn.addEventListener('click', () => controlsDialog.showModal())
+document.getElementById('closeControlsBtn').addEventListener('click', () => controlsDialog.close())
 
 
 

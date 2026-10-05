@@ -1,47 +1,14 @@
 import * as THREE from 'three'
 import { HousePursuit } from './pursuit.js'
-import { findStoryAsset, createAuthoredGhost, createJumpScareGhost, darkenGraves, setGhostAppearance } from './story-assets.js'
+import { findStoryAsset, createAuthoredGhost, createJumpScareGhost, darkenGraves } from './story-assets.js'
 
-export const HOUSE_EVIDENCE = [
-  {
-    id: 'evelyn-diary', title: "Evelyn's diary", foundAt: "Upstairs, Daniel's bedroom",
-    position: [-1.25, 5.72, 1.45], label: 'E. VALE',
-    storyNote: 'September 12. The man stands where Mother used to stand. He knows her words, but not the tune. Father says grief makes us hear things. I hid the little key inside this diary. Father took it and locked the diary in his room. My music box is still in my bedroom.',
-    riteNote: 'The voice that sounds like Margaret belongs to someone else. Find Evelyn\'s music box in her bedroom.',
-    response: 'EVELYN · “He knows her words. He never knows the tune.”',
-  },
-  {
-    id: 'annex-message', title: 'The wall engraving', foundAt: 'Upstairs, the locked room',
-    position: [-1.65, 5.72, 3.65], label: 'HE IS NOT MOTHER', kind: 'engraving',
-    storyNote: 'Words are scratched into the wall: HE IS NOT MOTHER. Beneath them, smaller: Father shut the door from outside. I can hear him leaving. My name is Evelyn. I was here.',
-    riteNote: 'Evelyn died confined in the upstairs annex. She did not run away.',
-    response: 'EVELYN · “I was here. I was here the whole time.”',
-  },
-  {
-    id: 'music-box', title: "Margaret's music box", foundAt: "Upstairs, Evelyn's bedroom",
-    position: [1, 5.72, 4.3], label: 'M. V. / E. V.', kind: 'box',
-    storyNote: 'The key from Evelyn\'s diary fits. A fragile melody starts, pauses, then finds its final note. Under the velvet is an estate record: ELIAS WREN, CARETAKER. DIED IN THE BARN, 1931. In another hand: He still counts this house as his. The box smells of lavender, not earth.',
-    riteNote: 'The music box is Evelyn\'s anchor. Elias Wren is the older presence. Daniel\'s letter may reveal where Evelyn lies.',
-    response: 'ELIAS · “Leave what belongs to this house.”',
-  },
-  {
-    id: 'daniel-confession', title: "Daniel's unsent confession", foundAt: 'Kitchen, beside the lone place setting',
-    position: [0, 2, 0], label: 'FORGIVE ME', kind: 'confession',
-    storyNote: 'I locked Evelyn in that room. I told myself she would be safe until morning. When the house went quiet, I left. I buried my daughter in the unmarked grave beside the other grave behind the house. I told the sheriff she had run away. There is no forgiveness in that sentence.',
-    riteNote: 'Daniel confined and abandoned Evelyn, then concealed her death. Take her music box to the unmarked grave beside the other grave.',
-    response: 'THE HOUSE · Something is standing right in front of you.',
-  },
-]
-
-export const RITE_QUESTIONS = [
-  { title: 'Call the person who needs your help.', choices: ['Evelyn Vale', 'Margaret Vale', 'Elias Wren'], answer: 0, line: 'Evelyn Vale. You have been found.' },
-  { title: 'Speak the truth that was concealed.', choices: ['You left this house of your own will.', 'Daniel locked you away and abandoned you.', 'You died in the old barn.'], answer: 1, line: 'You were confined and abandoned. This was not your fault.' },
-  { title: 'Give her back the memory that holds her.', choices: ['The fourth place at supper', "The caretaker's estate record", "Margaret's music box"], answer: 2, line: 'Take the song your mother left you. You do not have to stay.' },
-]
+import { HOUSE_EVIDENCE, RITE_QUESTIONS } from './story-data.js'
+export { HOUSE_EVIDENCE, RITE_QUESTIONS } from './story-data.js'
 
 export class HouseStory {
-  constructor({ model, level, items, camera, audio, onMessage }) {
+  constructor({ model, animations = [], level, items, doors = [], camera, audio, onMessage }) {
     this.model = model
+    this.doors = doors
     this.camera = camera
     this.audio = audio
     this.onMessage = onMessage
@@ -72,9 +39,27 @@ export class HouseStory {
     })
     this.markers = []
     darkenGraves(this.model)
+    this.diaryEntry = findStoryAsset(this.model, ['Diary Entry'])
+    if (this.diaryEntry) this.diaryEntry.visible = false
+    this.confessionEnvelope = findStoryAsset(this.model, ['Daniel Envelope'])
+    this.confessionLetter = findStoryAsset(this.model, ['Daniels Letter'])
+    if (this.confessionLetter) this.confessionLetter.visible = false
     for (const evidence of HOUSE_EVIDENCE) {
       const object = this.createEvidence(evidence)
-      items.push({ ...evidence, object, inspectionMesh: object.userData.inspectionMesh || object.children[1], story: true, prompt: `E · Inspect ${evidence.title.toLowerCase()}` })
+      const inspectionMesh = evidence.id === 'evelyn-diary' && this.diaryEntry
+        ? this.firstMesh(this.diaryEntry)
+        : evidence.id === 'daniel-confession' && this.confessionLetter
+          ? this.firstMesh(this.confessionLetter)
+          : object.userData.inspectionMesh || this.firstMesh(object)
+      const inspectionMode = evidence.id === 'evelyn-diary' && this.diaryEntry
+        ? 'page' : evidence.inspectionMode
+      const item = { ...evidence, object, inspectionMesh, inspectionMode, story: true, prompt: evidence.id === 'daniel-confession'
+        ? 'E · Open Daniel’s envelope'
+        : `E · Inspect ${evidence.title.toLowerCase()}` }
+      items.push(item)
+      if (evidence.id === 'daniel-confession' && this.confessionLetter) {
+        items.push({ ...item, object: this.confessionLetter })
+      }
     }
     const grave = this.createGrave()
     this.gravePosition = this.authoredGravePosition?.clone() || grave.position.clone()
@@ -83,6 +68,54 @@ export class HouseStory {
     this.root.add(this.ghost)
     this.ghost.visible = false
     this.jumpScareGhost = createJumpScareGhost(this.ghost, camera)
+    const evelynSource = findStoryAsset(this.model, ['Evelyn'])
+    this.evelyn = evelynSource ? createAuthoredGhost(evelynSource, 1.55) : null
+    if (this.evelyn) {
+      this.root.add(this.evelyn)
+      this.evelyn.visible = false
+      this.evelyn.traverse(object => {
+        if (!object.isMesh) return
+        const glowMaterial = original => new THREE.MeshBasicMaterial({
+          map: original.map || null,
+          alphaMap: original.alphaMap || null,
+          alphaTest: original.alphaTest || 0,
+          color: 0x8ddcff,
+          transparent: true,
+          opacity: 0.88,
+          depthWrite: false,
+          depthTest: false,
+          blending: THREE.AdditiveBlending,
+          side: THREE.DoubleSide,
+          fog: false,
+          toneMapped: false,
+        })
+        object.material = Array.isArray(object.material)
+          ? object.material.map(glowMaterial) : glowMaterial(object.material)
+        object.renderOrder = 20
+      })
+      const glowCanvas = document.createElement('canvas')
+      glowCanvas.width = glowCanvas.height = 128
+      const glowContext = glowCanvas.getContext('2d')
+      const halo = glowContext.createRadialGradient(64, 64, 4, 64, 64, 64)
+      halo.addColorStop(0, 'rgba(153, 221, 255, 0.48)')
+      halo.addColorStop(0.45, 'rgba(112, 184, 234, 0.2)')
+      halo.addColorStop(1, 'rgba(112, 184, 234, 0)')
+      glowContext.fillStyle = halo
+      glowContext.fillRect(0, 0, 128, 128)
+      this.evelynHalo = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: new THREE.CanvasTexture(glowCanvas), transparent: true,
+        opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
+      }))
+      this.evelynHalo.position.set(0, 0.8, 0)
+      this.evelynHalo.scale.set(2.2, 2.8, 1)
+      this.evelyn.add(this.evelynHalo)
+      const idle = animations.find(clip => clip.name === 'idle')
+      if (idle) {
+        this.evelynMixer = new THREE.AnimationMixer(this.evelyn)
+        this.evelynMixer.clipAction(idle).play()
+        this.evelynMixer.update(0.01)
+      }
+    }
     this.flashlight = new THREE.SpotLight(0xffebcf, 5, 15, 0.48, 0.75, 1.5)
     this.flashlight.position.set(0.18, -0.18, -0.1)
     this.flashlight.target.position.set(0, 0, -8)
@@ -92,6 +125,13 @@ export class HouseStory {
 
   startHouseApparition() {
     return this.triggerJumpScare(false)
+  }
+
+  firstMesh(object) {
+    if (object.isMesh) return object
+    let mesh = null
+    object.traverse(child => { if (!mesh && child.isMesh) mesh = child })
+    return mesh
   }
 
   ground(position) {
@@ -107,6 +147,8 @@ export class HouseStory {
 
   createEvidence(data) {
     if (data.kind === 'engraving') return this.createEngraving(data)
+    const authored = findStoryAsset(this.model, data.assetNames || [])
+    if (authored) return authored
     const group = new THREE.Group()
     group.name = data.id
     if (data.kind === 'confession') {
@@ -165,11 +207,22 @@ export class HouseStory {
     this.model.traverse(object => {
       if (object.isMesh && object.visible && /wall|structure/i.test(object.name)) walls.push(object)
     })
+    const doorCentre = this.doors
+      .map(door => (door.object || door.mesh)?.getWorldPosition(new THREE.Vector3()))
+      .filter(Boolean)
+      .sort((a, b) => a.distanceToSquared(roomCentre) - b.distanceToSquared(roomCentre))[0]
     let nearest = null
-    for (const direction of [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]]) {
-      const hit = new THREE.Raycaster(roomCentre, new THREE.Vector3(...direction), 0, 2.5)
-        .intersectObjects(walls, false)[0]
-      if (hit && (!nearest || hit.distance < nearest.distance)) nearest = hit
+    if (doorCentre && doorCentre.distanceTo(roomCentre) < 5) {
+      const inward = roomCentre.clone().sub(doorCentre).setY(0).normalize()
+      const left = new THREE.Vector3(inward.z, 0, -inward.x)
+      nearest = new THREE.Raycaster(roomCentre, left, 0, 4).intersectObjects(walls, false)[0]
+    }
+    if (!nearest) {
+      for (const direction of [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]]) {
+        const hit = new THREE.Raycaster(roomCentre, new THREE.Vector3(...direction), 0, 2.5)
+          .intersectObjects(walls, false)[0]
+        if (hit && (!nearest || hit.distance < nearest.distance)) nearest = hit
+      }
     }
     group.position.copy(nearest
       ? nearest.point.clone().add(roomCentre.clone().sub(nearest.point).normalize().multiplyScalar(0.04))
@@ -180,15 +233,35 @@ export class HouseStory {
     canvas.height = 512
     const ctx = canvas.getContext('2d')
     ctx.clearRect(0, 0, 1024, 512)
+    let seed = 73
+    const random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296)
+    for (let index = 0; index < 42; index++) {
+      const x = 80 + random() * 860
+      const y = 45 + random() * 415
+      ctx.fillStyle = `rgba(65, 5, 9, ${0.05 + random() * 0.18})`
+      ctx.beginPath()
+      ctx.ellipse(x, y, 8 + random() * 28, 3 + random() * 14, random() * Math.PI, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.strokeStyle = 'rgba(43, 18, 16, 0.65)'
+    ctx.lineWidth = 3
+    for (let index = 0; index < 18; index++) {
+      const x = 50 + random() * 920
+      const y = 20 + random() * 465
+      ctx.beginPath()
+      ctx.moveTo(x, y)
+      ctx.lineTo(x + 20 + random() * 110, y - 4 + random() * 14)
+      ctx.stroke()
+    }
     ctx.textAlign = 'center'
     ctx.fillStyle = '#5b2822'
     ctx.shadowColor = '#1a0908'
     ctx.shadowBlur = 6
     ctx.font = 'bold 76px Georgia'
-    ctx.fillText('HE IS NOT MOTHER', 512, 185)
+    ctx.fillText('SHE IS NOT MOTHER', 512, 165)
     ctx.font = '42px Georgia'
-    ctx.fillText('FATHER LOCKED THE DOOR', 512, 275)
-    ctx.fillText('MY NAME IS EVELYN', 512, 345)
+    ctx.fillText('FATHER LOCKED THE DOOR', 512, 260)
+    ctx.fillText('I WAS HERE', 512, 345)
     const texture = new THREE.CanvasTexture(canvas)
     texture.colorSpace = THREE.SRGBColorSpace
     const inscription = new THREE.Mesh(
@@ -213,13 +286,27 @@ export class HouseStory {
   }
 
   createGrave() {
-    const authored = findStoryAsset(this.model, ['grave.001', 'Grave_Evelyn_Unmarked', 'Evelyn_Grave'])
+    const authored = findStoryAsset(this.model, ['grave.001', 'Grave_Evelyn_Unmarked', 'Evelyn_Grave', 'grave'])
     if (authored) {
       const bounds = new THREE.Box3().setFromObject(authored)
       const position = bounds.getCenter(new THREE.Vector3())
       position.y = bounds.min.y
-      // Attach without changing the placement in the artist's scene.
       this.root.attach(authored)
+      const surfaces = []
+      this.model.traverse(object => {
+        if (object.isMesh && object.visible && /floor|yard|ground|garden|terrain|road/i.test(object.name)) {
+          surfaces.push(object)
+        }
+      })
+      const floorHit = new THREE.Raycaster(
+        position.clone().add(new THREE.Vector3(0, 2, 0)),
+        new THREE.Vector3(0, -1, 0), 0, 5,
+      ).intersectObjects(surfaces, false)[0]
+      const lowering = (floorHit
+        ? Math.min(0.22, Math.max(0, position.y - floorHit.point.y + 0.025))
+        : 0.1) + 0.15
+      authored.position.y -= lowering
+      position.y -= lowering
       this.authoredGravePosition = position
       for (const x of [-0.6, 0.6]) this.addClueLight(position.clone().add(new THREE.Vector3(x, 0, 0.6)), 'evelyn-grave')
       return authored
@@ -277,21 +364,20 @@ export class HouseStory {
     if (!this.phoneAnswered) return false
     if (id === 'evelyn-grave') return HOUSE_EVIDENCE.every(item => this.found.has(item.id)) && this.pursuit?.state === 'safe'
     if (!HOUSE_EVIDENCE.some(item => item.id === id)) return false
-    if (id === 'music-box') return this.found.has('evelyn-diary')
-    if (id === 'daniel-confession') return ['evelyn-diary', 'annex-message', 'music-box'].every(item => this.found.has(item))
+    if (id === 'daniel-confession') return ['evelyn-diary', 'music-box', 'annex-message', 'caretaker-record'].every(item => this.found.has(item))
     return true
   }
 
   prompt(item) {
     if (item.id === 'evelyn-grave') {
       if (this.released) return 'Evelyn is at rest. Return to the front road.'
-      return this.canInspect(item.id) ? 'E · Begin the release rite' : 'An unmarked grave. Find Daniel’s letter and survive the chase.'
+      return this.canInspect(item.id) ? 'E · Begin the exorcism' : 'An unmarked grave. Find Daniel’s letter and survive Elias.'
     }
-    if (this.found.has(item.id)) return `E · Revisit ${item.title.toLowerCase()}`
-    if (!this.phoneAnswered) return 'The house is silent. Investigate the kitchen telephone.'
-    if (!this.canInspect(item.id)) return item.id === 'music-box'
-      ? 'Find the key in Evelyn’s diary in Daniel’s room.'
-      : 'Find the diary, wall engraving and music box first.'
+    if (this.found.has(item.id)) return item.id === 'daniel-confession'
+      ? 'E · Reread Daniel’s letter'
+      : `E · Revisit ${item.title.toLowerCase()}`
+    if (!this.phoneAnswered) return 'Answer the ringing phone in the upstairs main bedroom.'
+    if (!this.canInspect(item.id)) return 'Find the diary, music box, wall scratches and caretaker record first.'
     return item.prompt
   }
 
@@ -300,12 +386,13 @@ export class HouseStory {
     this.found.add(id)
     this.disturbance = 4
     if (id === 'evelyn-diary' || id === 'annex-message') this.pendingEvidenceScare = id
+    if (id === 'daniel-confession') {
+      if (this.confessionLetter) this.confessionLetter.visible = true
+    }
     const evidence = HOUSE_EVIDENCE.find(item => item.id === id)
     this.onMessage(evidence.response)
-    this.audio.playCue(id === 'music-box' ? 'ghostTwo' : 'ghostFootsteps')
-    if (id === 'music-box') {
-      this.audio.playMelody()
-    }
+    if (id === 'music-box') this.audio.playMelody()
+    else this.audio.playCue(id === 'caretaker-record' ? 'ghostBreath' : 'ghostFootsteps')
     if (id === 'daniel-confession') {
       this.pendingLetterScare = true
     }
@@ -359,7 +446,7 @@ export class HouseStory {
     if (this.jumpScareTime === 0 && this.chaseAfterScare) {
       this.chaseAfterScare = false
       this.pursuit.start(player.position)
-      this.onMessage('EVELYN · “Run to the two graves behind the house!” Hold Shift to sprint.', 10)
+      this.onMessage('EVELYN · “Run to my grave behind the house!” Hold Shift to sprint.', 10)
     }
   }
 
@@ -379,7 +466,7 @@ export class HouseStory {
     this.disturbance = 3
     this.nextApparitionAt = this.time + 20 + Math.random() * 10
     this.nextScareAllowedAt = this.nextApparitionAt
-    this.onMessage('TELEPHONE · “Upstairs. Read what I left. If you hear Mother… it is not her.”', 10)
+    this.onMessage('EVELYN ON THE PHONE · “You found my picture. The voice upstairs sounds like Mum, but Mum is gone. My diary is beside my bed. Don’t follow that voice.”', 13)
     this.audio.playCue('ghostOne')
   }
 
@@ -395,23 +482,25 @@ export class HouseStory {
     if (this.riteStep === RITE_QUESTIONS.length) {
       this.released = true
       this.releaseTime = this.time
+      if (this.ghost) this.ghost.visible = false
       this.audio.setCalm(true)
       this.audio.playMelody()
-      this.onMessage('EVELYN · “Tell them I did not run away.” The music box closes. For the first time, the yard is still.', 12)
+      this.onMessage('EVELYN · “Thank you for finding me. Tell them I was here.” Elias is gone. The yard falls quiet.', 12)
     }
     return true
   }
 
   objective() {
     if (!this.phoneAnswered) return null
-    if (this.complete) return 'CASE CLOSED · EVELYN RELEASED / SECOND PRESENCE UNRESOLVED'
+    if (this.complete) return 'CASE CLOSED · EVELYN RELEASED / ELIAS BANISHED'
     if (this.released) return 'RETURN TO THE FRONT ROAD · EVELYN IS AT REST'
-    if (this.pendingLetterScare || this.chaseAfterScare || this.pursuit?.state === 'chasing') return 'RUN TO THE BACKYARD · REACH THE TWO GRAVES'
-    if (!this.found.has('evelyn-diary')) return "UPSTAIRS · FIND EVELYN'S DIARY IN DANIEL'S ROOM"
-    if (!this.found.has('annex-message')) return 'UPSTAIRS · READ THE ENGRAVING IN THE LOCKED ROOM'
-    if (!this.found.has('music-box')) return "UPSTAIRS · FIND THE MUSIC BOX IN EVELYN'S ROOM"
-    if (!this.found.has('daniel-confession')) return "KITCHEN · READ DANIEL'S LETTER BESIDE THE LONE PLATE"
-    return 'BACKYARD · FIND EVELYN’S GRAVE BESIDE THE OTHER GRAVE'
+    if (this.pendingLetterScare || this.chaseAfterScare || this.pursuit?.state === 'chasing') return 'RUN TO THE BACKYARD · REACH EVELYN’S GRAVE'
+    if (!this.found.has('evelyn-diary')) return "UPSTAIRS · FIND EVELYN'S DIARY BESIDE HER BED"
+    if (!this.found.has('music-box')) return 'UPSTAIRS · INSPECT THE MUSIC BOX IN THE MAIN BEDROOM'
+    if (!this.found.has('annex-message')) return 'UPSTAIRS · READ THE SCRATCHES IN THE ANNEX'
+    if (!this.found.has('caretaker-record')) return 'KITCHEN · READ THE VALE ESTATE SERVICE RECORD'
+    if (!this.found.has('daniel-confession')) return 'KITCHEN · OPEN DANIEL’S ENVELOPE'
+    return 'BACKYARD · FIND EVELYN’S UNMARKED GRAVE'
   }
 
   update(dt, player, ringing) {
@@ -440,7 +529,7 @@ export class HouseStory {
       const previous = this.pursuit.state
       this.pursuit.update(dt, player.position, this.gravePosition)
       if (previous === 'chasing' && this.pursuit.state === 'safe') {
-        this.onMessage('EVELYN · “He cannot reach you here.” Face the grave and press E to begin the release.', 10)
+        this.onMessage('EVELYN · “She cannot reach me here.” Face my grave and press E to begin the exorcism.', 10)
         this.audio.playMelody()
       }
       this.ghost.position.copy(this.pursuit.state === 'chasing' || this.pursuit.state === 'caught'
@@ -451,32 +540,43 @@ export class HouseStory {
     }
     if (this.released && !this.complete) {
       const farewell = this.time - this.releaseTime
-      this.ghost.visible = farewell < 12
-      this.ghost.scale.setScalar(0.8)
-      this.ghost.position.copy(this.gravePosition).add(new THREE.Vector3(0, farewell * 0.035, -0.25))
-      this.ghost.lookAt(player.position.x, this.ghost.position.y, player.position.z)
-      setGhostAppearance(this.ghost, Math.max(0, 0.65 * (1 - farewell / 12)), 0xf2dfb7)
+      this.ghost.visible = false
+      if (this.evelyn) {
+        this.evelynMixer?.update(dt)
+        this.evelyn.visible = farewell < 18
+        const towardPlayer = player.position.clone().sub(this.gravePosition).setY(0).normalize().multiplyScalar(0.9)
+        this.evelyn.position.copy(this.gravePosition).add(towardPlayer)
+        this.evelyn.position.y += 0.12 + farewell * 0.025
+        this.evelyn.lookAt(player.position.x, this.evelyn.position.y, player.position.z)
+        const opacity = Math.max(0, 0.88 * (1 - farewell / 18))
+        this.evelyn.traverse(object => {
+          if (!object.isMesh) return
+          for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+            material.opacity = opacity
+          }
+        })
+        if (this.evelynHalo) this.evelynHalo.material.opacity = opacity * 0.85
+      }
     }
     if (this.released && !this.complete && player.position.z > 18) {
       this.complete = true
       this.endingTime = this.time
-      this.ghost.position.set(-0.8, 5.7, 5.5)
-      this.ghost.scale.setScalar(1.2)
-      setGhostAppearance(this.ghost, 0.65, 0x7f9097)
-      this.onMessage('CASE CLOSED · Evelyn Vale has been released. In the upstairs window, a tall man watches you leave. Elias Wren is still here.', 18)
-      this.audio.playCue('ghostBreath')
+      if (this.evelyn) this.evelyn.visible = false
+      this.onMessage('CASE CLOSED · Evelyn Vale is at rest. Elias Wren has been banished from the manor.', 18)
     }
-    if (this.complete) this.ghost.visible = true
+    if (this.complete) this.ghost.visible = false
   }
 
-  retryPursuit(player) {
+  retryPursuit(player, spawn = this.pursuit.checkpoint, yaw = player.input.yaw) {
     if (this.pursuit.state !== 'caught') return false
-    player.reset(this.pursuit.retry(), player.input.yaw)
-    this.onMessage('EVELYN · “Keep moving. My grave is beyond the outbuildings.”', 8)
+    player.reset(this.pursuit.retry(spawn), yaw)
+    this.onMessage('EVELYN · “Keep moving. My grave is behind the house.”', 8)
     return true
   }
 
   dispose() {
+    this.evelynMixer?.stopAllAction()
+    this.evelynHalo?.material.map?.dispose()
     for (const { light, intensity } of this.lights) light.intensity = intensity
     this.camera.remove(this.flashlight, this.flashlight.target)
     this.camera.remove(this.jumpScareGhost)

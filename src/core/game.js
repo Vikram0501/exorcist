@@ -265,7 +265,7 @@ export class Game {
 
     this.valeFrameInspected = false
 
-    this.kitchenPhoneAnswered = false
+    this.bedroomPhoneAnswered = false
 
     this.newspaperOpen = false
 
@@ -276,11 +276,6 @@ export class Game {
     this.newspaperPreview =
       document.getElementById(
         'newspaperTexturePreview'
-      )
-
-    this.evidenceNewspaperThumbnail =
-      document.getElementById(
-        'evidenceNewspaperThumbnail'
       )
 
     this.newspaperPreviewTransform = {
@@ -802,8 +797,7 @@ if (this.loaded) {
       }
       else if (
         investigationItem &&
-        investigationItem.id === 'newspaper' &&
-        !this.newspaperRead
+        investigationItem.id === 'newspaper'
       ) {
 
         this.openNewspaperReader(investigationItem)
@@ -812,8 +806,7 @@ if (this.loaded) {
       else if (
         investigationItem &&
         investigationItem.id === 'vale-frame' &&
-        this.newspaperRead &&
-        !this.valeFrameInspected
+        this.newspaperRead
       ) {
 
         this.inspectValeFrame(investigationItem)
@@ -821,25 +814,13 @@ if (this.loaded) {
 
       else if (
         investigationItem &&
-        investigationItem.id === 'fourth-place-setting' &&
-        this.newspaperRead &&
-        !this.inspectedEvidence.has(
-          investigationItem.id,
-        )
-      ) {
-
-        this.openNewspaperReader(investigationItem)
-      }
-
-      else if (
-        investigationItem &&
-        investigationItem.id === 'kitchen-phone' &&
+        investigationItem.id === 'bedroom-phone' &&
         this.valeFrameInspected &&
         this.houseStory?.isPhoneRinging() &&
-        !this.kitchenPhoneAnswered
+        !this.bedroomPhoneAnswered
       ) {
 
-        this.answerKitchenPhone()
+        this.answerBedroomPhone()
       }
 
       else if (door) {
@@ -954,7 +935,7 @@ if (this.loaded) {
     if (this.currentLevel === 'house') {
       this.houseAudio.update(this.player)
       if (!this.newspaperOpen && !this.houseStoryView?.open) {
-        this.houseStory?.update(dt, this.player, this.valeFrameInspected && !this.kitchenPhoneAnswered)
+        this.houseStory?.update(dt, this.player, this.valeFrameInspected && !this.bedroomPhoneAnswered)
       }
     }
     } else {
@@ -1087,6 +1068,7 @@ if (this.loaded) {
             doors,
             ramps,
             model,
+            animations,
             spawn,
             spawnYaw,
             modelSize,
@@ -1145,7 +1127,7 @@ if (this.loaded) {
 
           this.valeFrameInspected = false
 
-          this.kitchenPhoneAnswered = false
+          this.bedroomPhoneAnswered = false
 
           this.ramps =
             ramps || []
@@ -1156,7 +1138,7 @@ if (this.loaded) {
           if (levelName === 'house') {
             this.houseStoryView = new HouseStoryView(this)
             this.houseStory = new HouseStory({
-              model, level: levelRoot, items: this.investigationItems,
+              model, animations, level: levelRoot, items: this.investigationItems, doors: this.doors,
               camera: this.camera, audio: this.houseAudio,
               onMessage: (text, duration) => this.houseStoryView.message(text, duration),
             })
@@ -1497,7 +1479,7 @@ if (this.loaded) {
 
     this.valeFrameInspected = false
 
-    this.kitchenPhoneAnswered = false
+    this.bedroomPhoneAnswered = false
 
     this.hideNewspaperReader()
 
@@ -1770,14 +1752,14 @@ if (this.loaded) {
           if (!this.valeFrameInspected) {
             hudObjective.textContent =
               'ENTER THE HOUSE AND INSPECT THE FAMILY FRAME'
-          } else if (!this.kitchenPhoneAnswered) {
+          } else if (!this.bedroomPhoneAnswered) {
             hudObjective.textContent =
               this.houseStory?.isPhoneRinging()
-                ? 'ANSWER THE RINGING KITCHEN TELEPHONE'
-                : 'THE KITCHEN TELEPHONE IS SILENT'
+                ? 'UPSTAIRS · ANSWER THE RINGING MAIN BEDROOM PHONE'
+                : 'UPSTAIRS · FIND THE MAIN BEDROOM PHONE'
           } else {
             hudObjective.textContent =
-              'FOLLOW THE FOOTSTEPS UPSTAIRS'
+              'FIND EVELYN’S DIARY BESIDE HER BED'
           }
         }
       }
@@ -1892,32 +1874,42 @@ if (this.loaded) {
 
     this.currentInspectionItemId = investigationItem.id
 
-    const inspectionObject =
-      new THREE.Mesh(
-        sourceMesh.geometry,
-        Array.isArray(sourceMesh.material)
-          ? sourceMesh.material.map((material) => createInspectionMaterial(material))
-          : createInspectionMaterial(sourceMesh.material),
+    const inspectAsObject = investigationItem.inspectionMode === 'object'
+    const inspectionObject = inspectAsObject
+      ? investigationItem.object.clone(true)
+      : new THREE.Mesh(
+          sourceMesh.geometry,
+          Array.isArray(sourceMesh.material)
+            ? sourceMesh.material.map((material) => createInspectionMaterial(material))
+            : createInspectionMaterial(sourceMesh.material),
+        )
+
+    if (inspectAsObject) {
+      investigationItem.object.updateWorldMatrix(true, true)
+      investigationItem.object.matrixWorld.decompose(
+        inspectionObject.position, inspectionObject.quaternion, inspectionObject.scale,
       )
-
-    if (investigationItem.removeOnInspect) {
-      investigationItem.object.visible = false
+      inspectionObject.traverse(child => {
+        if (!child.isMesh) return
+        child.material = Array.isArray(child.material)
+          ? child.material.map(material => createInspectionMaterial(material, true))
+          : createInspectionMaterial(child.material, true)
+      })
+    } else {
+      inspectionObject.position.set(0, 0, 0)
+      // The porch plane is horizontal in the GLB, so turn it toward the camera.
+      inspectionObject.rotation.set(investigationItem.story ? 0 : Math.PI / 2, 0, 0)
+      inspectionObject.scale.set(1, 1, 1)
     }
-
-    inspectionObject.position.set(0, 0, 0)
-    // The porch plane is horizontal in the GLB (its normal points upward),
-    // so turn the picked-up copy toward the camera for inspection.
-    inspectionObject.rotation.set(investigationItem.story ? 0 : Math.PI / 2, 0, 0)
-    inspectionObject.scale.set(1, 1, 1)
     inspectionObject.updateMatrixWorld(true)
 
     inspectionObject.visible = true
     inspectionObject.frustumCulled = false
 
-    const inspectionMaterials =
-      Array.isArray(inspectionObject.material)
-        ? inspectionObject.material
-        : [inspectionObject.material]
+    const inspectionMaterials = []
+    inspectionObject.traverse(child => {
+      if (child.isMesh) inspectionMaterials.push(...(Array.isArray(child.material) ? child.material : [child.material]))
+    })
 
     for (const material of inspectionMaterials) {
 
@@ -1936,7 +1928,7 @@ if (this.loaded) {
         ? sourceMesh.material[0]
         : sourceMesh.material
 
-    if (this.newspaperPreview && sourceMaterial?.map?.image) {
+    if (!inspectAsObject && this.newspaperPreview && sourceMaterial?.map?.image) {
 
       const image = sourceMaterial.map.image
       const canvas = document.createElement('canvas')
@@ -1952,11 +1944,6 @@ if (this.loaded) {
 
         this.newspaperPreview.src = newspaperImageUrl
         this.newspaperPreview.classList.remove('hidden')
-
-        if (investigationItem.id === 'newspaper') {
-          this.evidenceNewspaperThumbnail.src =
-            newspaperImageUrl
-        }
 
         this.updateNewspaperPreviewTransform()
       }
@@ -1975,17 +1962,18 @@ if (this.loaded) {
     )
 
     inspectionObject.position.sub(centre)
-    inspectionObject.scale.setScalar(1.35 / largestDimension)
+    if (!inspectAsObject) inspectionObject.scale.setScalar(1.35 / largestDimension)
     inspectionGroup.add(inspectionObject)
-    inspectionGroup.position.set(0, -0.1, -2.15)
+    inspectionGroup.position.set(inspectAsObject ? 0.65 : 0, -0.1, -2.15)
     inspectionGroup.rotation.set(0.12, -0.16, -0.08)
-    inspectionGroup.scale.setScalar(1)
+    inspectionGroup.scale.setScalar(inspectAsObject ? 1.35 / largestDimension : 1)
     this.camera.add(inspectionGroup)
     this.newspaperInspectionObject = inspectionGroup
 
     this.newspaperReader.classList.remove('hidden')
 
     this.newspaperReader.classList.add('inspect-mode')
+    this.newspaperReader.classList.toggle('object-mode', inspectAsObject)
 
     this.input.release()
   }
@@ -2045,12 +2033,11 @@ if (this.loaded) {
   }
 
 
-  answerKitchenPhone() {
+  answerBedroomPhone() {
 
-    this.kitchenPhoneAnswered = true
+    this.bedroomPhoneAnswered = true
 
-    // A short ghost vocal is used as Evelyn's distorted message until a
-    // dedicated telephone recording is supplied.
+    // A short ghost vocal accompanies Evelyn's captioned telephone message.
     this.houseStory?.answerPhone()
   }
 
@@ -2068,7 +2055,8 @@ if (this.loaded) {
 
     this.input.lock()
 
-    if (inspectionId === 'vale-frame') this.houseStory?.schedulePhoneRing(3)
+    if (inspectionId === 'vale-frame' && !this.bedroomPhoneAnswered &&
+        this.houseStory?.phoneRingStartsAt === Infinity) this.houseStory.schedulePhoneRing(3)
     this.houseStory?.finishInspection(inspectionId)
   }
 
@@ -2182,28 +2170,6 @@ if (this.loaded) {
     this.evidenceBookOpen = true
     this.houseStoryView?.updateJournal()
 
-    evidenceBook.classList.toggle(
-      'has-evidence',
-      this.inspectedEvidence.size > 0,
-    )
-
-    evidenceBook.classList.toggle(
-      'has-newspaper-evidence',
-      this.inspectedEvidence.has('newspaper'),
-    )
-
-    evidenceBook.classList.toggle(
-      'has-frame-evidence',
-      this.inspectedEvidence.has('vale-frame'),
-    )
-
-    evidenceBook.classList.toggle(
-      'has-tableware-evidence',
-      this.inspectedEvidence.has(
-        'fourth-place-setting',
-      ),
-    )
-
     evidenceBook.classList.remove('hidden')
 
     this.input.release()
@@ -2231,6 +2197,7 @@ if (this.loaded) {
     this.newspaperOpen = false
 
     this.newspaperReader?.classList.add('hidden')
+    this.newspaperReader?.classList.remove('object-mode')
     this.newspaperPreview?.classList.add('hidden')
     this.newspaperPreview?.removeAttribute('src')
 
@@ -2355,7 +2322,7 @@ if (this.loaded) {
     switch (investigationItem.id) {
       case 'newspaper':
         return this.newspaperRead
-          ? 'Newspaper evidence logged'
+          ? 'Press E to reread the newspaper'
           : investigationItem.prompt
 
       case 'vale-frame':
@@ -2364,28 +2331,17 @@ if (this.loaded) {
         }
 
         return this.valeFrameInspected
-          ? 'The Vale family: Daniel, Margaret and Evelyn'
+          ? 'Press E to inspect the scratched family portrait again'
           : investigationItem.prompt
 
-      case 'kitchen-phone':
-        if (this.kitchenPhoneAnswered) {
-          return 'A child whispered: “Upstairs.”'
+      case 'bedroom-phone':
+        if (this.bedroomPhoneAnswered) {
+          return 'Evelyn warned you about the voice that imitates Margaret.'
         }
         if (!this.valeFrameInspected || !this.houseStory?.isPhoneRinging()) {
           return 'The telephone is silent'
         }
         return 'Press E to answer the ringing telephone'
-
-      case 'fourth-place-setting':
-        if (!this.newspaperRead) {
-          return 'Log the porch newspaper first'
-        }
-
-        return this.inspectedEvidence.has(
-          investigationItem.id,
-        )
-          ? 'Fourth place-setting evidence logged'
-          : investigationItem.prompt
 
       default:
         return investigationItem.prompt
@@ -3887,7 +3843,7 @@ function isEffectivelyVisible(object) {
   return true
 }
 
-function createInspectionMaterial(source) {
+function createInspectionMaterial(source, solid = false) {
 
   return new THREE.MeshBasicMaterial({
     map: source?.map || null,
@@ -3896,8 +3852,8 @@ function createInspectionMaterial(source) {
     opacity: source?.opacity ?? 1,
     alphaTest: source?.alphaTest || 0,
     side: THREE.DoubleSide,
-    depthTest: false,
-    depthWrite: false,
+    depthTest: solid,
+    depthWrite: solid,
   })
 }
 

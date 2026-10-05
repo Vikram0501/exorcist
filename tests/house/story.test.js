@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { HouseStory, HOUSE_EVIDENCE, RITE_QUESTIONS } from '../../src/levels/house/story.js'
+import { buildHouseJournalEntries } from '../../src/levels/house/story-view.js'
 import { HousePursuit } from '../../src/levels/house/pursuit.js'
 import { createAuthoredGhost, createJumpScareGhost, darkenGraves } from '../../src/levels/house/story-assets.js'
 import * as THREE from 'three'
@@ -17,23 +18,67 @@ function createStory() {
   return story
 }
 
-test('the diary supplies the music box key and the kitchen letter starts the final route', () => {
+test('the phone unlocks the new clues and all four must precede Daniel’s envelope', () => {
   const story = createStory()
   assert.equal(story.inspect('evelyn-diary'), false)
   assert.equal(story.answerRite(0), false)
   story.answerPhone()
   assert.equal(story.canInspect('evelyn-diary'), true)
-  assert.equal(story.canInspect('music-box'), false)
+  assert.equal(story.canInspect('music-box'), true)
   assert.equal(story.canInspect('daniel-confession'), false)
   story.inspect('evelyn-diary')
   assert.equal(story.canInspect('music-box'), true)
   story.inspect('music-box')
   assert.equal(story.pursuit.state, 'idle')
   story.inspect('annex-message')
+  assert.equal(story.canInspect('daniel-confession'), false)
+  story.inspect('caretaker-record')
   assert.equal(story.canInspect('daniel-confession'), true)
   story.inspect('daniel-confession')
   assert.equal(story.pendingLetterScare, true)
   assert.equal(story.canInspect('evelyn-grave'), false)
+})
+
+test('opening Daniel’s envelope leaves it in place and reveals the authored letter', () => {
+  const story = createStory()
+  story.answerPhone()
+  for (const id of ['evelyn-diary', 'music-box', 'annex-message', 'caretaker-record']) story.inspect(id)
+  story.confessionEnvelope = { visible: true }
+  story.confessionLetter = { visible: false }
+  assert.equal(story.inspect('daniel-confession'), true)
+  assert.equal(story.confessionEnvelope.visible, true)
+  assert.equal(story.confessionLetter.visible, true)
+  assert.equal(story.pendingLetterScare, true)
+})
+
+test('inspecting the diary keeps its authored page hidden in the room', () => {
+  const story = createStory()
+  story.answerPhone()
+  story.diaryEntry = { visible: false }
+  assert.equal(story.inspect('evelyn-diary'), true)
+  assert.equal(story.diaryEntry.visible, false)
+  assert.equal(story.found.has('evelyn-diary'), true)
+})
+
+test('field notes cover every inspected clue, the call, grave, and completed case once', () => {
+  const game = {
+    inspectedEvidence: new Set(['newspaper', 'vale-frame', ...HOUSE_EVIDENCE.map(item => item.id)]),
+    investigationItems: [
+      { id: 'newspaper', title: 'Newspaper', storyNote: 'Clipping' },
+      { id: 'vale-frame', title: 'Portrait', storyNote: 'Scratches' },
+      { id: 'daniel-confession', title: 'Letter' },
+      { id: 'daniel-confession', title: 'Letter' },
+    ],
+    bedroomPhoneAnswered: true,
+    houseStory: { pursuit: { state: 'safe' }, released: true, complete: true },
+  }
+  const entries = buildHouseJournalEntries(game)
+  assert.deepEqual(entries.map(item => item.id), [
+    'newspaper', 'vale-frame', 'bedroom-phone', ...HOUSE_EVIDENCE.map(item => item.id),
+    'evelyn-grave', 'completed-rite', 'closed-case',
+  ])
+  assert.ok(entries.every(item => item.storyNote))
+  assert.equal(entries.filter(item => item.id === 'daniel-confession').length, 1)
 })
 
 test('the telephone waits three seconds after the family frame closes', () => {
@@ -52,8 +97,9 @@ test('the telephone waits three seconds after the family frame closes', () => {
 
 test('wrong answers leave the rite recoverable and the completed rite cannot repeat', () => {
   const story = createStory()
+  assert.equal(RITE_QUESTIONS.length, 5)
   story.answerPhone()
-  for (const id of ['evelyn-diary', 'annex-message', 'music-box', 'daniel-confession']) story.inspect(id)
+  for (const id of ['evelyn-diary', 'music-box', 'annex-message', 'caretaker-record', 'daniel-confession']) story.inspect(id)
   story.pursuit.state = 'safe'
   for (const question of RITE_QUESTIONS) {
     const step = story.riteStep
@@ -64,6 +110,29 @@ test('wrong answers leave the rite recoverable and the completed rite cannot rep
   assert.equal(story.released, true)
   assert.match(story.objective(), /FRONT ROAD/)
   assert.equal(story.answerRite(0), false)
+})
+
+test('finishing the exorcism hides Elias and reveals Evelyn at the grave', () => {
+  const story = createStory()
+  story.answerPhone()
+  for (const id of ['evelyn-diary', 'music-box', 'annex-message', 'caretaker-record', 'daniel-confession']) story.inspect(id)
+  story.pursuit.state = 'safe'
+  story.ghost = new THREE.Group()
+  story.ghost.visible = true
+  story.evelyn = new THREE.Group()
+  story.evelyn.visible = false
+  story.gravePosition = new THREE.Vector3(0, 0, 0)
+  story.lights = []
+  story.markers = []
+  story.disturbance = 0
+  story.nextRing = Infinity
+  for (const question of RITE_QUESTIONS) story.answerRite(question.answer)
+  assert.equal(story.ghost.visible, false)
+  story.update(0.1, { position: new THREE.Vector3(1, 1, 0) }, false)
+  assert.equal(story.evelyn.visible, true)
+  story.update(0.1, { position: new THREE.Vector3(1, 1, 19) }, false)
+  assert.equal(story.complete, true)
+  assert.equal(story.evelyn.visible, false)
 })
 
 test('the chase follows the walked route, preserves its checkpoint, and ends at the grave', () => {
@@ -82,7 +151,25 @@ test('the chase follows the walked route, preserves its checkpoint, and ends at 
   assert.equal(pursuit.update(0.1, new THREE.Vector3(10, 1, 0), grave), 'safe')
 })
 
-test('the locked-room engraving can be found first, but the letter waits for all upstairs clues', () => {
+test('a caught player can restart the chase from the front of the house', () => {
+  const story = createStory()
+  const front = new THREE.Vector3(1, 2, 25)
+  story.pursuit.start(new THREE.Vector3(2, 5, 3))
+  story.pursuit.state = 'caught'
+  let resetPosition = null
+  let resetYaw = null
+  const player = { input: { yaw: 0 }, reset(position, yaw) {
+    resetPosition = position.clone()
+    resetYaw = yaw
+  } }
+  assert.equal(story.retryPursuit(player, front, 0.4), true)
+  assert.deepEqual(resetPosition.toArray(), front.toArray())
+  assert.equal(resetYaw, 0.4)
+  assert.equal(story.pursuit.state, 'chasing')
+  assert.deepEqual(story.pursuit.checkpoint.toArray(), front.toArray())
+})
+
+test('the annex clue can be found first, but the letter waits for the kitchen record too', () => {
   const story = createStory()
   story.answerPhone()
   story.inspect('annex-message')
@@ -93,9 +180,12 @@ test('the locked-room engraving can be found first, but the letter waits for all
   assert.equal(story.inspect('evelyn-diary'), false)
   assert.equal(story.found.size, 2)
   story.inspect('music-box')
-  assert.match(story.objective(), /KITCHEN/)
+  assert.match(story.objective(), /SERVICE RECORD/)
+  assert.equal(story.inspect('daniel-confession'), false)
+  story.inspect('caretaker-record')
+  assert.match(story.objective(), /ENVELOPE/)
   story.inspect('daniel-confession')
-  assert.match(story.objective(), /TWO GRAVES/)
+  assert.match(story.objective(), /GRAVE/)
 })
 
 test('closing the confession triggers a brief close-up scare before the chase', () => {
@@ -113,7 +203,7 @@ test('closing the confession triggers a brief close-up scare before the chase', 
   story.audio.playJumpScare = () => { played++ }
   story.audio.isInside = () => false
   story.answerPhone()
-  for (const id of ['evelyn-diary', 'annex-message', 'music-box', 'daniel-confession']) story.inspect(id)
+  for (const id of ['evelyn-diary', 'music-box', 'annex-message', 'caretaker-record', 'daniel-confession']) story.inspect(id)
   assert.equal(story.triggerLetterScare(), true)
   assert.equal(played, 1)
   assert.equal(ghost.visible, false)
@@ -220,6 +310,7 @@ test('nearby clue scares share the cooldown while the confession can still begin
   }
   assert.equal(scares, 1)
   story.inspect('music-box')
+  story.inspect('caretaker-record')
   story.inspect('daniel-confession')
   assert.equal(story.finishInspection('daniel-confession'), true)
   story.updateJumpScare(1, player)

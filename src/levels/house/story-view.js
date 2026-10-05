@@ -1,5 +1,38 @@
 import { HOUSE_EVIDENCE, RITE_QUESTIONS } from './story.js'
 
+export function buildHouseJournalEntries(game) {
+  const entries = []
+  for (const id of ['newspaper', 'vale-frame']) {
+    if (!game.inspectedEvidence.has(id)) continue
+    const item = game.investigationItems.find(candidate => candidate.id === id)
+    if (item) entries.push(item)
+  }
+  if (game.bedroomPhoneAnswered) entries.push({
+    id: 'bedroom-phone', title: 'The impossible call', foundAt: 'Upstairs, main bedroom',
+    storyNote: 'Evelyn called after I inspected her damaged portrait. She said the upstairs voice sounded like her dead mother Margaret and directed me to the diary beside her bed.',
+    riteNote: 'Evelyn is asking for help. The voice imitating Margaret belongs to another spirit.',
+  })
+  for (const item of HOUSE_EVIDENCE) {
+    if (game.inspectedEvidence.has(item.id)) entries.push(item)
+  }
+  if (game.houseStory?.pursuit.state === 'safe' || game.houseStory?.released) entries.push({
+    id: 'evelyn-grave', title: "Evelyn's unmarked grave", foundAt: 'Backyard',
+    storyNote: 'The unmarked grave behind the house is where Daniel buried Evelyn. Elias stopped pursuing me at its edge.',
+    riteNote: 'The exorcism can begin here. Use the music-box melody, tell Evelyn the truth, and name Elias Wren.',
+  })
+  if (game.houseStory?.released) entries.push({
+    id: 'completed-rite', title: 'The exorcism', foundAt: "Evelyn's grave",
+    storyNote: 'I remembered Margaret’s melody, told Evelyn what Daniel concealed, and banished Elias Wren by name. Evelyn appeared to thank me.',
+    riteNote: 'Evelyn is at rest. Elias has left the manor.',
+  })
+  if (game.houseStory?.complete) entries.push({
+    id: 'closed-case', title: 'Case closed', foundAt: 'Front road',
+    storyNote: 'I left Vale Manor after the rite. The truth of Evelyn’s disappearance is recorded here.',
+    riteNote: 'Evelyn Vale was found and released.',
+  })
+  return entries
+}
+
 export class HouseStoryView {
   constructor(game) {
     this.game = game
@@ -51,17 +84,17 @@ export class HouseStoryView {
     const panel = document.createElement('div')
     panel.className = 'rite-panel'
     const title = document.createElement('h2')
-    title.textContent = type === 'caught' ? 'Elias found you' : 'Evelyn Vale is free'
+    title.textContent = type === 'caught' ? 'Elias found you' : 'The exorcism is complete'
     const copy = document.createElement('p')
     copy.textContent = type === 'caught'
-      ? 'The music box is still with you. Your evidence is safe. Run to the two graves behind the house.'
-      : 'Her disappearance is explained. The older presence remains in the house.'
+      ? 'Your field notes are safe. You can try again from the front of the house.'
+      : 'Evelyn Vale is at rest. Elias Wren has been banished from the manor.'
     const action = document.createElement('button')
     action.type = 'button'
-    action.textContent = type === 'caught' ? 'Try the crossing again' : 'Return to the case menu'
+    action.textContent = type === 'caught' ? 'Respawn at front of house' : 'Return to the case menu'
     action.addEventListener('click', () => {
       if (type === 'caught') {
-        this.game.houseStory.retryPursuit(this.game.player)
+        this.game.houseStory.retryPursuit(this.game.player, this.game.spawnPoint, this.game.spawnYaw)
         this.outcome = null
         this.closeRite()
       } else {
@@ -90,12 +123,12 @@ export class HouseStoryView {
     panel.className = 'rite-panel'
     const label = document.createElement('p')
     label.className = 'evidence-label'
-    label.textContent = `THE RELEASE / ${story.riteStep + 1} OF 3`
+    label.textContent = `THE EXORCISM / ${story.riteStep + 1} OF ${RITE_QUESTIONS.length}`
     const title = document.createElement('h2')
     title.id = 'riteTitle'
     title.textContent = question.title
     const copy = document.createElement('p')
-    copy.textContent = 'Speak for Evelyn. The other voice does not belong in this rite.'
+    copy.textContent = 'Use the evidence you gathered to free Evelyn and name the spirit that held her.'
     panel.append(label, title, copy)
     question.choices.forEach((choice, index) => {
       const button = document.createElement('button')
@@ -103,7 +136,7 @@ export class HouseStoryView {
       button.textContent = choice
       button.addEventListener('click', () => {
         if (!story.answerRite(index)) {
-          this.renderRite('The voice answers too quickly. That is his memory, not hers. Consult your notes and try again.')
+          this.renderRite('That does not match the evidence. Consult your field notes and try again.')
         } else if (story.released) {
           this.closeRite()
         } else {
@@ -135,10 +168,9 @@ export class HouseStoryView {
   updateJournal() {
     const book = document.querySelector('.evidence-notepad')
     book.querySelectorAll('[data-story-entry]').forEach(entry => entry.remove())
-    const entries = [...HOUSE_EVIDENCE]
-    if (this.game.kitchenPhoneAnswered) entries.unshift({ id: 'kitchen-phone', title: 'The impossible call', foundAt: 'Kitchen', storyNote: 'A girl asked me to read what she left upstairs. She warned that the voice of her mother was an imitation.', riteNote: 'Two presences. Listen to what they say, not whose voice they use.' })
+    const entries = buildHouseJournalEntries(this.game)
+    book.querySelector('.evidence-empty').hidden = entries.length > 0
     for (const item of entries) {
-      if (item.id !== 'kitchen-phone' && !this.game.inspectedEvidence.has(item.id)) continue
       const entry = document.createElement('article')
       entry.dataset.storyEntry = item.id
       entry.className = 'story-journal-entry'

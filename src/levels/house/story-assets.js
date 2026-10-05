@@ -22,9 +22,10 @@ export function darkenGraves(model) {
       if (!object.isMesh) return
       const darken = material => {
         const copy = material.clone()
-        copy.color?.multiplyScalar(0.38)
+        copy.color?.setHex(0x0c1112)
         if (copy.emissive) copy.emissive.setRGB(0, 0, 0)
         if ('roughness' in copy) copy.roughness = Math.max(copy.roughness, 0.92)
+        if ('metalness' in copy) copy.metalness = 0
         return copy
       }
       object.material = Array.isArray(object.material)

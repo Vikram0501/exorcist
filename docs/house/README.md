@@ -1,7 +1,7 @@
 # Level 1: Vale Manor
 
 Investigate Evelyn Vale's disappearance, uncover her father's confession, escape
-the pursuing ghost, and complete the release rite at her backyard grave.
+the pursuing caretaker Elias Wren, and complete the exorcism at Evelyn's grave.
 
 ## Files
 
@@ -24,7 +24,9 @@ remains in `src/core/game.js`.
 All Level 1 assets live in `public/levels/house/`:
 
 ```text
-models/vale-manor.glb       Current house environment, including the ghost and graves
+models/house.glb            Original house export and authored story props
+models/house-runtime.glb    Optimized house asset loaded by the game
+models/vale-manor.glb       Previous environment export
 textures/moon.png          Moon texture
 audio/ambience.ogg         Background music
 audio/footsteps-house.ogg  Indoor footsteps
@@ -47,7 +49,7 @@ into the house code.
 
 The environment loads with `GLTFLoader` and `MeshoptDecoder`, at scale `0.15`.
 Preserve its authored hierarchy, node names, pivots, and transforms: doors,
-investigation props, the ghost, and the graves depend on them. Structural collision
+investigation props, the two ghosts, and the grave depend on them. Structural collision
 uses an Octree built from selected model meshes; doors retain dynamic bounds.
 Replacement exports need their evidence placement and collision checked in game.
 

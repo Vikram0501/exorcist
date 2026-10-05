@@ -90,6 +90,18 @@
       .level-card-action { align-self: center; color: #b74a41; font: 700 10px system-ui, sans-serif; letter-spacing: 0.13em; }
       .level-card:disabled .level-card-action { color: #625a50; }
       .menu-footer { color: #71695f; font: 10px system-ui, sans-serif; letter-spacing: 0.08em; }
+      #controlsBtn { padding: 10px 18px; color: #ded4c2; font: 700 11px system-ui, sans-serif; letter-spacing: 0.16em; background: rgba(23, 20, 20, 0.8); border: 1px solid rgba(183, 164, 134, 0.4); cursor: pointer; }
+      #controlsBtn:hover { border-color: #c85c50; color: #fff; }
+      #controlsDialog { position: fixed; inset: 0; width: min(560px, calc(100vw - 32px)); max-height: min(740px, calc(100vh - 32px)); margin: auto; padding: 28px; overflow-y: auto; color: #e7dfd0; background: #15191a; border: 1px solid #796e58; box-shadow: 0 25px 100px #000; }
+      #controlsDialog::backdrop { background: rgba(2, 4, 6, 0.82); backdrop-filter: blur(5px); }
+      #controlsDialog h2 { margin-bottom: 8px; font: 700 32px Georgia, serif; }
+      #controlsDialog h3 { margin: 22px 0 10px; color: #b8ab8e; font: 700 11px system-ui, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; }
+      #controlsDialog p { color: #aaa193; font: 13px/1.5 Georgia, serif; }
+      .controls-list { display: grid; grid-template-columns: 1fr auto; gap: 10px 18px; margin-top: 12px; font: 14px Georgia, serif; }
+      .controls-list dt { color: #ddd5c5; }
+      .controls-list dd { color: #f1e9d8; font-weight: 700; text-align: right; }
+      #closeControlsBtn { display: block; width: 100%; margin-top: 28px; padding: 12px; color: #eee5d1; font: 700 12px system-ui, sans-serif; letter-spacing: 0.12em; background: #4a1c20; border: 1px solid #a44a43; cursor: pointer; }
+      #closeControlsBtn:hover, #closeControlsBtn:focus-visible { background: #70302f; }
       #overlay button:focus-visible { outline: 1px solid #c85c50; outline-offset: 3px; }
       @media (max-width: 560px) { .level-card { grid-template-columns: 54px 1fr; } .level-card-action { grid-column: 2; } }
       #overlay.hidden {
@@ -152,13 +164,14 @@
       }
       #newspaperReader:active { cursor: grabbing; }
       #newspaperReader.hidden { display: none; }
+      #newspaperReader.object-mode { backdrop-filter: none; background: rgba(2, 4, 12, 0.48); }
       #newspaperReader .newspaper-sheet { display: none; }
       #newspaperTexturePreview {
         position: absolute;
         top: 50%;
-        left: 50%;
+        left: calc(50% + 170px);
         z-index: 1;
-        width: min(680px, calc(100vw - 48px));
+        width: min(520px, calc(100vw - 370px));
         max-height: 78vh;
         object-fit: contain;
         transform-origin: center;
@@ -183,6 +196,7 @@
       }
       #newspaperInspectionPanel h2 { margin: 4px 0 8px; font: 700 22px Georgia, serif; }
       #newspaperInspectionPanel p { color: #c9c2b4; font-size: 13px; line-height: 1.5; }
+      #inspectionStoryNote, .story-journal-entry p { white-space: pre-line; }
       #newspaperInspectionPanel .newspaper-controls { margin-top: 10px; color: #fef3c7; font-size: 11px; }
       .newspaper-sheet {
         width: min(620px, 100%);
@@ -271,6 +285,8 @@
       .evidence-notepad {
         width: min(520px, 100%);
         min-height: 360px;
+        max-height: min(82vh, 820px);
+        overflow-y: auto;
         padding: clamp(26px, 6vw, 56px);
         color: #28231b;
         font-family: 'Segoe Print', 'Bradley Hand', cursive;
@@ -281,11 +297,7 @@
       }
       .evidence-notepad h2 { margin: 8px 0 28px; font: 700 32px Georgia, serif; }
       .evidence-notepad p { font-size: 14px; line-height: 1.6; }
-      .evidence-notepad .evidence-entry { display: none; }
-      #evidenceBook.has-evidence .evidence-empty { display: none; }
-      #evidenceBook.has-newspaper-evidence [data-evidence="newspaper"],
-      #evidenceBook.has-frame-evidence [data-evidence="frame"],
-      #evidenceBook.has-tableware-evidence [data-evidence="tableware"] { display: flex; gap: 18px; }
+      .evidence-empty[hidden] { display: none; }
       .evidence-entry-number { font: 700 30px Georgia, serif; color: #795548; }
       .evidence-thumbnail {
         display: block;
@@ -373,6 +385,10 @@
       .story-journal-entry h3 { margin: 8px 0 12px; font: 700 23px Georgia, serif; }
       .story-journal-entry p + p { margin-top: 10px; }
       #newspaperInspectionPanel { max-height: calc(100vh - 48px); overflow-y: auto; }
+      @media (max-width: 700px) {
+        #newspaperTexturePreview { top: 33%; left: 50%; width: min(520px, calc(100vw - 32px)); max-height: 48vh; }
+        #newspaperInspectionPanel { left: 12px; bottom: 12px; width: calc(100% - 24px); max-height: 42vh; }
+      }
       @media (prefers-reduced-motion: reduce) { .level-card { transition: none; } }
     </style>
   </head>
@@ -401,19 +417,20 @@
         <h2 id="newspaperInspectTitle">Newspaper clipping</h2>
         <p id="inspectionStoryNote">Inspect the original clipping, then return to the house.</p>
         <p id="inspectionRiteNote"></p>
+        <p class="inspection-log-note">Recorded in field notes · Press I to review.</p>
         <p class="newspaper-controls">Drag to rotate Â· Scroll to zoom</p>
         <button id="closeNewspaperInspectBtn" type="button">CLOSE INSPECTION</button>
       </section>
       <article class="newspaper-sheet">
-        <div class="newspaper-masthead">THE VALE COUNTY GAZETTE</div>
+        <div class="newspaper-masthead">THE VALE COUNTY HERALD</div>
         <div class="newspaper-date">THURSDAY, OCTOBER 18, 1984</div>
-        <h2 id="newspaperHeadline">VALE GIRL STILL MISSING</h2>
+        <h2 id="newspaperHeadline">TEEN GIRL VANISHES FROM VALE HOME</h2>
         <div class="newspaper-inspect-note">A folded clipping, damp from the porch, is marked with a child's initials. Read it carefully before logging the evidence.</div>
-        <p class="newspaper-deck">Police renew appeal after neighbours report shouting at the isolated Vale property.</p>
+        <p class="newspaper-deck">Neighbours describe footsteps upstairs and moving lights before Evelyn vanished.</p>
         <div class="newspaper-copy">
-          <p>Authorities have renewed their search for sixteen-year-old <strong>Evelyn Vale</strong>, who vanished from her family home on Old Mill Road last month.</p>
-          <p>Her father, Daniel Vale, told police that Evelyn left during the night. Several neighbours, however, reported hearing a heated argument and a young girl crying from inside the house.</p>
-          <p>Investigators found no sign of Evelyn on the surrounding roads or woodland. Anyone with information is urged to contact the Vale County Sheriff's Office.</p>
+          <p>Sixteen-year-old <strong>Evelyn Vale</strong> vanished from her family home sometime during the night.</p>
+          <p>In the weeks before her disappearance, neighbours reported footsteps from the upper floor and lights moving through rooms long after the family had gone to bed. One resident said Evelyn had recently claimed that someone kept walking the house.</p>
+          <p>By morning she was gone. No trace of Evelyn has ever been found.</p>
         </div>
         <button id="readNewspaperBtn" type="button">READ ARTICLE</button>
         <button id="closeNewspaperBtn" type="button">LOG EVIDENCE</button>
@@ -427,51 +444,21 @@
           <p>No evidence logged yet.</p>
           <p>Inspect the newspaper on the front porch to begin the investigation.</p>
         </div>
-        <div class="evidence-entry" data-evidence="newspaper">
-          <div class="evidence-entry-number">01</div>
-          <img id="evidenceNewspaperThumbnail" class="evidence-thumbnail" alt="Newspaper clipping evidence" />
-          <div class="evidence-entry-details">
-            <h3>Newspaper clipping</h3>
-            <p class="evidence-clue">Missing-person article connected to the Vale house.</p>
-            <p><strong>Found:</strong> Front porch</p>
-            <span class="evidence-stamp">LOGGED</span>
-          </div>
-        </div>
-        <div class="evidence-entry" data-evidence="frame">
-          <div class="evidence-entry-number">02</div>
-          <div class="evidence-entry-details">
-            <h3>Vale family photograph</h3>
-            <p class="evidence-clue">Story: Evelyn holds Margaret's music box in the photograph.</p>
-            <p><strong>Exorcism:</strong> The music box is Evelyn's anchor; use it in her release rite.</p>
-            <p><strong>Found:</strong> Entrance room</p>
-            <span class="evidence-stamp">LOGGED</span>
-          </div>
-        </div>
-        <div class="evidence-entry" data-evidence="tableware">
-          <div class="evidence-entry-number">03</div>
-          <div class="evidence-entry-details">
-            <h3>Fourth place setting</h3>
-            <p class="evidence-clue">Story: Four places are laid for a family of three.</p>
-            <p><strong>Exorcism:</strong> A second spirit is present. Evelyn is not the only dead person here.</p>
-            <p><strong>Found:</strong> Dining room</p>
-            <span class="evidence-stamp">LOGGED</span>
-          </div>
-        </div>
         <button id="closeEvidenceNotepadBtn" type="button">CLOSE NOTES</button>
       </section>
       <section class="evidence-book">
         <article class="evidence-page">
           <div class="evidence-label">FIELD JOURNAL Â· EVIDENCE 01</div>
           <h2>The Vale Girl</h2>
-          <p><strong>Source:</strong> Vale County Gazette clipping, found on the front porch.</p>
+          <p><strong>Source:</strong> Vale County Herald clipping, found on the front porch.</p>
           <p><strong>Subject:</strong> Evelyn Vale, age sixteen, reported missing from Old Mill Road.</p>
           <span class="evidence-stamp">LOGGED</span>
         </article>
         <article class="evidence-page">
           <div class="evidence-label">INVESTIGATOR'S NOTES</div>
-          <p>Daniel Vale says Evelyn ran away. Neighbours heard an argument and a girl crying inside the house.</p>
-          <p>The search found no trace on the roads or in the surrounding woodland.</p>
-          <p><em>Someone may have wanted the truth to disappear.</em></p>
+          <p>Neighbours heard footsteps upstairs and saw lights moving long after the family went to bed.</p>
+          <p>No trace of Evelyn was found. The portrait inside the house shows her face scratched out.</p>
+          <p><em>Someone knew more than the newspaper could report.</em></p>
           <button id="closeEvidenceBtn" type="button">CLOSE JOURNAL</button>
         </article>
       </section>
@@ -480,7 +467,7 @@
     <div id="overlay">
       <div class="title-kicker">A SUPERNATURAL INVESTIGATION</div>
       <h1>EXORCIST<span class="title-subtitle">THE LAST RITES</span></h1>
-      <p class="title-intro">Some houses keep their dead. Others wait for someone to find them.</p>
+      <p class="title-intro">You are an exorcist. Uncover each haunting's truth, then complete the rite.</p>
       <nav class="level-menu" aria-label="Case files">
         <div class="level-menu-label">SELECT CASE FILE</div>
         <button id="playBtn" class="level-card" type="button">
@@ -499,8 +486,36 @@
           <span class="level-card-action">ENTER</span>
         </button>
       </nav>
+      <button id="controlsBtn" type="button">CONTROLS</button>
       <p class="menu-footer">ESC returns to case files</p>
     </div>
+    <dialog id="controlsDialog" aria-labelledby="controlsTitle">
+      <h2 id="controlsTitle">Controls</h2>
+      <p>Open this panel from the case menu. Press Esc during play to return here.</p>
+      <h3>On foot</h3>
+      <dl class="controls-list">
+        <dt>Move</dt><dd>W A S D</dd>
+        <dt>Look around</dt><dd>Mouse</dd>
+        <dt>Interact, inspect, open doors</dt><dd>E</dd>
+        <dt>Sprint</dt><dd>Hold Shift</dd>
+        <dt>Jump</dt><dd>Space</dd>
+        <dt>Pause / case menu</dt><dd>Esc</dd>
+      </dl>
+      <h3>Vale Manor</h3>
+      <dl class="controls-list">
+        <dt>Toggle torch</dt><dd>T</dd>
+        <dt>Open field notes</dt><dd>I</dd>
+        <dt>Respawn</dt><dd>R</dd>
+      </dl>
+      <h3>Optional movement and debug</h3>
+      <dl class="controls-list">
+        <dt>Toggle fly mode</dt><dd>F</dd>
+        <dt>Fly down</dt><dd>C</dd>
+        <dt>Show collision bounds</dt><dd>H</dd>
+        <dt>Log nearby wall colliders</dt><dd>J</dd>
+      </dl>
+      <button id="closeControlsBtn" type="button">CLOSE</button>
+    </dialog>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

@@ -8,8 +8,8 @@ Stripped of your title after a failed exorcism gone wrong, you must prove yourse
 
 **Mission 1 — Vale Manor**
 - Investigate Evelyn Vale's disappearance through the house and rear yard
-- Answer the ringing telephone, gather the upstairs evidence and recover her music box
-- Escape Elias Wren to Evelyn's grave, then use the evidence in the release rite
+- Answer the upstairs telephone, inspect Evelyn's diary and music box, and identify Elias Wren in the kitchen record
+- Open Daniel's envelope, escape the female caretaker spirit to Evelyn's grave, and complete the exorcism
 - Return to the road to close Evelyn's case
 
 **Mission 2 — The Undead Train**
@@ -145,7 +145,9 @@ exorcist/
       shared/                  Shared lighting
   public/
     levels/house/
-      models/vale-manor.glb     Active Level 1 environment
+      models/house.glb          Original Blender export and authored props
+      models/house-runtime.glb  Optimized Level 1 asset loaded by the game
+      models/vale-manor.glb     Previous Level 1 export
       textures/moon.png
       audio/                   Descriptively named house recordings
         screams/               scream-01.ogg through scream-04.ogg
@@ -187,7 +189,7 @@ Level design documents live in `docs/`. Read `docs/BUILDSPEC.md` first if you pl
 - [x] Level 3 — dynamic roadside clue signs
 - [x] Level 3 — brake-cut sequence
 - [ ] Level 3 — final exorcism / name-entry finale
-- [x] Level 1 investigation: newspaper, family photograph, fourth place setting, telephone, diary, annex message, confession, music box, grave
-- [x] Level 1 evidence journal, three-question release rite, and departure ending
+- [x] Level 1 investigation: newspaper, scratched family portrait, upstairs telephone, diary, music box, annex scratches, caretaker record, Daniel's envelope and letter, grave
+- [x] Level 1 evidence journal, five-question exorcism, separate Evelyn farewell, and departure ending
 - [x] Level 1 ambient recordings, telephone ring, music-box melody, candlelight, torch, and story apparitions
 - [ ] Enemy AI and combat

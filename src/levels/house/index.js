@@ -6,7 +6,7 @@ import { setupHouseLighting } from './lighting.js'
 
 // Current house scene exported from Blender. Includes the surrounding forest and
 // four boundary meshes named Plane, Plane.001, Plane.002 and Plane.003.
-const HOUSE_MODEL_URL = '/levels/house/models/vale-manor.glb'
+const HOUSE_MODEL_URL = '/levels/house/models/house-runtime.glb'
 const HOUSE_SCALE = 0.15
 
 const DOOR_SPEED = 12
@@ -465,6 +465,7 @@ export async function loadHouse(level) {
     investigationItems,
     ramps: [],
     model,
+    animations: gltf.animations,
     spawn,
     spawnYaw,
     modelSize: size,
@@ -520,7 +521,6 @@ function buildLabelledCollisionWorld(model) {
 
   model.traverse((object) => {
     if (!shouldUseForCollision(object)) return
-
     object.updateWorldMatrix(true, false)
 
     const cleanName =
@@ -608,6 +608,24 @@ function buildLabelledCollisionWorld(model) {
         },
       )
 
+      return
+    }
+
+    // The repeated decorative gravel tiles each have ~95k triangles but are
+    // almost flat (about 12 cm of height variation). A thin walkable box for
+    // each tile preserves its footprint without making the Octree process
+    // hundreds of thousands of triangles before the level can start.
+    if (/^gravel_road_in_village\d*$/i.test(object.name)) {
+      const box = new THREE.Box3().setFromObject(object)
+      const size = box.getSize(new THREE.Vector3())
+      const thickness = Math.max(size.y, 0.15)
+      const centre = box.getCenter(new THREE.Vector3())
+      centre.y = box.max.y - thickness / 2
+      const collisionMesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, thickness, size.z))
+      collisionMesh.position.copy(centre)
+      collisionMesh.name = `COLLISION_GRAVEL_${object.name}`
+      collisionRoot.add(collisionMesh)
+      names.push(`${object.name} [walkable proxy]`)
       return
     }
 
@@ -1510,12 +1528,6 @@ function createInvestigationItems(model) {
       'Phone',
     )
 
-  const tableSetting =
-    findObjectCaseInsensitive(
-      model,
-      'Table Set',
-    )
-
   const items = []
 
   if (newspaper) {
@@ -1526,10 +1538,9 @@ function createInvestigationItems(model) {
       title: 'Newspaper clipping',
       foundAt: 'Front porch',
       storyNote:
-        'Evelyn Vale vanished from this house. Daniel said she ran away, but neighbours heard a girl crying.',
+        'The Vale County Herald reports that Evelyn Vale, sixteen, vanished overnight. Neighbours had heard footsteps upstairs and seen lights moving after the family went to bed. No trace of Evelyn was found. The article includes an intact photograph of her.',
       riteNote:
-        'Rite fact: the spirit must be called Evelyn Vale, not “the Vale girl.”',
-      removeOnInspect: true,
+        'Her full name and face are preserved here: Evelyn Vale.',
     })
   } else {
     console.warn(
@@ -1545,9 +1556,9 @@ function createInvestigationItems(model) {
       title: 'Vale family photograph',
       foundAt: 'Entrance room',
       storyNote:
-        'Daniel, Margaret and Evelyn are pictured together. Evelyn is holding a small music box.',
+        'Daniel, Margaret and Evelyn stand together, but Evelyn’s face has been scratched out. Her face is intact in the newspaper photograph.',
       riteNote:
-        'Rite fact: the music box belonged to Margaret Vale and is Evelyn’s likely anchor.',
+        'Someone defaced this portrait after Evelyn disappeared. Find out who and why.',
     })
   } else {
     console.warn(
@@ -1557,31 +1568,13 @@ function createInvestigationItems(model) {
 
   if (phone) {
     items.push({
-      id: 'kitchen-phone',
+      id: 'bedroom-phone',
       object: phone,
       prompt: 'The telephone is silent',
     })
   } else {
     console.warn(
       'House investigation prop not found: Phone',
-    )
-  }
-
-  if (tableSetting) {
-    items.push({
-      id: 'fourth-place-setting',
-      object: tableSetting,
-      prompt: 'Press E to inspect the fourth place setting',
-      title: 'Fourth place setting',
-      foundAt: 'Dining room',
-      storyNote:
-        'The table is laid for four, although the Vale family had only three members.',
-      riteNote:
-        'Rite fact: another presence is in the house. Do not confuse it with Evelyn during the release.',
-    })
-  } else {
-    console.warn(
-      'House investigation prop not found: Table Set',
     )
   }
 

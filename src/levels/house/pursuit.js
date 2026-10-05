@@ -51,8 +51,8 @@ export class HousePursuit {
     return this.state
   }
 
-  retry() {
-    this.start(this.checkpoint)
-    return this.checkpoint.clone()
+  retry(position = this.checkpoint) {
+    this.start(position)
+    return position.clone()
   }
 }
