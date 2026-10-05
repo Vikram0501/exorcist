@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { createTrainCollision } from './collision.js'
 import { createCarriageLights, setupTrainLighting } from './lighting.js'
 import { createTrainTerrain } from './terrain.js'
 
@@ -43,7 +44,7 @@ function placeCarriage(gltf, z, level, carriages, carriageType, instanceIndex) {
   group.add(model)
   const controller = createCarriageLights(group, carriageType, instanceIndex)
   group.position.z = z
-  carriages.push({ group, model, controller })
+  carriages.push({ group, model, controller, carriageType, instanceIndex })
   level.add(group)
 }
 
@@ -68,6 +69,7 @@ export function loadTrain(level) {
     }
 
     const controllers = carriages.map(c => c.controller)
+    const trainCollision = createTrainCollision(level, carriages)
 
     const carriage02Size = (() => {
       const m = cloneCarriage(cachedGltf[CARRIAGE_02_PATH])
@@ -82,7 +84,7 @@ export function loadTrain(level) {
     const spawnYaw = Math.PI
 
     return {
-      colliders: [],
+      colliders: [trainCollision],
       colliderHelpers: [],
       lightHelpers: [],
       doors: [],
