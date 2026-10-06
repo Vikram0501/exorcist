@@ -1028,6 +1028,8 @@ if (this.loaded) {
     const loadId =
       ++this.levelLoadId
 
+    const loadStarted = performance.now()
+
 
     // Remove old level.
     this.unloadCurrentLevel()
@@ -1396,10 +1398,39 @@ if (this.loaded) {
           this.camera.updateProjectionMatrix()
 
 
+          // Compile every shader while the overlay still shows LOADING:
+          // the train level alone has 119 point lights and ~410 carriage
+          // materials, and compiling them on the first visible frame makes
+          // the level appear to hang after loading.
+          const warmupStarted = performance.now()
+          try {
+            if (this.renderer.compileAsync) {
+              await this.renderer.compileAsync(this.scene, this.camera)
+            } else {
+              this.renderer.compile(this.scene, this.camera)
+            }
+          } catch (err) {
+            console.warn('Shader warmup failed:', err)
+          }
+          console.debug(
+            `[load:${levelName}] shader warmup: ${(performance.now() - warmupStarted).toFixed(0)}ms`,
+          )
+
+          // A newer level was selected during warmup.
+          if (loadId !== this.levelLoadId) {
+            disposeLevel(levelRoot)
+            return false
+          }
+
+
           this.loaded = true
 
           window.dispatchEvent(
             new CustomEvent('levelloaded', { detail: { levelName } })
+          )
+
+          console.debug(
+            `[load:${levelName}] total: ${(performance.now() - loadStarted).toFixed(0)}ms`,
           )
 
           console.log(

@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { addLevelLights } from '../shared/lighting.js'
+import { loadingManager } from '../../core/loading.js'
 
 
 // ── Per-type light configs ──────────────────────────────
@@ -235,6 +236,68 @@ const CARRIAGE_02_PRESETS = [
 ]
 
 
+// ── Light budget ────────────────────────────────────────
+//
+// three.js inlines every scene light into every material's shader, so GPU
+// driver compile time grows with (lights x materials). Level 2 authored 119
+// point lights, which measured ~29s of shader compilation on load against
+// ~1s with no carriage lights — while level 1 keeps ~5 lights and level 3
+// keeps 2. We therefore only give a handful of lamps per carriage a real
+// PointLight and widen their radius to keep the corridor evenly washed.
+
+const CARRIAGE_LIGHT_BUDGET = { '01': 3, '02': 8 }
+// Authored lamps sit ~1.2 m apart with distance 3.5, so every point of the
+// corridor was within reach of several lamps. The budgeted lamps are 4-6 m
+// apart, so their cutoff has to reach the next lamp or the corridor goes
+// black between pools (3.5 and 9 both showed hard dark bands). Carriage 01
+// keeps its authored 3.5 since it has not been thinned out.
+const LIGHT_DISTANCE = { '01': 3.5, '02': 12 }
+// The authored carriage-02 presets assume ~30 overlapping lamps; with a
+// handful of wider lamps the same intensity reads far too dark, so both
+// steady intensities and flicker ranges are scaled up together. Carriage 01
+// only ever had three lamps and keeps its original intensity.
+const LIGHT_INTENSITY_SCALE = { '01': 1, '02': 3 }
+
+// Presets mark dead lamps with `null`. The authored code passed that through
+// as `undefined`, which THREE turns into a white intensity-1 light — i.e. the
+// "broken" lamps were the brightest lights in the Dark/Broken carriage and
+// dominated the approved baseline look. Keep that behaviour (a handful of
+// white lamps among the dim brown ones) instead of dropping them.
+const BROKEN_LAMP_PRESET = { color: 0xffffff, intensity: 1 }
+
+function pickSpreadIndices(sourceIndices, count) {
+  if (count <= 0 || sourceIndices.length === 0) return []
+  if (count >= sourceIndices.length) return [...sourceIndices]
+  const picked = []
+  for (let i = 0; i < count; i++) {
+    picked.push(sourceIndices[Math.round((i * (sourceIndices.length - 1)) / (count - 1))])
+  }
+  return picked
+}
+
+// Spread the budget across both decks so the upper row is not left dark.
+function selectLampIndices(positions, budget) {
+  const pool = positions.map((_, index) => index)
+  const lower = []
+  const upper = []
+  pool.forEach((index) => (positions[index].y >= 4 ? upper : lower).push(index))
+
+  if (upper.length === 0) {
+    return pickSpreadIndices(lower, Math.min(budget, lower.length))
+  }
+
+  // The ceiling pools are the carriage's signature look, so the upper deck
+  // keeps a fixed 40% share of the budget instead of a pro-rata sliver.
+  const upperBudget = Math.min(upper.length, Math.max(1, Math.round(budget * 0.4)))
+  const lowerBudget = Math.min(lower.length, budget - upperBudget)
+
+  return [
+    ...pickSpreadIndices(lower, lowerBudget),
+    ...pickSpreadIndices(upper, upperBudget),
+  ].sort((a, b) => a - b)
+}
+
+
 // ── CarriageLightController ─────────────────────────────
 
 class CarriageLightController {
@@ -416,7 +479,7 @@ function addTrainNightSky(level) {
   stars.name = 'star-field'
   sky.add(stars)
 
-  const moonTexture = new THREE.TextureLoader().load('/textures/haunted-moon.png')
+  const moonTexture = new THREE.TextureLoader(loadingManager).load('/textures/haunted-moon.png')
   moonTexture.colorSpace = THREE.SRGBColorSpace
 
   const moon = new THREE.Sprite(
@@ -452,13 +515,12 @@ export function createCarriageLights(carriageGroup, carriageType = '02', instanc
   const lights = []
   const helpers = []
 
-  let color, intensity, distance, decay, positions, presetOverrides, flickerOverrides
+  let color, intensity, decay, positions, presetOverrides, flickerOverrides
 
   if (carriageType === '01') {
     const cfg = CARRIAGE_01_CONFIG
     color = cfg.color
     intensity = cfg.intensity
-    distance = cfg.distance
     decay = cfg.decay
     positions = cfg.positions
     presetOverrides = null
@@ -466,7 +528,6 @@ export function createCarriageLights(carriageGroup, carriageType = '02', instanc
   } else {
     const base = CARRIAGE_02_BASE
     const preset = CARRIAGE_02_PRESETS[instanceIndex % CARRIAGE_02_PRESETS.length]
-    distance = base.distance
     decay = base.decay
     positions = base.positions
     presetOverrides = preset.lights
@@ -474,55 +535,77 @@ export function createCarriageLights(carriageGroup, carriageType = '02', instanc
   }
 
   const presets = []
+  const debugPositions = []
+  const flickerFor = []
+  const intensityScale = LIGHT_INTENSITY_SCALE[carriageType] ?? 1
 
-  for (let i = 0; i < positions.length; i++) {
-    const cfg = positions[i]
-    const lightColor = (presetOverrides && presetOverrides[i])
-      ? presetOverrides[i].color
-      : color
-    const lightIntensity = (presetOverrides && presetOverrides[i])
-      ? presetOverrides[i].intensity
-      : intensity
+  const budget = CARRIAGE_LIGHT_BUDGET[carriageType] ?? positions.length
 
-    const light = new THREE.PointLight(lightColor, lightIntensity, distance, decay)
+  for (const sourceIndex of selectLampIndices(positions, budget)) {
+    const cfg = positions[sourceIndex]
+    const preset = (presetOverrides && presetOverrides[sourceIndex]) ||
+      (presetOverrides ? BROKEN_LAMP_PRESET : { color, intensity })
+
+    const light = new THREE.PointLight(
+      preset.color,
+      preset.intensity * intensityScale,
+      LIGHT_DISTANCE[carriageType] ?? 0,
+      decay,
+    )
     light.position.set(cfg.x, cfg.y, cfg.z)
     light.castShadow = false
-    light.name = `carriage_light_${i}`
+    light.name = `carriage_light_${lights.length}`
     carriageGroup.add(light)
     lights.push(light)
-    presets.push({ color: lightColor, intensity: lightIntensity })
-
-    const helper = new THREE.PointLightHelper(light, 0.3)
-    helper.visible = false
-    carriageGroup.add(helper)
-    helpers.push(helper)
+    presets.push({ color: preset.color, intensity: preset.intensity * intensityScale })
+    debugPositions.push(cfg)
+    if (flickerOverrides && flickerOverrides[sourceIndex]) {
+      const flicker = flickerOverrides[sourceIndex]
+      flickerFor.push([lights.length - 1, {
+        speed: flicker.speed,
+        minIntensity: flicker.minIntensity * intensityScale,
+        maxIntensity: flicker.maxIntensity * intensityScale,
+      }])
+    }
   }
 
   const controller = new CarriageLightController(carriageGroup, lights, helpers, presets)
 
   // Apply flicker overrides from preset
-  if (flickerOverrides) {
-    for (let i = 0; i < flickerOverrides.length; i++) {
-      if (flickerOverrides[i]) {
-        controller.setFlicker(i, flickerOverrides[i])
-      }
-    }
+  for (const [lightIndex, flicker] of flickerFor) {
+    controller.setFlicker(lightIndex, flicker)
   }
 
-  // Store debug label sprites (hidden by default)
+  // Debug helpers and label sprites are created on first toggle (K),
+  // not eagerly: every light would otherwise spawn two hidden objects
+  // and a canvas during level load.
   controller._debugLabels = []
-  for (let i = 0; i < lights.length; i++) {
-    const pos = positions[i]
-    const label = createDebugLabel(
-      lights[i],
-      `C${carriageType}-${instanceIndex} L${i}\n${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}`
-    )
-    label.visible = false
-    carriageGroup.add(label)
-    controller._debugLabels.push(label)
-  }
+  controller._debugMeta = { carriageType, instanceIndex, positions: debugPositions }
 
   return controller
+}
+
+
+function ensureDebugObjects(controller) {
+  if (controller.helpers.length > 0) return
+
+  const { carriageType, instanceIndex, positions } = controller._debugMeta
+
+  for (let i = 0; i < controller.lights.length; i++) {
+    const light = controller.lights[i]
+    const pos = positions[i]
+
+    const helper = new THREE.PointLightHelper(light, 0.3)
+    controller.group.add(helper)
+    controller.helpers.push(helper)
+
+    const label = createDebugLabel(
+      light,
+      `C${carriageType}-${instanceIndex} L${i}\n${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}`
+    )
+    controller.group.add(label)
+    controller._debugLabels.push(label)
+  }
 }
 
 
@@ -547,6 +630,7 @@ export function disposeCarriageLights(carriageGroup) {
  */
 export function toggleCarriageLightDebug(controllers, visible) {
   for (const ctrl of controllers) {
+    if (visible) ensureDebugObjects(ctrl)
     for (const helper of ctrl.helpers) {
       helper.visible = visible
     }

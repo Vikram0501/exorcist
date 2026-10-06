@@ -21,6 +21,23 @@ const respawnBtn =
 
 const trainBtn = document.getElementById('trainBtn')
 const level3Btn = document.getElementById('highwayBtn')
+
+// startLevel() replaces a button's markup with "LOADING...", so remember the
+// originals and restore them whenever buttons are reset.
+const buttonMarkup = new Map([
+  [playBtn, playBtn.innerHTML],
+  [trainBtn, trainBtn.innerHTML],
+  [level3Btn, level3Btn.innerHTML],
+])
+
+let loadingButton = null
+
+window.addEventListener('assetprogress', (event) => {
+  if (!loadingButton) return
+  const { itemsLoaded, itemsTotal } = event.detail
+  const pct = itemsTotal > 0 ? Math.round((itemsLoaded / itemsTotal) * 100) : 0
+  loadingButton.textContent = `LOADING ${pct}%`
+})
 const controlsBtn = document.getElementById('controlsBtn')
 const controlsDialog = document.getElementById('controlsDialog')
 
@@ -35,6 +52,9 @@ function resetLevelButtons() {
     <span><strong class="level-card-title">Vale Manor</strong><small class="level-card-copy">Old Mill Road · A missing-person investigation</small></span>
     <span class="level-card-action">ENTER</span>
   `
+
+  trainBtn.innerHTML = buttonMarkup.get(trainBtn)
+  level3Btn.innerHTML = buttonMarkup.get(level3Btn)
 
   playBtn.disabled = false
   trainBtn.disabled = false
@@ -92,6 +112,8 @@ async function startLevel(
   disableLevelButtons()
 
 
+  loadingButton = button
+
   button.textContent =
     'LOADING...'
 
@@ -139,6 +161,12 @@ async function startLevel(
 
 
     resetLevelButtons()
+
+  }
+
+  finally {
+
+    loadingButton = null
 
   }
 
