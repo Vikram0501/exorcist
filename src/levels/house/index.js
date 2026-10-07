@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { Octree } from 'three/addons/math/Octree.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
+import { loadingManager } from '../../core/loading.js'
 import { setupHouseLighting } from './lighting.js'
 
 // Current house scene exported from Blender. Includes the surrounding forest and
@@ -343,7 +344,7 @@ export function getDoorColliders(doors) {
 // -----------------------------------------------------------------------------
 
 export async function loadHouse(level) {
-  const loader = new GLTFLoader()
+  const loader = new GLTFLoader(loadingManager)
   loader.setMeshoptDecoder(MeshoptDecoder)
   const gltf = await loader.loadAsync(HOUSE_MODEL_URL)
   const model = gltf.scene

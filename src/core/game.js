@@ -1032,6 +1032,8 @@ if (this.loaded) {
     const loadId =
       ++this.levelLoadId
 
+    const loadStarted = performance.now()
+
 
     // Remove old level.
     this.unloadCurrentLevel()
@@ -1400,10 +1402,37 @@ if (this.loaded) {
           this.camera.updateProjectionMatrix()
 
 
+          // Warm shaders while the overlay still shows LOADING so their
+          // first compilation does not interrupt the first playable frame.
+          const warmupStarted = performance.now()
+          try {
+            if (this.renderer.compileAsync) {
+              await this.renderer.compileAsync(this.scene, this.camera)
+            } else {
+              this.renderer.compile(this.scene, this.camera)
+            }
+          } catch (err) {
+            console.warn('Shader warmup failed:', err)
+          }
+          console.debug(
+            `[load:${levelName}] shader warmup: ${(performance.now() - warmupStarted).toFixed(0)}ms`,
+          )
+
+          // A newer level was selected during warmup.
+          if (loadId !== this.levelLoadId) {
+            disposeLevel(levelRoot)
+            return false
+          }
+
+
           this.loaded = true
 
           window.dispatchEvent(
             new CustomEvent('levelloaded', { detail: { levelName } })
+          )
+
+          console.debug(
+            `[load:${levelName}] total: ${(performance.now() - loadStarted).toFixed(0)}ms`,
           )
 
           console.log(

@@ -1,7 +1,8 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { loadingManager } from '../../core/loading.js'
 import { createCarriageLights, setupTrainLighting } from './lighting.js'
-import { createTrainTerrain } from './terrain.js'
+import { createTrainTerrain, preloadTrainTerrain } from './terrain.js'
 import { createTrainCollision } from './collision.js'
 
 const TRAIN_SCALE = 0.1
@@ -9,13 +10,19 @@ const TRAIN_SCALE = 0.1
 const CARRIAGE_01_PATH = '/models/Train_Carriage_New_01.glb'
 const CARRIAGE_02_PATH = '/models/Train_Carriage_New_02.glb'
 
+const ZOMBIE_PATH = '/models/zombie_the_burnt.glb'
+const ZOMBIE_TARGET_HEIGHT = 1.8
+const ZOMBIE_POSITION = new THREE.Vector3(9, 0, -118)
+const ZOMBIE_YAW = -Math.PI / 2
+
+
 const cachedGltf = {}
 const pendingGltf = {}
 
 function loadModel(path) {
   if (cachedGltf[path]) return Promise.resolve(cachedGltf[path])
   if (pendingGltf[path]) return pendingGltf[path]
-  const loader = new GLTFLoader()
+  const loader = new GLTFLoader(loadingManager)
   pendingGltf[path] = loader.loadAsync(path).then(gltf => {
     cachedGltf[path] = gltf
     delete pendingGltf[path]
@@ -63,7 +70,65 @@ export function updateTrainCarriageVisibility(carriages, playerZ) {
   }
 }
 
+async function placeBurntZombie(level, trainTerrain) {
+  let gltf
+
+  try {
+    gltf = await loadModel(ZOMBIE_PATH)
+  } catch (err) {
+    console.warn('Failed to load zombie_the_burnt.glb:', err)
+    return null
+  }
+
+  const model = gltf.scene.clone(true)
+  model.name = 'zombie_the_burnt'
+  model.rotation.set(0, 0, 0)
+  model.scale.setScalar(1)
+  model.position.set(0, 0, 0)
+
+  let bounds = new THREE.Box3().setFromObject(model)
+  let size = bounds.getSize(new THREE.Vector3())
+
+  if (size.y < Math.max(size.x, size.z) * 0.7) {
+    model.rotation.x = -Math.PI / 2
+    bounds = new THREE.Box3().setFromObject(model)
+    size = bounds.getSize(new THREE.Vector3())
+  }
+
+  const scale = ZOMBIE_TARGET_HEIGHT / Math.max(size.y, 0.001)
+  model.scale.setScalar(scale)
+
+  model.traverse((child) => {
+    if (!child.isMesh) return
+    child.castShadow = true
+    child.receiveShadow = true
+    child.frustumCulled = false
+    child.userData.sharedAsset = true
+  })
+
+  let groundY = 0
+
+  if (trainTerrain.terrain) {
+    const ray = new THREE.Raycaster(
+      new THREE.Vector3(ZOMBIE_POSITION.x, 100, ZOMBIE_POSITION.z),
+      new THREE.Vector3(0, -1, 0)
+    )
+    const hits = ray.intersectObject(trainTerrain.terrain, true)
+    if (hits.length > 0) groundY = hits[0].point.y
+  }
+
+  const group = new THREE.Group()
+  group.name = 'zombie_the_burnt_group'
+  group.position.set(ZOMBIE_POSITION.x, groundY - bounds.min.y * scale, ZOMBIE_POSITION.z)
+  group.rotation.y = ZOMBIE_YAW
+  group.add(model)
+  level.add(group)
+}
+
+
 export function loadTrain(level) {
+  preloadTrainTerrain()
+  loadModel(ZOMBIE_PATH).catch(() => null)
   return Promise.all([loadModel(CARRIAGE_01_PATH), loadModel(CARRIAGE_02_PATH)]).then(async () => {
     const carriages = []
 
@@ -82,7 +147,8 @@ export function loadTrain(level) {
     const colliders = await createTrainCollision(carriages)
 
     setupTrainLighting(level, carriages[carriages.length - 1].model, carriage02Size)
-    const trainTerrain = createTrainTerrain(level)
+    const trainTerrain = await createTrainTerrain(level)
+    await placeBurntZombie(level, trainTerrain)
 
     // Player spawns at the far end, facing back toward carriage 01.
     const spawn = new THREE.Vector3(2.8, 2, -127)
