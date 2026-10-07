@@ -25,7 +25,8 @@ test('loaded carriage bounds follow their parents, expose the spawn car, and all
   globalThis.window = { addEventListener() {} }
   try {
     const level = await loadTrain(new THREE.Group())
-    const { carriages, spawn, colliders } = level
+    const { carriages, spawn, colliders, zombie } = level
+    assert.ok(zombie && Number.isFinite(zombie.footOffset), 'the stalker always sits on the floor line')
     for (const { model, bounds } of carriages) {
       const actual = new THREE.Box3().setFromObject(model)
       assert.ok(actual.min.distanceTo(bounds.min) < 0.00001)
@@ -33,6 +34,10 @@ test('loaded carriage bounds follow their parents, expose the spawn car, and all
     }
     assert.ok(carriages.at(-1).group.visible, 'the spawn carriage must be visible on the first frame')
     assert.ok(carriages.at(-1).bounds.containsPoint(spawn))
+    const spawnLights = carriages.at(-1).controller.lights
+    assert.ok(spawnLights.length > 0, 'the spawn carriage must be lit')
+    assert.ok(spawnLights.every(light => light.color.getHex() === 0xffcc88), 'the spawn carriage uses the warm/normal preset')
+    assert.ok(carriages.slice(0, -1).every(c => c.controller.lights.length === 0), 'every other carriage stays dark')
     const input = { yaw: 0, pitch: 0, isDown: code => code === 'KeyW' }
     const player = new Player(new THREE.PerspectiveCamera(), input)
     player.reset(spawn, level.spawnYaw)

@@ -54,7 +54,8 @@ import {
   updateDoors,
 } from '../levels/house/index.js'
 
-import { loadTrain, updateTrainCarriageVisibility } from '../levels/train/index.js'
+import { loadTrain, updateTrainCarriageVisibility, updateTrainCarriageLights } from '../levels/train/index.js'
+import { TrainZombie } from '../levels/train/zombie.js'
 import { toggleCarriageLightDebug } from '../levels/train/lighting.js'
 import { createFlashlight } from '../levels/shared/lighting.js'
 
@@ -185,6 +186,12 @@ export class Game {
     this.obstacles = null
 
     this.trainTerrain = null
+
+    this.trainCarriages = null
+
+    this.trainZombie = null
+
+    this.trainCaught = false
 
     this.carriageLightControllers = null
 
@@ -934,6 +941,18 @@ if (this.loaded) {
 
     if (this.currentLevel === 'train' && this.trainCarriages) {
       updateTrainCarriageVisibility(this.trainCarriages, this.player.position.z)
+      updateTrainCarriageLights(this.trainCarriages, this.player.position.z)
+    }
+
+    if (this.currentLevel === 'train' && this.trainZombie && !this.trainCaught) {
+      const outcome = this.trainZombie.update(dt, {
+        position: this.player.position,
+        velocity: this.player.velocity,
+        crouching: this.player.crouching,
+        flashlightOn: (this.flashlight ? this.flashlight.intensity : 0) > 0,
+      })
+
+      if (outcome === 'caught') this.onPlayerCaught()
     }
 
     if (this.currentLevel === 'house') {
@@ -1085,6 +1104,7 @@ if (this.loaded) {
             trainTerrain,
             carriages,
             controllers,
+            zombie,
             investigationItems,
             moonLight,
             roadPath,
@@ -1158,6 +1178,18 @@ if (this.loaded) {
 
           this.carriageLightControllers =
             controllers || null
+
+          this.trainCaught = false
+
+          this.trainZombie = levelName === 'train' && zombie
+            ? new TrainZombie({
+                group: zombie.group,
+                mixer: zombie.mixer,
+                footOffset: zombie.footOffset,
+                carriages: carriages || [],
+                colliders: this.colliders,
+              })
+            : null
 
 
           // ======================================
@@ -1610,6 +1642,10 @@ if (this.loaded) {
 
     this.trainCarriages = null
 
+    this.trainZombie?.dispose()
+    this.trainZombie = null
+    this.trainCaught = false
+
     this.carriageLightControllers = null
 
     this.carriageLightDebug = false
@@ -1747,7 +1783,9 @@ if (this.loaded) {
 
       hudMode.textContent =
         this.currentLevel
-          ? this.player.flying ? 'UNNATURAL ELEVATION' : 'ON FOOT'
+          ? this.player.flying
+            ? 'UNNATURAL ELEVATION'
+            : this.trainZombie?.hidden ? 'UNSEEN' : 'ON FOOT'
           : 'AWAITING ENTRY'
     }
 
@@ -1772,7 +1810,15 @@ if (this.loaded) {
       const isHouse = this.currentLevel === 'house'
 
       hudObjective.style.display =
-        isHouse ? '' : 'none'
+        isHouse || this.currentLevel === 'train' ? '' : 'none'
+
+      if (this.currentLevel === 'train') {
+
+        hudObjective.textContent =
+          this.trainZombie && this.trainZombie.state !== 'dormant'
+            ? 'IT WALKS THE CARRIAGES · CROUCH BETWEEN THE SEATS · TORCH OFF'
+            : 'CROSS INTO THE NEXT CARRIAGE'
+      }
 
       if (isHouse) {
 
@@ -2847,6 +2893,66 @@ if (this.loaded) {
 
     }
 
+    const message = crashed
+      ? 'YOU CRASHED ON THE HIGHWAY.'
+      : wrongName
+        ? 'WRONG NAME.'
+        : ghostName + ' REACHED THE FINISH FIRST.'
+
+    this.showRetryScreen({
+      message,
+      subMessage: 'THE RACE WAS NEVER YOURS.',
+      onRetry: () => this.restartHighway(),
+    })
+
+  }
+
+
+  onPlayerCaught() {
+
+    if (this.trainCaught) return
+
+    this.trainCaught = true
+
+    this.input.release()
+
+    this.showRetryScreen({
+      title: 'CAUGHT',
+      message: 'THE UNDEAD FOUND YOU IN THE CARRIAGE.',
+      subMessage: 'CROUCH BETWEEN THE SEATS WITH THE TORCH OFF.',
+      onRetry: () => this.restartTrain(),
+    })
+
+  }
+
+
+  restartTrain() {
+
+    if (this.currentLevel !== 'train') {
+      return
+    }
+
+    this.hideGameOver()
+
+    document.getElementById('overlay')?.classList.add('hidden')
+
+    this.trainCaught = false
+
+    this.loaded = false
+
+    this.loadLevel('train')
+
+    this.input.lock()
+
+  }
+
+
+  showRetryScreen({
+    title = 'GAME OVER',
+    message,
+    subMessage,
+    onRetry,
+  }) {
 
     const el =
       document.createElement('div')
@@ -2876,7 +2982,7 @@ if (this.loaded) {
       document.createElement('div')
 
     goTitle.textContent =
-      'GAME OVER'
+      title
 
     goTitle.style.color = '#ff3333'
 
@@ -2897,22 +3003,8 @@ if (this.loaded) {
     const goMsg =
       document.createElement('div')
 
-    if (crashed) {
-
-      goMsg.textContent =
-        'YOU CRASHED ON THE HIGHWAY.'
-
-    } else if (wrongName) {
-
-      goMsg.textContent =
-        'WRONG NAME.'
-
-    } else {
-
-      goMsg.textContent =
-        ghostName + ' REACHED THE FINISH FIRST.'
-
-    }
+    goMsg.textContent =
+      message
 
     goMsg.style.color = '#cc2222'
 
@@ -2930,7 +3022,7 @@ if (this.loaded) {
       document.createElement('div')
 
     goMsg2.textContent =
-      'THE RACE WAS NEVER YOURS.'
+      subMessage
 
     goMsg2.style.color = '#aa1111'
 
@@ -2982,11 +3074,7 @@ if (this.loaded) {
 
     restartBtn.addEventListener(
       'click',
-      () => {
-
-        this.restartHighway()
-
-      }
+      onRetry
     )
 
     el.appendChild(restartBtn)

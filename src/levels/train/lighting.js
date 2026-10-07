@@ -255,6 +255,7 @@ class CarriageLightController {
       }
     })
 
+    this.cutOut = false
     this._time = 0
   }
 
@@ -271,6 +272,19 @@ class CarriageLightController {
         const noise = Math.random() * 0.1
         this.lights[i].intensity = f.minIntensity + (flick + noise) * range
       }
+    }
+  }
+
+  // Switch every light off for good. `visible = false` makes the renderer
+  // skip these point lights entirely, so they leave the GPU light list and
+  // the shaders recompile with fewer lights.
+  cut() {
+    this.cutOut = true
+    for (let i = 0; i < this.lights.length; i++) {
+      this.lights[i].visible = false
+      this.lights[i].intensity = 0
+      this.states[i].broken = true
+      this.states[i].flicker = null
     }
   }
 
@@ -451,9 +465,12 @@ function addTrainNightSky(level) {
  * @param {THREE.Group} carriageGroup
  * @param {'01'|'02'} carriageType
  * @param {number} instanceIndex  - 0-3, only used for type '02'
+ * @param {object} [options]
+ * @param {boolean} [options.lit] - false for carriages that must stay dark
+ * @param {number} [options.presetIndex] - preset to apply, defaults to instanceIndex
  * @returns {CarriageLightController}
  */
-export function createCarriageLights(carriageGroup, carriageType = '02', instanceIndex = 0) {
+export function createCarriageLights(carriageGroup, carriageType = '02', instanceIndex = 0, { lit = true, presetIndex = instanceIndex } = {}) {
   const lights = []
   const helpers = []
 
@@ -470,7 +487,7 @@ export function createCarriageLights(carriageGroup, carriageType = '02', instanc
     flickerOverrides = null
   } else {
     const base = CARRIAGE_02_BASE
-    const preset = CARRIAGE_02_PRESETS[instanceIndex % CARRIAGE_02_PRESETS.length]
+    const preset = CARRIAGE_02_PRESETS[presetIndex % CARRIAGE_02_PRESETS.length]
     distance = base.distance
     decay = base.decay
     positions = base.positions
@@ -480,11 +497,13 @@ export function createCarriageLights(carriageGroup, carriageType = '02', instanc
 
   const presets = []
 
-  // A few wider lights cover each carriage without compiling a shader for
-  // every decorative fixture in all four copies of carriage 02.
-  const selected = carriageType === '01'
-    ? [1]
-    : [0, 12, 24].filter(index => presetOverrides[index] !== null)
+  // Every other authored fixture becomes a light: positions are ~2 units
+  // apart, so half of them still overlap into even coverage at half the
+  // shader cost. Fixtures the preset marks as broken are skipped, and dark
+  // carriages get no lights at all so they never reach the GPU light list.
+  const selected = !lit ? []
+    : positions.map((_, index) => index)
+      .filter(index => index % 2 === 0 && (!presetOverrides || presetOverrides[index] !== null))
 
   for (const i of selected) {
     const cfg = positions[i]

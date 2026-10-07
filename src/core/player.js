@@ -4,6 +4,8 @@ import { Capsule } from 'three/addons/math/Capsule.js'
 const DEFAULT_MOVEMENT = { radius: 0.2, walk: 3, sprint: 5, acceleration: 20, jump: 5 }
 const HOUSE_MOVEMENT = { radius: 0.35, walk: 4.8, sprint: 8, acceleration: 45, jump: 7.5 }
 const EYE_HEIGHT = 1
+const CROUCH_EYE_HEIGHT = 0.55
+const CROUCH_SPEED = 0.45
 const DAMPING = 10
 const GRAVITY = -20
 const STEP_HEIGHT = 0.5
@@ -18,6 +20,7 @@ export class Player {
     this.position.set(20, EYE_HEIGHT, 25)
     this.isGrounded = true
     this.flying = false
+    this.crouching = false
 
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyF' && this.input.isLocked && !e.repeat) {
@@ -31,11 +34,23 @@ export class Player {
     this.movement = levelName === 'house' ? HOUSE_MOVEMENT : DEFAULT_MOVEMENT
   }
 
+  get eyeHeight() {
+    return this.crouching ? CROUCH_EYE_HEIGHT : EYE_HEIGHT
+  }
+
+  setCrouching(value) {
+    if (this.crouching === value) return
+    const previous = this.eyeHeight
+    this.crouching = value
+    this.position.y += this.eyeHeight - previous
+  }
+
   reset(spawn, yaw = 0) {
     this.velocity.set(0, 0, 0)
     this.position.copy(spawn)
     this.isGrounded = true
     this.flying = false
+    this.crouching = false
     this.input.yaw = yaw
     this.input.pitch = 0
     this.updateRotation()
@@ -192,7 +207,7 @@ export class Player {
       this.position.y =
         Math.max(
           this.position.y,
-          EYE_HEIGHT
+          this.eyeHeight
         )
 
     }
@@ -213,7 +228,7 @@ export class Player {
 
     const feetY =
       this.position.y -
-      EYE_HEIGHT
+      this.eyeHeight
 
 
     const start =
@@ -328,11 +343,11 @@ export class Player {
     // fall if the player walks beyond the model bounds.
     if (
       this.position.y <
-      EYE_HEIGHT
+      this.eyeHeight
     ) {
 
       this.position.y =
-        EYE_HEIGHT
+        this.eyeHeight
 
       if (
         this.velocity.y < 0
@@ -412,6 +427,8 @@ export class Player {
     const forward = this.getForward()
     const right = this.getRight()
 
+    this.setCrouching(!this.flying && this.input.isDown('KeyC'))
+
     const moveX = (this.input.isDown('KeyD') ? 1 : 0) - (this.input.isDown('KeyA') ? 1 : 0)
     const moveZ = (this.input.isDown('KeyW') ? 1 : 0) - (this.input.isDown('KeyS') ? 1 : 0)
 
@@ -422,7 +439,11 @@ export class Player {
     if (wish.lengthSq() > 0) wish.normalize()
 
     const sprinting = this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight')
-    const speed = sprinting ? this.movement.sprint : this.movement.walk
+    const speed = this.crouching
+      ? this.movement.walk * CROUCH_SPEED
+      : sprinting
+        ? this.movement.sprint
+        : this.movement.walk
 
     const targetVx = wish.x * speed
     const targetVz = wish.z * speed
@@ -456,7 +477,7 @@ export class Player {
 
   collide(colliders) {
     for (const c of colliders) {
-      const playerBottom = this.position.y - EYE_HEIGHT
+      const playerBottom = this.position.y - this.eyeHeight
       const playerTop = this.position.y + 0.1
       if (
         c.minY !== undefined &&
@@ -492,7 +513,7 @@ export class Player {
   }
 
   applyGravity(dt, colliders) {
-    const feetY = this.position.y - EYE_HEIGHT
+    const feetY = this.position.y - this.eyeHeight
     const walkableSurface = this.getWalkableSurface(colliders, feetY)
     if (
       this.velocity.y <= 0 &&
@@ -506,7 +527,7 @@ export class Player {
     }
 
     this.velocity.y += GRAVITY * dt
-    const nextFeetY = this.position.y - EYE_HEIGHT
+    const nextFeetY = this.position.y - this.eyeHeight
     const previousFeetY = nextFeetY - this.velocity.y * dt
     const landingSurface = this.getLandingSurface(colliders, previousFeetY, nextFeetY)
     if (landingSurface !== null) {
@@ -554,7 +575,7 @@ export class Player {
   }
 
   setGroundedSurface(surface) {
-    this.position.y = surface.top + EYE_HEIGHT
+    this.position.y = surface.top + this.eyeHeight
   }
 
   overlapsCollider(c) {
