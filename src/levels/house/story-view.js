@@ -71,7 +71,7 @@ export class HouseStoryView {
     if (active) this.remaining = Math.max(0, this.remaining - dt)
     this.caption.classList.toggle('hidden', this.remaining <= 0 || !active)
     const story = this.game.houseStory
-    if (story?.pursuit.state === 'caught' && this.outcome !== 'caught') this.showOutcome('caught')
+    if (story?.pursuit.state === 'caught' && story.jumpScareTime <= 0 && this.outcome !== 'caught') this.showOutcome('caught')
     if (story?.complete && story.time - story.endingTime > 5 && this.outcome !== 'complete') this.showOutcome('complete')
   }
 
@@ -84,10 +84,15 @@ export class HouseStoryView {
     const panel = document.createElement('div')
     panel.className = 'rite-panel'
     const title = document.createElement('h2')
-    title.textContent = type === 'caught' ? 'Elias found you' : 'The exorcism is complete'
+    const wrongAnswer = type === 'caught' && this.game.houseStory.failureReason === 'wrong-answer'
+    title.textContent = type === 'caught'
+      ? (wrongAnswer ? 'The rite failed' : 'Elias found you')
+      : 'The exorcism is complete'
     const copy = document.createElement('p')
     copy.textContent = type === 'caught'
-      ? 'Your field notes are safe. You can try again from the front of the house.'
+      ? (wrongAnswer
+          ? 'Elias broke the rite. Your field notes are safe. Return to the grave and begin again.'
+          : 'Your field notes are safe. You can try again from the front of the house.')
       : 'Evelyn Vale is at rest. Elias Wren has been banished from the manor.'
     const action = document.createElement('button')
     action.type = 'button'
@@ -136,7 +141,7 @@ export class HouseStoryView {
       button.textContent = choice
       button.addEventListener('click', () => {
         if (!story.answerRite(index)) {
-          this.renderRite('That does not match the evidence. Consult your field notes and try again.')
+          this.closeRite(false)
         } else if (story.released) {
           this.closeRite()
         } else {
@@ -152,9 +157,14 @@ export class HouseStoryView {
     const back = document.createElement('button')
     back.type = 'button'
     back.className = 'rite-back'
-    back.textContent = 'Step back / consult field notes'
+    back.textContent = 'Step back'
     back.addEventListener('click', () => this.closeRite())
-    panel.append(feedback, back)
+    const notes = document.createElement('button')
+    notes.type = 'button'
+    notes.className = 'rite-back'
+    notes.textContent = 'Open field notes'
+    notes.addEventListener('click', () => this.game.openEvidenceBook())
+    panel.append(feedback, notes, back)
     this.dialog.append(panel)
     panel.querySelector('button').focus()
   }

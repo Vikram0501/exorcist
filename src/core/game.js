@@ -54,7 +54,7 @@ import {
   updateDoors,
 } from '../levels/house/index.js'
 
-import { loadTrain } from '../levels/train/index.js'
+import { loadTrain, updateTrainCarriageVisibility } from '../levels/train/index.js'
 import { toggleCarriageLightDebug } from '../levels/train/lighting.js'
 import { createFlashlight } from '../levels/shared/lighting.js'
 
@@ -931,6 +931,10 @@ if (this.loaded) {
         ...doorColliders,
       ]
     )
+
+    if (this.currentLevel === 'train' && this.trainCarriages) {
+      updateTrainCarriageVisibility(this.trainCarriages, this.player.position.z)
+    }
 
     if (this.currentLevel === 'house') {
       this.houseAudio.update(this.player)
@@ -2154,7 +2158,7 @@ if (this.loaded) {
 
   openEvidenceBook() {
 
-    if (this.currentLevel !== 'house' || this.evidenceBookOpen || this.newspaperOpen || this.houseStoryView?.open) {
+    if (this.currentLevel !== 'house' || this.evidenceBookOpen || this.newspaperOpen || this.houseStoryView?.outcome) {
 
       return
     }
@@ -2171,8 +2175,10 @@ if (this.loaded) {
     this.houseStoryView?.updateJournal()
 
     evidenceBook.classList.remove('hidden')
+    evidenceBook.style.zIndex = this.houseStoryView?.open ? '111' : ''
 
     this.input.release()
+    document.getElementById('closeEvidenceNotepadBtn')?.focus()
   }
 
 
@@ -2184,10 +2190,13 @@ if (this.loaded) {
     this.evidenceBookOpen = false
 
     evidenceBook?.classList.add('hidden')
+    if (evidenceBook) evidenceBook.style.zIndex = ''
 
-    if (!fromLevelUnload && this.loaded) {
+    if (!fromLevelUnload && this.loaded && !this.houseStoryView?.open) {
 
       this.input.lock()
+    } else if (!fromLevelUnload && this.houseStoryView?.open) {
+      this.houseStoryView.dialog.querySelector('button')?.focus()
     }
   }
 
@@ -3877,6 +3886,8 @@ function disposeLevel(levelRoot) {
 
   levelRoot.traverse(
     (object) => {
+
+      if (object.userData.sharedAsset) return
 
       if (object.geometry) {
 

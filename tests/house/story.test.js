@@ -95,18 +95,29 @@ test('the telephone waits three seconds after the family frame closes', () => {
   assert.ok(story.nextScareAllowedAt <= story.time + 30)
 })
 
-test('wrong answers leave the rite recoverable and the completed rite cannot repeat', () => {
+test('wrong rite answers scare the player and require a respawn', () => {
   const story = createStory()
   assert.equal(RITE_QUESTIONS.length, 5)
   story.answerPhone()
   for (const id of ['evelyn-diary', 'music-box', 'annex-message', 'caretaker-record', 'daniel-confession']) story.inspect(id)
   story.pursuit.state = 'safe'
-  for (const question of RITE_QUESTIONS) {
-    const step = story.riteStep
-    assert.equal(story.answerRite((question.answer + 1) % 3), false)
-    assert.equal(story.riteStep, step)
-    assert.equal(story.answerRite(question.answer), true)
-  }
+  story.camera = new THREE.PerspectiveCamera()
+  story.ghost = new THREE.Group()
+  story.jumpScareGhost = new THREE.Group()
+  story.time = 1
+  story.nextScareAllowedAt = 100
+  story.answerRite(RITE_QUESTIONS[0].answer)
+  assert.equal(story.riteStep, 1)
+  assert.equal(story.answerRite((RITE_QUESTIONS[1].answer + 1) % 3), false)
+  assert.equal(story.riteStep, 0)
+  assert.equal(story.pursuit.state, 'caught')
+  assert.equal(story.failureReason, 'wrong-answer')
+  assert.equal(story.jumpScareGhost.visible, true)
+  assert.equal(story.answerRite(RITE_QUESTIONS[0].answer), false)
+  story.pursuit.retry(new THREE.Vector3(0, 1, 0))
+  story.pursuit.state = 'safe'
+  story.jumpScareTime = 0
+  for (const question of RITE_QUESTIONS) story.answerRite(question.answer)
   assert.equal(story.released, true)
   assert.match(story.objective(), /FRONT ROAD/)
   assert.equal(story.answerRite(0), false)
@@ -167,6 +178,28 @@ test('a caught player can restart the chase from the front of the house', () => 
   assert.equal(resetYaw, 0.4)
   assert.equal(story.pursuit.state, 'chasing')
   assert.deepEqual(story.pursuit.checkpoint.toArray(), front.toArray())
+})
+
+test('being caught starts a scare before the respawn state', () => {
+  const story = createStory()
+  const camera = new THREE.PerspectiveCamera()
+  const ghost = new THREE.Group()
+  ghost.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.5, 0.3), new THREE.MeshStandardMaterial()))
+  Object.assign(story, {
+    camera, ghost, jumpScareGhost: createJumpScareGhost(ghost, camera),
+    jumpScareTime: 0, lights: [], markers: [], disturbance: 0,
+    nextRing: Infinity, gravePosition: new THREE.Vector3(20, 0, 0),
+  })
+  story.found.add('daniel-confession')
+  story.pursuit.start(new THREE.Vector3(0, 1, 0))
+  story.pursuit.grace = 0
+  story.pursuit.position.set(0, 1, 0)
+  story.audio.playJumpScare = () => {}
+  story.update(0.1, { position: new THREE.Vector3(0, 1, 0) }, false)
+  assert.equal(story.pursuit.state, 'caught')
+  assert.equal(story.failureReason, 'caught')
+  assert.ok(story.jumpScareTime > 0)
+  assert.equal(story.jumpScareGhost.visible, true)
 })
 
 test('the annex clue can be found first, but the letter waits for the kitchen record too', () => {

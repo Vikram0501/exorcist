@@ -38,10 +38,10 @@ try:
         mime = image.get('mimeType')
         if mime == 'image/png' and raw[:8] == b'\x89PNG\r\n\x1a\n':
             width, height = struct.unpack_from('>II', raw, 16)
-            if min(width, height) < 2048 or (min(width, height) == 2048 and len(raw) < 3_000_000):
+            if min(width, height) < 1024 or len(raw) < 500_000:
                 continue
             output_format = '.jpg' if raw[25] == 2 else '.png'
-        elif mime == 'image/jpeg' and len(raw) > 2_000_000:
+        elif mime == 'image/jpeg' and len(raw) > 500_000:
             output_format = '.jpg'
         else:
             continue

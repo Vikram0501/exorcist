@@ -21,6 +21,8 @@ const respawnBtn =
 
 const trainBtn = document.getElementById('trainBtn')
 const level3Btn = document.getElementById('highwayBtn')
+const trainButtonHTML = trainBtn.innerHTML
+const highwayButtonHTML = level3Btn.innerHTML
 const controlsBtn = document.getElementById('controlsBtn')
 const controlsDialog = document.getElementById('controlsDialog')
 
@@ -37,6 +39,8 @@ function resetLevelButtons() {
   `
 
   playBtn.disabled = false
+  trainBtn.innerHTML = trainButtonHTML
+  level3Btn.innerHTML = highwayButtonHTML
   trainBtn.disabled = false
   level3Btn.disabled = false
 }

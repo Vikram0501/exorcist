@@ -325,6 +325,11 @@ class CarriageLightController {
       this.group.remove(helper)
       if (helper.dispose) helper.dispose()
     }
+    for (const label of this._debugLabels || []) {
+      this.group.remove(label)
+      label.material.map?.dispose()
+      label.material.dispose()
+    }
   }
 }
 
@@ -475,16 +480,23 @@ export function createCarriageLights(carriageGroup, carriageType = '02', instanc
 
   const presets = []
 
-  for (let i = 0; i < positions.length; i++) {
-    const cfg = positions[i]
-    const lightColor = (presetOverrides && presetOverrides[i])
-      ? presetOverrides[i].color
-      : color
-    const lightIntensity = (presetOverrides && presetOverrides[i])
-      ? presetOverrides[i].intensity
-      : intensity
+  // A few wider lights cover each carriage without compiling a shader for
+  // every decorative fixture in all four copies of carriage 02.
+  const selected = carriageType === '01'
+    ? [1]
+    : [0, 12, 24].filter(index => presetOverrides[index] !== null)
 
-    const light = new THREE.PointLight(lightColor, lightIntensity, distance, decay)
+  for (const i of selected) {
+    const cfg = positions[i]
+    const override = presetOverrides?.[i]
+    const lightColor = override?.color ?? color ?? 0xffcc88
+    const lightIntensity = (override?.intensity ?? intensity) * (carriageType === '01' ? 1 : 1.35)
+
+    const light = new THREE.PointLight(
+      lightColor, lightIntensity,
+      carriageType === '01' ? 16 : 26,
+      carriageType === '01' ? decay : 1.4,
+    )
     light.position.set(cfg.x, cfg.y, cfg.z)
     light.castShadow = false
     light.name = `carriage_light_${i}`
@@ -492,35 +504,18 @@ export function createCarriageLights(carriageGroup, carriageType = '02', instanc
     lights.push(light)
     presets.push({ color: lightColor, intensity: lightIntensity })
 
-    const helper = new THREE.PointLightHelper(light, 0.3)
-    helper.visible = false
-    carriageGroup.add(helper)
-    helpers.push(helper)
   }
 
   const controller = new CarriageLightController(carriageGroup, lights, helpers, presets)
 
   // Apply flicker overrides from preset
-  if (flickerOverrides) {
-    for (let i = 0; i < flickerOverrides.length; i++) {
-      if (flickerOverrides[i]) {
-        controller.setFlicker(i, flickerOverrides[i])
-      }
-    }
-  }
+  if (flickerOverrides) selected.forEach((sourceIndex, lightIndex) => {
+    if (flickerOverrides[sourceIndex]) controller.setFlicker(lightIndex, flickerOverrides[sourceIndex])
+  })
 
-  // Store debug label sprites (hidden by default)
+  // The labels and helpers are only built if the player turns debug mode on.
   controller._debugLabels = []
-  for (let i = 0; i < lights.length; i++) {
-    const pos = positions[i]
-    const label = createDebugLabel(
-      lights[i],
-      `C${carriageType}-${instanceIndex} L${i}\n${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}`
-    )
-    label.visible = false
-    carriageGroup.add(label)
-    controller._debugLabels.push(label)
-  }
+  controller._debugInfo = { carriageGroup, carriageType, instanceIndex, positions, selected }
 
   return controller
 }
@@ -547,6 +542,20 @@ export function disposeCarriageLights(carriageGroup) {
  */
 export function toggleCarriageLightDebug(controllers, visible) {
   for (const ctrl of controllers) {
+    if (visible && ctrl.helpers.length === 0) {
+      const { carriageGroup, carriageType, instanceIndex, positions, selected } = ctrl._debugInfo
+      ctrl.lights.forEach((light, index) => {
+        const helper = new THREE.PointLightHelper(light, 0.3)
+        carriageGroup.add(helper)
+        ctrl.helpers.push(helper)
+        const sourceIndex = selected[index]
+        const pos = positions[sourceIndex]
+        const label = createDebugLabel(light,
+          `C${carriageType}-${instanceIndex} L${sourceIndex}\n${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}`)
+        carriageGroup.add(label)
+        ctrl._debugLabels.push(label)
+      })
+    }
     for (const helper of ctrl.helpers) {
       helper.visible = visible
     }
@@ -558,7 +567,8 @@ export function toggleCarriageLightDebug(controllers, visible) {
 
 
 export function setupTrainLighting(level, model, size) {
-  addLevelLights(level, size)
+  const { moon } = addLevelLights(level, size)
+  moon.castShadow = false
   const sky = addTrainNightSky(level)
   return { lightHelpers: [], sky }
 }

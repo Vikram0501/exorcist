@@ -16,6 +16,7 @@ export class HouseStory {
     this.time = 0
     this.disturbance = 0
     this.riteStep = 0
+    this.failureReason = null
     this.released = false
     this.complete = false
     this.releaseTime = 0
@@ -79,19 +80,22 @@ export class HouseStory {
           map: original.map || null,
           alphaMap: original.alphaMap || null,
           alphaTest: original.alphaTest || 0,
-          color: 0x8ddcff,
+          color: original.name === 'material_1' ? 0xffffff : 0xc3e7f5,
           transparent: true,
-          opacity: 0.88,
+          opacity: original.name === 'material_1' ? 0.96 : 0.58,
           depthWrite: false,
-          depthTest: false,
-          blending: THREE.AdditiveBlending,
-          side: THREE.DoubleSide,
+          depthTest: true,
+          blending: THREE.NormalBlending,
+          side: THREE.FrontSide,
           fog: false,
           toneMapped: false,
         })
         object.material = Array.isArray(object.material)
           ? object.material.map(glowMaterial) : glowMaterial(object.material)
         object.renderOrder = 20
+        for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+          material.userData.baseOpacity = material.opacity
+        }
       })
       const glowCanvas = document.createElement('canvas')
       glowCanvas.width = glowCanvas.height = 128
@@ -212,10 +216,17 @@ export class HouseStory {
       .filter(Boolean)
       .sort((a, b) => a.distanceToSquared(roomCentre) - b.distanceToSquared(roomCentre))[0]
     let nearest = null
-    if (doorCentre && doorCentre.distanceTo(roomCentre) < 5) {
-      const inward = roomCentre.clone().sub(doorCentre).setY(0).normalize()
-      const left = new THREE.Vector3(inward.z, 0, -inward.x)
-      nearest = new THREE.Raycaster(roomCentre, left, 0, 4).intersectObjects(walls, false)[0]
+    const diary = findStoryAsset(this.model, ['Diary'])
+    if (doorCentre && diary && doorCentre.distanceTo(roomCentre) < 3) {
+      // The diary is in the bedroom beside the annex. Cast through the
+      // annex door, away from that bedroom, to find its inside back wall.
+      const diaryCentre = new THREE.Box3().setFromObject(diary).getCenter(new THREE.Vector3())
+      const inward = doorCentre.clone().sub(diaryCentre).setY(0).normalize()
+      const start = doorCentre.clone().addScaledVector(inward, 0.55)
+      start.y = roomCentre.y
+      nearest = new THREE.Raycaster(start, inward, 0.2, 3)
+        .intersectObjects(walls, false)[0]
+      roomCentre.copy(start)
     }
     if (!nearest) {
       for (const direction of [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]]) {
@@ -418,11 +429,11 @@ export class HouseStory {
     return this.triggerJumpScare(false)
   }
 
-  triggerJumpScare(startChase = false) {
+  triggerJumpScare(startChase = false, force = false) {
     if (!this.camera || this.jumpScareTime > 0 || this.released) return false
     // Ambient and clue scares share a cooldown. The confession is the
     // deliberate final scare and must still start the story's chase.
-    if (!startChase && this.time < this.nextScareAllowedAt) return false
+    if (!startChase && !force && this.time < this.nextScareAllowedAt) return false
     this.chaseAfterScare = startChase
     this.jumpScareTime = 0.95
     this.jumpScareEndsAt = performance.now() + 950
@@ -474,7 +485,8 @@ export class HouseStory {
     if (!this.canInspect('evelyn-grave') || this.released) return false
     if (choice !== RITE_QUESTIONS[this.riteStep].answer) {
       this.disturbance = 4
-      this.audio.playCue('ghostBreath')
+      this.riteStep = 0
+      this.failPlayer('wrong-answer')
       return false
     }
     this.onMessage(RITE_QUESTIONS[this.riteStep].line, 7)
@@ -488,6 +500,13 @@ export class HouseStory {
       this.onMessage('EVELYN · “Thank you for finding me. Tell them I was here.” Elias is gone. The yard falls quiet.', 12)
     }
     return true
+  }
+
+  failPlayer(reason = 'caught') {
+    this.failureReason = reason
+    this.pursuit.state = 'caught'
+    // A failed rite or capture must play even during an ambient scare cooldown.
+    this.triggerJumpScare(false, true)
   }
 
   objective() {
@@ -528,6 +547,10 @@ export class HouseStory {
     if (haunting) {
       const previous = this.pursuit.state
       this.pursuit.update(dt, player.position, this.gravePosition)
+      if (previous !== 'caught' && this.pursuit.state === 'caught') {
+        this.failPlayer()
+        return
+      }
       if (previous === 'chasing' && this.pursuit.state === 'safe') {
         this.onMessage('EVELYN · “She cannot reach me here.” Face my grave and press E to begin the exorcism.', 10)
         this.audio.playMelody()
@@ -552,7 +575,7 @@ export class HouseStory {
         this.evelyn.traverse(object => {
           if (!object.isMesh) return
           for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
-            material.opacity = opacity
+            material.opacity = opacity * (material.userData.baseOpacity / 0.88)
           }
         })
         if (this.evelynHalo) this.evelynHalo.material.opacity = opacity * 0.85
@@ -570,6 +593,7 @@ export class HouseStory {
   retryPursuit(player, spawn = this.pursuit.checkpoint, yaw = player.input.yaw) {
     if (this.pursuit.state !== 'caught') return false
     player.reset(this.pursuit.retry(spawn), yaw)
+    this.failureReason = null
     this.onMessage('EVELYN · “Keep moving. My grave is behind the house.”', 8)
     return true
   }

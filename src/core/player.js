@@ -68,13 +68,13 @@ export class Player {
 
 
     // ============================================
-    // CHECK FOR OCTREE COLLISION
+    // CHECK FOR TRIANGLE COLLISION (HOUSE OCTREE / TRAIN BVH)
     // ============================================
 
     const octreeCollider =
       colliders.find(
         (collider) =>
-          collider.type === 'octree'
+            collider.type === 'octree' || collider.type === 'mesh'
       )
 
 
