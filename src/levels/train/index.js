@@ -5,6 +5,9 @@ import { loadingManager } from '../../core/loading.js'
 import { createCarriageLights, setupTrainLighting } from './lighting.js'
 import { createTrainTerrain, preloadTrainTerrain } from './terrain.js'
 import { createTrainCollision } from './collision.js'
+import { createCluePlan } from './story-data.js'
+import { createTrainClues } from './clues.js'
+import { TrainStory } from './story.js'
 
 const TRAIN_SCALE = 0.1
 
@@ -175,6 +178,11 @@ export function loadTrain(level) {
     const trainTerrain = await createTrainTerrain(level)
     const zombie = await placeBurntZombie(level)
 
+    const plan = createCluePlan()
+    const clues = createTrainClues({ carriages, plan })
+    const trainStory = new TrainStory({ plan, items: clues.items })
+    trainStory.frontZ = carriages[1] ? carriages[1].bounds.min.z : -Infinity
+
     // Player spawns at the far end, facing back toward carriage 01.
     const spawn = new THREE.Vector3(2.8, 2, -127)
     const spawnYaw = Math.PI
@@ -194,6 +202,9 @@ export function loadTrain(level) {
       carriages,
       controllers,
       zombie,
+      investigationItems: clues.items,
+      trainStory,
+      trainClues: clues,
     }
   })
 }

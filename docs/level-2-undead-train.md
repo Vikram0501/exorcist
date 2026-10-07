@@ -90,4 +90,41 @@ per frame and shows the retry screen when it reports a catch.
 Hold **C** to crouch. Crouching lowers the eye height to `0.55`, keeps the feet
 planted, and walks at `0.45` speed; releasing it restores the stance in place.
 
+## Clues and field notes
+
+The train hides the spirit's name across its carriages. `story-data.js` holds
+four ghost profiles, each a short kana name with a romaji reading and two
+residue hints. Every run picks one at random, so a retry after a catch rolls a
+new name and a new layout.
+
+- The name is split into individual kana marks. `createCluePlan` shuffles the
+  marks across a pool of seatback, window and end-section anchors, one per
+  carriage across the rear four cars, so the reading order never matches the
+  name order. Selection is driven by an injectable RNG, which keeps the tests
+  deterministic.
+- Two fixed residue clues — a torn ticket and a half-burned name tag — sit low
+  in the dark carriages. Reading one hands over a single mark, so a cautious
+  player can infer the name without reading every mark in the open.
+- A mark is read by holding **E** for `1.2` seconds in the world. Pointer lock
+  stays held, so the stalker keeps ticking while the player reads: the read is
+  the exposure window. `#holdProgress` fills at the bottom of the screen, and
+  releasing **E**, looking away or being caught resets it.
+- Reading fills a slot on the name board, reusing Level 3's `createGhostNameUI`
+  (`revealLetter`), shown in kana with a counter of collected marks.
+- Field notes (**I** / Evidence) use the same book as Level 1. `game.js` now
+  takes a per-level journal builder, and the train renders the boarding note,
+  read residue, read marks in name order, then the fire note once the front
+  carriage is reached.
+- Clue props are unlit, canvas-textured planes (kana, romaji and index number)
+  parented to their carriage groups, so the carriage visibility culling still
+  applies and the raycast reaches them across the whole train. Textures are
+  skipped when there is no DOM, so the modules load under `node --test`.
+- Placement is verified against the shipped collision: every clue must have
+  standing room in a walking lane and must be seen before the carriage surface
+  behind it (a ray from the lane has to hit the prop first).
+
+The exorcism finale is designed — assemble the kana in the burnt front carriage
+and speak the name — but not built yet; the clue system is complete without it.
+
+
 

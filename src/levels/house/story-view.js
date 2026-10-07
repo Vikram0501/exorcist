@@ -33,6 +33,28 @@ export function buildHouseJournalEntries(game) {
   return entries
 }
 
+export function renderJournal(book, entries) {
+  if (!book) return
+  book.querySelectorAll('[data-story-entry]').forEach(entry => entry.remove())
+  book.querySelector('.evidence-empty').hidden = entries.length > 0
+  for (const item of entries) {
+    const entry = document.createElement('article')
+    entry.dataset.storyEntry = item.id
+    entry.className = 'story-journal-entry'
+    const title = document.createElement('h3')
+    title.textContent = item.title
+    const location = document.createElement('small')
+    location.textContent = item.foundAt
+    const body = document.createElement('p')
+    body.textContent = item.storyNote
+    const fact = document.createElement('p')
+    fact.className = 'evidence-clue'
+    fact.textContent = item.riteNote
+    entry.append(location, title, body, fact)
+    book.insertBefore(entry, document.getElementById('closeEvidenceNotepadBtn'))
+  }
+}
+
 export class HouseStoryView {
   constructor(game) {
     this.game = game
@@ -176,26 +198,7 @@ export class HouseStoryView {
   }
 
   updateJournal() {
-    const book = document.querySelector('.evidence-notepad')
-    book.querySelectorAll('[data-story-entry]').forEach(entry => entry.remove())
-    const entries = buildHouseJournalEntries(this.game)
-    book.querySelector('.evidence-empty').hidden = entries.length > 0
-    for (const item of entries) {
-      const entry = document.createElement('article')
-      entry.dataset.storyEntry = item.id
-      entry.className = 'story-journal-entry'
-      const title = document.createElement('h3')
-      title.textContent = item.title
-      const location = document.createElement('small')
-      location.textContent = item.foundAt
-      const body = document.createElement('p')
-      body.textContent = item.storyNote
-      const fact = document.createElement('p')
-      fact.className = 'evidence-clue'
-      fact.textContent = item.riteNote
-      entry.append(location, title, body, fact)
-      book.insertBefore(entry, document.getElementById('closeEvidenceNotepadBtn'))
-    }
+    renderJournal(document.querySelector('.evidence-notepad'), buildHouseJournalEntries(this.game))
   }
 
   dispose() {

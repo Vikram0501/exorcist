@@ -372,6 +372,11 @@
       #houseCaption { position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%); z-index: 15; width: min(700px, calc(100% - 48px)); padding: 16px 24px; color: #ede4d2; background: linear-gradient(90deg, transparent, rgba(5, 9, 12, .94) 12%, rgba(5, 9, 12, .94) 88%, transparent); text-align: center; font: 17px/1.65 Georgia, serif; pointer-events: none; text-shadow: 0 2px 8px #000; }
       #houseRite { position: fixed; inset: 0; z-index: 110; display: grid; place-items: center; padding: 24px; overflow-y: auto; background: rgba(4, 9, 12, .86); backdrop-filter: blur(5px); }
       #houseRite.hidden, #houseCaption.hidden { display: none; }
+      #levelCaption { position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%); z-index: 15; width: min(700px, calc(100% - 48px)); padding: 16px 24px; color: #ede4d2; background: linear-gradient(90deg, transparent, rgba(5, 9, 12, .94) 12%, rgba(5, 9, 12, .94) 88%, transparent); text-align: center; font: 17px/1.65 Georgia, serif; pointer-events: none; text-shadow: 0 2px 8px #000; }
+      #levelCaption.hidden { display: none; }
+      #holdProgress { position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%); z-index: 16; width: 220px; height: 6px; border: 1px solid #7a4038; background: rgba(8, 6, 4, .8); pointer-events: none; }
+      #holdProgress.hidden { display: none; }
+      #holdProgressFill { width: 0; height: 100%; background: linear-gradient(90deg, #7a1f18, #c42a20); }
       .rite-panel { width: min(590px, 100%); padding: clamp(24px, 5vw, 46px); border: 1px solid #796e58; background: radial-gradient(ellipse at top, #252c2b, #101517); color: #e6dcc9; box-shadow: 0 25px 100px #000; }
       .rite-panel .evidence-label { margin-bottom: 18px; color: #b8ab8e; }
       .rite-panel h2 { font: 30px/1.2 Georgia, serif; margin-bottom: 16px; }
@@ -410,6 +415,8 @@
       &nbsp;&middot;&nbsp; <kbd>I</kbd> NOTES &nbsp;&middot;&nbsp; <kbd>T</kbd> TORCH
       &nbsp;&middot;&nbsp; <kbd>C</kbd> CROUCH</div>
     <div id="interactionPrompt" class="hidden"></div>
+    <div id="levelCaption" class="hidden" role="status"></div>
+    <div id="holdProgress" class="hidden" aria-hidden="true"><div id="holdProgressFill"></div></div>
     <button id="respawnBtn" class="hidden" type="button">Respawn <kbd>R</kbd></button>
     <button id="evidenceBtn" class="hidden" type="button">Evidence <kbd>I</kbd></button>
     <div id="newspaperReader" class="hidden" role="dialog" aria-modal="true" aria-labelledby="newspaperInspectTitle">

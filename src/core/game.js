@@ -4,7 +4,7 @@ import { Player } from './player.js'
 import { HauntedHouseAudio } from '../levels/house/audio.js'
 import { HighwayAudio } from '../levels/highway/audio.js'
 import { HouseStory } from '../levels/house/story.js'
-import { HouseStoryView } from '../levels/house/story-view.js'
+import { HouseStoryView, renderJournal } from '../levels/house/story-view.js'
 
 import {
   createHighwayLevel,
@@ -192,6 +192,20 @@ export class Game {
     this.trainZombie = null
 
     this.trainCaught = false
+
+    this.trainStory = null
+
+    this.trainClues = null
+
+    this.journalBuilder = null
+
+    this.levelCaptionEl = document.getElementById('levelCaption')
+
+    this.levelCaptionRemaining = 0
+
+    this.holdProgressEl = document.getElementById('holdProgress')
+
+    this.holdProgressFill = document.getElementById('holdProgressFill')
 
     this.carriageLightControllers = null
 
@@ -481,7 +495,7 @@ export class Game {
     }
 
     if (
-      this.currentLevel === 'house' &&
+      (this.currentLevel === 'house' || this.currentLevel === 'train') &&
       this.input.consumePressed('KeyI')
     ) {
       if (this.evidenceBookOpen) this.closeEvidenceBook()
@@ -726,6 +740,10 @@ if (this.loaded) {
   else {
     const active = this.input.isLocked && !this.newspaperOpen && !this.evidenceBookOpen && !this.houseStoryView?.open
     this.houseStoryView?.update(dt, active)
+    if (this.levelCaptionRemaining > 0) {
+      this.levelCaptionRemaining = Math.max(0, this.levelCaptionRemaining - dt)
+      this.levelCaptionEl?.classList.toggle('hidden', this.levelCaptionRemaining <= 0)
+    }
     if (this.currentLevel === 'house') this.houseAudio.setPaused(!active && !this.newspaperOpen && !this.houseStoryView?.open && !this.houseStory?.jumpScareTime)
     if (active) {
     if (this.houseStory && this.input.consumePressed('KeyT')) {
@@ -780,7 +798,7 @@ if (this.loaded) {
       this.getLookedAtDoor()
 
     const investigationItem =
-      this.currentLevel === 'house'
+      this.currentLevel === 'house' || this.currentLevel === 'train'
         ? this.getLookedAtInvestigationItem()
         : null
 
@@ -790,6 +808,7 @@ if (this.loaded) {
     ) {
 
       if (
+        this.currentLevel === 'house' &&
         investigationItem &&
         investigationItem.story
       ) {
@@ -922,6 +941,26 @@ if (this.loaded) {
       door,
       investigationItem
     )
+
+
+    if (this.currentLevel === 'train' && this.trainStory) {
+      const storyItem = investigationItem && investigationItem.story ? investigationItem : null
+      const reading = storyItem && this.input.isDown('KeyE') && !this.trainStory.found.has(storyItem.id)
+
+      if (reading) {
+        const finished = this.trainStory.hold(dt, storyItem)
+        if (finished) this.trainStory.read(storyItem)
+        if (this.holdProgressFill) {
+          this.holdProgressFill.style.width = `${(this.trainStory.progress * 100).toFixed(1)}%`
+        }
+        this.holdProgressEl?.classList.remove('hidden')
+      } else {
+        this.trainStory.releaseHold()
+        this.holdProgressEl?.classList.add('hidden')
+      }
+
+      this.trainStory.update(dt, this.player)
+    }
 
 
     const doorColliders =
@@ -1106,6 +1145,8 @@ if (this.loaded) {
             controllers,
             zombie,
             investigationItems,
+            trainStory,
+            trainClues,
             moonLight,
             roadPath,
             arcLengths,
@@ -1190,6 +1231,23 @@ if (this.loaded) {
                 colliders: this.colliders,
               })
             : null
+
+          this.trainStory = levelName === 'train' ? trainStory || null : null
+
+          this.trainClues = levelName === 'train' ? trainClues || null : null
+
+          this.journalBuilder = levelName === 'train' && this.trainStory
+            ? (game) => game.trainStory.journalEntries()
+            : null
+
+          if (this.trainStory) {
+            this.trainStory.onMessage = (text, duration) => this.showLevelCaption(text, duration)
+            const boardName = this.trainStory.profile?.kana || this.trainStory.profile?.romaji || ''
+            if (boardName) {
+              this.ghostNameUI = createGhostNameUI(boardName)
+              this.trainStory.nameBoard = this.ghostNameUI
+            }
+          }
 
 
           // ======================================
@@ -1646,6 +1704,18 @@ if (this.loaded) {
     this.trainZombie = null
     this.trainCaught = false
 
+    this.trainStory?.dispose()
+    this.trainStory = null
+
+    this.trainClues?.dispose()
+    this.trainClues = null
+
+    this.journalBuilder = null
+
+    this.levelCaptionRemaining = 0
+    this.levelCaptionEl?.classList.add('hidden')
+    this.holdProgressEl?.classList.add('hidden')
+
     this.carriageLightControllers = null
 
     this.carriageLightDebug = false
@@ -1816,8 +1886,10 @@ if (this.loaded) {
 
         hudObjective.textContent =
           this.trainZombie && this.trainZombie.state !== 'dormant'
-            ? 'IT WALKS THE CARRIAGES · CROUCH BETWEEN THE SEATS · TORCH OFF'
+            ? 'IT WALKS THE CARRIAGES … CROUCH BETWEEN THE SEATS … TORCH OFF'
             : 'CROSS INTO THE NEXT CARRIAGE'
+
+        if (this.trainStory) hudObjective.textContent = this.trainStory.objective()
       }
 
       if (isHouse) {
@@ -1855,7 +1927,7 @@ if (this.loaded) {
 
       evidenceButton.classList.toggle(
         'hidden',
-        this.currentLevel !== 'house'
+        this.currentLevel !== 'house' && this.currentLevel !== 'train'
       )
     }
   }
@@ -1878,8 +1950,13 @@ if (this.loaded) {
       this.camera
     )
 
+    const targets = [this.model, ...(this.houseStory ? [this.houseStory.root] : [])]
+    if (this.currentLevel === 'train' && this.trainCarriages) {
+      for (const carriage of this.trainCarriages) targets.push(carriage.group)
+    }
+
     const hits = this.raycaster.intersectObjects(
-      [this.model, ...(this.houseStory ? [this.houseStory.root] : [])], true,
+      targets, true,
     ).filter(hit => isEffectivelyVisible(hit.object))
 
     for (const hit of hits) {
@@ -2233,7 +2310,8 @@ if (this.loaded) {
 
   openEvidenceBook() {
 
-    if (this.currentLevel !== 'house' || this.evidenceBookOpen || this.newspaperOpen || this.houseStoryView?.outcome) {
+    const supportsEvidence = this.currentLevel === 'house' || this.currentLevel === 'train'
+    if (!supportsEvidence || this.evidenceBookOpen || this.newspaperOpen || this.houseStoryView?.outcome) {
 
       return
     }
@@ -2248,12 +2326,27 @@ if (this.loaded) {
 
     this.evidenceBookOpen = true
     this.houseStoryView?.updateJournal()
+    this.updateJournalEntries()
 
     evidenceBook.classList.remove('hidden')
     evidenceBook.style.zIndex = this.houseStoryView?.open ? '111' : ''
 
     this.input.release()
     document.getElementById('closeEvidenceNotepadBtn')?.focus()
+  }
+
+
+  updateJournalEntries() {
+    if (!this.journalBuilder) return
+    renderJournal(document.querySelector('.evidence-notepad'), this.journalBuilder(this))
+  }
+
+
+  showLevelCaption(text, duration = 6) {
+    if (!this.levelCaptionEl) return
+    this.levelCaptionEl.textContent = text
+    this.levelCaptionRemaining = duration
+    this.levelCaptionEl.classList.remove('hidden')
   }
 
 
@@ -2401,6 +2494,10 @@ if (this.loaded) {
   }
 
   getInvestigationPrompt(investigationItem) {
+    if (this.currentLevel === 'train' && this.trainStory) {
+      return this.trainStory.prompt(investigationItem)
+    }
+
     if (investigationItem.story) return this.houseStory.prompt(investigationItem)
 
     switch (investigationItem.id) {
