@@ -1,5 +1,13 @@
 import * as THREE from 'three'
 import { asTrack, FRAME_TANGENT_HALF } from './track.js'
+import { circuitSiteAt } from './circuit-scenery.js'
+import { createCircuitFloodlights, updateCircuitFloodlights } from './circuit-lighting.js'
+import {
+  createDriftSmoke,
+  createLandmarkAtmosphere,
+  updateDriftSmoke,
+  updateLandmarkAtmosphere,
+} from './circuit-effects.js'
 
 
 // ============================================
@@ -7,12 +15,12 @@ import { asTrack, FRAME_TANGENT_HALF } from './track.js'
 // ============================================
 
 const FOG_COLOR = 0x160809
-const FOG_DENSITY_BASE = 0.014
-const FOG_DENSITY_FAR = 0.026
+const FOG_DENSITY_BASE = 0.012
+const FOG_DENSITY_FAR = 0.020
 
 const HEADLIGHT_COLOR = 0xFFF4D0
-const HEADLIGHT_INTENSITY = 45
-const HEADLIGHT_DISTANCE = 50
+const HEADLIGHT_INTENSITY = 65
+const HEADLIGHT_DISTANCE = 72
 const HEADLIGHT_ANGLE = Math.PI / 6
 const HEADLIGHT_PENUMBRA = 0.4
 const HEADLIGHT_DECAY = 1.0
@@ -387,6 +395,9 @@ export class HighwayEnvironmentManager {
     this.setupShoulders()
     this.setupCity()
     this.setupStreetlights()
+    this.circuitFloodlights = createCircuitFloodlights(this.track, this.group)
+    this.driftSmoke = createDriftSmoke(this.group)
+    this.landmarkAtmosphere = createLandmarkAtmosphere(this.track, this.group)
     this.setupGroundMist()
     this.setupSilhouettes()
     this.setupRoadsideClutter()
@@ -534,9 +545,9 @@ export class HighwayEnvironmentManager {
   setupCrimsonHemi() {
 
     const hemi = new THREE.HemisphereLight(
-      0x74444c,
-      0x0d0a09,
-      0.45
+      0x92878b,
+      0x211715,
+      0.55
     )
     hemi.name = 'crimsonSkyFill'
 
@@ -556,13 +567,13 @@ export class HighwayEnvironmentManager {
 
     this.fillLight = new THREE.DirectionalLight(
       0xbfb6ae,
-      0.55
+      0.75
     )
     this.fillLight.name = 'neutralFill'
 
     this.rimLight = new THREE.DirectionalLight(
       0xd42a2a,
-      0.9
+      0.7
     )
     this.rimLight.name = 'redRim'
 
@@ -637,7 +648,7 @@ export class HighwayEnvironmentManager {
 
     for (const side of [1, -1]) {
       const outer = this.buildTrackRibbon(
-        side * 23.5, side * 43.5, -0.2, outerMat
+        side * 20, side * 43.5, -0.2, outerMat
       )
       outer.material.side = THREE.DoubleSide
       this.group.add(outer)
@@ -739,9 +750,12 @@ export class HighwayEnvironmentManager {
       (progress01 > 0.44 && progress01 < 0.56) || // downhill reveal
       (progress01 > 0.62 && progress01 < 0.76) || // hero drift corner
       (progress01 > 0.78 && progress01 < 0.90) // fast run
-    const baseClearance = openSection
-      ? CITY_OPEN_SECTION_CLEARANCE
-      : CITY_SAFE_ROAD_CLEARANCE
+    // Keep the city as a backdrop behind the pits and grandstands, with
+    // enough station padding for the entire authored city-block footprint.
+    const circuitSite = circuitSiteAt(distance, side)
+    const baseClearance = circuitSite
+      ? 36
+      : openSection ? CITY_OPEN_SECTION_CLEARANCE : CITY_SAFE_ROAD_CLEARANCE
     const clearance = baseClearance + hashRange(
       index * 5.1 + side * 7.9,
       0,
@@ -749,6 +763,7 @@ export class HighwayEnvironmentManager {
     )
 
     const section = this.cityTemplate.clone()
+    section.userData.circuitSite = circuitSite?.name ?? null
 
     section.name =
       `citySection_${side > 0 ? 'right' : 'left'}_${index}`
@@ -1286,9 +1301,7 @@ export class HighwayEnvironmentManager {
 
   setupRoadsideClutter() {
 
-    this.setupGuardrails()
     this.setupAbandonedCars()
-    this.setupMileMarkers()
   }
 
 
@@ -1475,7 +1488,12 @@ export class HighwayEnvironmentManager {
 
       const station = pos.frac * totalLength
       const frame = this.track.sampleAt(station)
-      const world = this.track.toWorld(station, pos.d, 0)
+      // Preserve every wreck, but move those beside a landmark onto its
+      // service apron, beyond the tire wall and clear of the structures.
+      const reserved = circuitSiteAt(station, Math.sign(pos.d), 12)
+      const lateral = reserved ? Math.sign(pos.d) * 26 : pos.d
+      const world = this.track.toWorld(station, lateral, 0)
+      car.name = 'circuitWreck'
       car.position.copy(world)
       car.rotation.y = frame.angle + pos.rotY
       car.scale.setScalar(pos.s)
@@ -1656,12 +1674,15 @@ export class HighwayEnvironmentManager {
     if (this.disposed) return
 
     const time = performance.now() * 0.001
+    const progress = this.track.toTrack(this.playerCar.position).s
 
-    this.updateHeadlights(time)
+    this.updateHeadlights(time, progress)
     this.updateGroundMist(dt, time)
     this.updateCity()
     this.updateStreetlights()
-    this.updateStreetlightPool(dt)
+    this.updateStreetlightPool(dt, progress)
+    updateCircuitFloodlights(this.circuitFloodlights, progress, dt)
+    this.updateCircuitEffects(dt, time, progress)
     this.updateShadowFollowing()
     this.updateSilhouettes(dt, time)
     this.updateDisturbances(dt, time)
@@ -1694,11 +1715,12 @@ export class HighwayEnvironmentManager {
     return right.normalize()
   }
 
-  updateHeadlights(time) {
+  updateHeadlights(time, progress = this.track.toTrack(this.playerCar.position).s) {
 
     const pos = this.playerCar.position
     const fwd = this.carForward(new THREE.Vector3())
     const right = this.carRight(new THREE.Vector3())
+    const roadAhead = this.track.toWorld(progress + 38, 0, 0.8)
 
     // Cone geometry points down -Y natively with the historical -PI/2 X
     // tilt; yaw that tilt so the beam follows the car heading.
@@ -1725,8 +1747,10 @@ export class HighwayEnvironmentManager {
     this.leftLight.intensity =
       HEADLIGHT_INTENSITY * flicker
     this.leftTarget.position.set(
-      leftBase.x, pos.y, leftBase.z
+      leftBase.x, roadAhead.y, leftBase.z
     ).addScaledVector(fwd, 35)
+    this.leftTarget.position.x = THREE.MathUtils.lerp(this.leftTarget.position.x, roadAhead.x, 0.2)
+    this.leftTarget.position.z = THREE.MathUtils.lerp(this.leftTarget.position.z, roadAhead.z, 0.2)
     this.leftCone.position.set(
       leftBase.x, lightY, leftBase.z
     ).addScaledVector(fwd, 19.5)
@@ -1741,8 +1765,10 @@ export class HighwayEnvironmentManager {
     this.rightLight.intensity =
       HEADLIGHT_INTENSITY * flicker
     this.rightTarget.position.set(
-      rightBase.x, pos.y, rightBase.z
+      rightBase.x, roadAhead.y, rightBase.z
     ).addScaledVector(fwd, 35)
+    this.rightTarget.position.x = THREE.MathUtils.lerp(this.rightTarget.position.x, roadAhead.x, 0.2)
+    this.rightTarget.position.z = THREE.MathUtils.lerp(this.rightTarget.position.z, roadAhead.z, 0.2)
     this.rightCone.position.set(
       rightBase.x, lightY, rightBase.z
     ).addScaledVector(fwd, 19.5)
@@ -1895,7 +1921,7 @@ export class HighwayEnvironmentManager {
   }
 
 
-  updateStreetlightPool(dt) {
+  updateStreetlightPool(dt, progress = null) {
 
     if (this.streetlightPool.length === 0) return
     if (this.streetlightPoles.length === 0) return
@@ -1912,6 +1938,7 @@ export class HighwayEnvironmentManager {
     this.streetlightPoolTimer = 0
 
     const player = this.playerCar.position
+    const playerS = progress ?? this.track.toTrack(player).s
 
     // Nearest poles ahead of the player, so light pools open up down the
     // road instead of sitting behind the car.
@@ -1919,11 +1946,12 @@ export class HighwayEnvironmentManager {
 
     for (const pole of this.streetlightPoles) {
 
-      const dz = player.z - pole.position.z
-
-      if (dz < -10 || dz > STREETLIGHT_POOL_RANGE) continue
+      // Circuit turns can head toward +Z: ahead is arc progress, not -Z.
+      const ds = pole.userData.streetlightDistance - playerS
+      if (ds < -10 || ds > STREETLIGHT_POOL_RANGE) continue
 
       const dx = pole.position.x - player.x
+      const dz = pole.position.z - player.z
       ahead.push({ pole, near: dx * dx + dz * dz })
 
     }
@@ -1946,7 +1974,7 @@ export class HighwayEnvironmentManager {
 
       light.position.set(
         slot.pole.position.x,
-        STREETLIGHT_POOL_HEIGHT,
+        slot.pole.position.y - STREETLIGHT_Y_OFFSET + STREETLIGHT_POOL_HEIGHT,
         slot.pole.position.z
       )
 
@@ -1954,21 +1982,37 @@ export class HighwayEnvironmentManager {
   }
 
 
+  // Tire smoke, speed dust, embers and wisps. Reads plain driving
+  // telemetry the car publishes on userData; a missing controller state
+  // simply emits nothing. No lights, no shadows, three draw calls total.
+  updateCircuitEffects(dt, time, progress) {
+    if (!this.driftSmoke || !this.landmarkAtmosphere) return
+    const car = this.playerCar
+    const telemetry = car?.userData ?? {}
+    updateDriftSmoke(this.driftSmoke, dt, {
+      position: car.position,
+      forward: this.carForward(new THREE.Vector3()),
+      driftFactor: telemetry.driftFactor ?? 0,
+      slipAngle: telemetry.slipAngle ?? 0,
+      speed: telemetry.speed ?? 0,
+    })
+    updateLandmarkAtmosphere(
+      this.landmarkAtmosphere, dt, time, progress ?? 0
+    )
+  }
+
+
   updateShadowFollowing() {
 
-    const px = this.playerCar.position.x
-    const pz =
-      this.playerCar.position.z
+    const pos = this.playerCar.position
+    const forward = this.carForward(new THREE.Vector3())
+    const right = this.carRight(new THREE.Vector3())
 
     if (this.moonLight) {
 
-      this.moonLight.position.set(
-        -30, 35, pz - 90
-      )
-
-      this.moonLight.target.position.set(
-        0, 0, pz
-      )
+      this.moonLight.position.copy(pos).addScaledVector(forward, -35).addScaledVector(right, -28)
+      this.moonLight.position.y += 45
+      this.moonLight.target.position.copy(pos).addScaledVector(forward, 20)
 
     }
 
@@ -1976,25 +2020,18 @@ export class HighwayEnvironmentManager {
     // neutral light; rim stays low down-road so dark shapes edge in red.
     if (this.fillLight) {
 
-      this.fillLight.position.set(
-        px + 10, 18, pz + 30
-      )
-
-      this.fillLight.target.position.set(
-        px, 0, pz - 20
-      )
+      this.fillLight.position.copy(pos).addScaledVector(forward, -22).addScaledVector(right, 10)
+      this.fillLight.position.y += 18
+      this.fillLight.target.position.copy(pos).addScaledVector(forward, 20)
 
     }
 
     if (this.rimLight) {
 
-      this.rimLight.position.set(
-        px - 15, 10, pz - 130
-      )
-
-      this.rimLight.target.position.set(
-        px, 1, pz - 20
-      )
+      this.rimLight.position.copy(pos).addScaledVector(forward, 45).addScaledVector(right, -15)
+      this.rimLight.position.y += 10
+      this.rimLight.target.position.copy(pos).addScaledVector(forward, 15)
+      this.rimLight.target.position.y += 1
 
     }
   }
@@ -2174,6 +2211,9 @@ export class HighwayEnvironmentManager {
             )
           )
     }
+    // Preserve at least ~27% un-fogged contrast at 60 m, even during a
+    // pulse: distant silhouettes remain spooky without hiding reaction cues.
+    this.scene.fog.density = Math.min(this.scene.fog.density, 0.019)
   }
 
 

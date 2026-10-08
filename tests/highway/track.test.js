@@ -12,8 +12,8 @@ import {
   createDefaultTrack,
 } from '../../src/levels/highway/track.js'
 
-// 3D arc length of the dramatic 8-section geometry (was 1151.202...).
-const EXPECTED_TOTAL_LENGTH = 1207.48571328137
+// Circuit route including the 60 m finish runoff.
+const EXPECTED_TOTAL_LENGTH = 1581.046503009062
 
 test('s=0 produces the expected start position', () => {
   const track = createDefaultTrack()
@@ -26,8 +26,7 @@ test('s=0 produces the expected start position', () => {
 test('s=totalLength produces the expected end position', () => {
   const track = createDefaultTrack()
   const frame = track.sampleAt(track.totalLength)
-  assert.ok(Math.abs(frame.position.x - -6) < 1e-9)
-  assert.ok(Math.abs(frame.position.z - -1110) < 1e-9)
+  assert.ok(frame.position.distanceTo(ROAD_PATH_POINTS.at(-1)) < 1e-9)
   assert.equal(frame.progress, track.totalLength)
 })
 
@@ -38,7 +37,7 @@ test('sampleAt() clamps safely outside valid range', () => {
   assert.ok(Math.abs(before.position.z - 10) < 1e-9)
   const after = track.sampleAt(track.totalLength + 100)
   assert.equal(after.progress, track.totalLength)
-  assert.ok(Math.abs(after.position.z - -1110) < 1e-9)
+  assert.ok(after.position.distanceTo(ROAD_PATH_POINTS.at(-1)) < 1e-9)
 })
 
 test('tangent and lateral are normalized and perpendicular', () => {
@@ -199,7 +198,7 @@ test('curvature stays playable for the lateral controller', () => {
     }
     prev = cur
   }
-  // No hairpins: the auto-aligning lateral controller needs wide bends.
+  // Tight corners still leave a safe radius for free-steering arcade cars.
   assert.ok(minRadius > 45, `min curve radius: ${minRadius}`)
 })
 
@@ -334,4 +333,50 @@ test('finish distance remains valid on the new geometry', () => {
   const frame = track.sampleAt(finish)
   assert.ok(Number.isFinite(frame.angle))
   assert.ok(Math.abs(frame.tangent.length() - 1) < 1e-9)
+})
+
+test('circuit has three racing straights and readable corner complexes', () => {
+  const track = createDefaultTrack()
+  const turn = (a, b) => {
+    const delta = track.sampleAt(b).angle - track.sampleAt(a).angle
+    return Math.atan2(Math.sin(delta), Math.cos(delta)) * 180 / Math.PI
+  }
+  // Long enough to accelerate and race side by side; finish paint lies on
+  // the final straight, not partway around the last corner.
+  for (const [a, b] of [[10, 160], [400, 520], [1400, 1570]]) {
+    assert.ok(Math.abs(turn(a, b)) < 1, `straight ${a}..${b}`)
+  }
+  assert.ok(turn(190, 370) < -70, 'opening sweeper changes direction visibly')
+  assert.ok(turn(550, 710) > 90, 'braking corner is a deliberate left turn')
+  assert.ok(turn(730, 810) < -30 && turn(830, 910) > 30, 'linked S changes direction')
+  assert.ok(turn(930, 1110) < -135, 'hero corner doubles back through a long drift arc')
+  assert.ok(turn(1130, 1370) > 110, 'broad exit sweeper leads onto the sprint')
+  let lateralReveal = 0
+  for (let s = 940; s < 1070; s += 5) {
+    const frame = track.sampleAt(s)
+    lateralReveal = Math.max(lateralReveal, Math.abs(
+      track.sampleAt(s + 50).position.sub(frame.position).dot(frame.lateral)
+    ))
+  }
+  assert.ok(lateralReveal > ROAD_WIDTH, 'corner leaves the current forward corridor within 50 m')
+})
+
+test('two car footprints fit side by side through every circuit corner', () => {
+  const track = createDefaultTrack()
+  for (let s = 10; s < track.getFinishDistance(); s += 10) {
+    const frame = track.sampleAt(s)
+    for (const lane of [-2, 2]) {
+      const center = track.toWorld(s, lane)
+      for (const width of [-1, 1]) {
+        for (const length of [-2, 2]) {
+          const corner = center.clone().addScaledVector(frame.lateral, width)
+            .addScaledVector(frame.tangent, length)
+          const solved = track.toTrack(corner)
+          assert.ok(Math.abs(solved.d) < 5.9, '4 m by 2 m cars clear the curbs')
+          assert.ok(Math.sign(solved.d) === Math.sign(lane), 'cars occupy separate lanes')
+          assert.ok(Math.abs(solved.s - s) < 2.5, 'footprint stays on its circuit section')
+        }
+      }
+    }
+  }
 })

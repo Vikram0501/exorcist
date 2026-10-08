@@ -18,11 +18,9 @@ export function isTypingTarget(target) {
 }
 
 
-// Chase-camera composition: ~15% closer and a touch lower than the original
-// 8-back/+4-high framing, so car and zombie detail reads better while the
-// forward road view (look-ahead below) still dominates.
-export const CAMERA_DISTANCE = 6.8
-export const CAMERA_HEIGHT = 3.6
+// Closer detail framing, with track clearance and restrained corner preview.
+export const CAMERA_DISTANCE = 6.0
+export const CAMERA_HEIGHT = 3.05
 
 // ============================================
 // ARCADE CHASE-CAMERA TUNING
@@ -33,14 +31,14 @@ export const CAMERA_HEIGHT = 3.6
 // height, FOV) while drifting blends a restrained amount of velocity
 // direction into the follow orientation so the slide reads visually.
 //
-// Distance: 6.8 (standstill) -> 8.0 (top speed). The car never goes tiny.
-// Height: 3.6 -> 4.0. Stays a chase view, never overhead.
+// Distance: 6.0 (standstill) -> 7.1 (top speed).
+// Height: 3.05 -> 3.55. Stays a chase view, never overhead.
 // FOV: baseline (whatever the camera was constructed with, e.g. 75 in
 // game) + up to CAMERA_FOV_GAIN degrees at top speed. Subtle, no tunnel.
 // Drift blend: 100% heading normally, up to 25% velocity direction at full
 // slide. Never swings around the car.
-export const CAMERA_MAX_DISTANCE = 8.0
-export const CAMERA_MAX_HEIGHT = 4.0
+export const CAMERA_MAX_DISTANCE = 7.1
+export const CAMERA_MAX_HEIGHT = 3.55
 export const CAMERA_FOV_GAIN = 8
 export const CAMERA_DRIFT_MAX_INFLUENCE = 0.25
 export const CAMERA_LOOK_AHEAD_NEAR = 8
@@ -743,6 +741,11 @@ export class HighwayCarController {
       )
       visual.rotation.x = -Math.asin(slope)
     }
+    // Effect telemetry for the environment pass (drift smoke, speed dust).
+    // Plain values on userData: no coupling between car and environment.
+    this.car.userData.driftFactor = this.driftFactor
+    this.car.userData.slipAngle = this.slipAngle
+    this.car.userData.speed = this.speed
   }
 
 
@@ -916,6 +919,7 @@ export class HighwayCarController {
     if (!Number.isFinite(this.camera.position.lengthSq())) {
       this.camera.position.copy(targetPosition)
     }
+    this.constrainCameraPosition()
 
     // --- Look target: forward point along the follow direction ---
     // Uses the lagged orientation (not raw heading) so the target never
@@ -927,6 +931,16 @@ export class HighwayCarController {
       this.car.position.z +
         this.cameraForward.z * this.currentLookAhead
     )
+    // A small track preview helps reveal S-bends without making steering
+    // feel track-locked. Keep the vehicle heading dominant, including drift.
+    const ahead = this.track.sampleAt(this.pathProgress + this.currentLookAhead)
+    const alignment = headingDir.dot(ahead.tangent)
+    const preview = 0.22 * THREE.MathUtils.clamp((alignment - 0.4) / 0.6, 0, 1)
+    const roadLook = this.track.toWorld(this.pathProgress + this.currentLookAhead,
+      this.lateralOffset * 0.5, 1)
+    desiredLook.lerp(roadLook, preview)
+    // Follow uphill/downhill sightlines without changing horizontal framing.
+    desiredLook.y = THREE.MathUtils.lerp(desiredLook.y, roadLook.y, 0.65)
     if (
       !Number.isFinite(this.smoothedLook.x) ||
       this.smoothedLook.lengthSq() < 1e-8
@@ -939,6 +953,50 @@ export class HighwayCarController {
       this.smoothedLook.copy(desiredLook)
     }
     this.camera.lookAt(this.smoothedLook)
+  }
+
+  constrainCameraPosition() {
+    // Cheap local search: the camera is always near this car's station, so
+    // no scene-wide raycasts or repeated full-track nearest-point scans.
+    // After a teleport the camera is still converging from far away; leave
+    // it to the smoothing pass that frame instead of clamping to a wrong
+    // local section.
+    const camera = this.camera.position
+    let nearest = this.track.sampleAt(this.pathProgress)
+    let best = Infinity
+    for (let offset = -24; offset <= 16; offset += 4) {
+      const frame = this.track.sampleAt(this.pathProgress + offset)
+      const distance = Math.hypot(camera.x - frame.position.x, camera.z - frame.position.z)
+      if (distance < best) {
+        best = distance
+        nearest = frame
+      }
+    }
+    if (!(best <= 25)) return
+    const delta = camera.clone().sub(nearest.position)
+    const along = delta.x * nearest.tangent.x + delta.z * nearest.tangent.z
+    const frame = this.track.sampleAt(nearest.progress + along)
+    const dx = camera.x - frame.position.x
+    const dz = camera.z - frame.position.z
+    const lateralLength = Math.hypot(frame.lateral.x, frame.lateral.z)
+    const rightX = frame.lateral.x / lateralLength
+    const rightZ = frame.lateral.z / lateralLength
+    const d = dx * rightX + dz * rightZ
+    // The near plane remains inside the barriers, while stands/pits begin
+    // beyond |d|=10. This also keeps extreme drift/reverse views out of props.
+    const safeD = THREE.MathUtils.clamp(d, -5.8, 5.8)
+    camera.x += rightX * (safeD - d)
+    camera.z += rightZ * (safeD - d)
+    const ground = frame.position.y - (frame.up.x * (camera.x - frame.position.x) +
+      frame.up.z * (camera.z - frame.position.z)) / frame.up.y
+    camera.y = Math.max(camera.y, ground + 1.5)
+    const relative = camera.clone().sub(this.car.position)
+    const forward = this.forwardVector(new THREE.Vector3())
+    const alongCar = relative.dot(forward)
+    const acrossCar = relative.x * -forward.z + relative.z * forward.x
+    if (Math.abs(alongCar) < 3.1 && Math.abs(acrossCar) < 1.7) {
+      camera.y = Math.max(camera.y, this.car.position.y + 2.4)
+    }
   }
 
   setDrivingEnabled(enabled) {

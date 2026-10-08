@@ -114,6 +114,9 @@ test('obstacles cycle zombie, scientist and barbed wire with working collision',
       obs.mesh.updateMatrixWorld(true)
       const box = new THREE.Box3().setFromObject(obs.mesh)
       const frame = level.track.sampleAt(obs.progress)
+      assert.ok(obs.mesh.position.distanceTo(
+        level.track.toWorld(obs.progress, obs.lateralOffset)
+      ) < 1e-6, 'obstacle visual agrees with banked collision coordinates')
       const roadBase =
         frame.position.y + frame.lateral.y * obs.lateralOffset
       assert.ok(
@@ -134,9 +137,16 @@ test('obstacles cycle zombie, scientist and barbed wire with working collision',
           `scientist height ${size.y.toFixed(2)}`
         )
       } else {
+        // Measure across the obstacle's own frame, not world X: circuit
+        // corners now rotate wire fences through more than 90 degrees.
+        const local = obs.mesh.clone(true)
+        local.position.set(0, 0, 0)
+        local.rotation.set(0, 0, 0)
+        local.updateMatrixWorld(true)
+        const width = new THREE.Box3().setFromObject(local).getSize(new THREE.Vector3()).x
         assert.ok(
-          size.x > 3.8 && size.x < 4.2,
-          `barbed width ${size.x.toFixed(2)}`
+          width > 3.8 && width < 4.2,
+          `barbed width ${width.toFixed(2)}`
         )
       }
     }

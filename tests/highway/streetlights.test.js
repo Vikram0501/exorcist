@@ -161,6 +161,24 @@ test('streetlights line both sides of the highway with shared resources', async 
     assert.ok(visible.length > 0, 'nearby poles render')
     assert.ok(visible.length < built, 'distant poles are culled')
 
+    // The returning drift corner faces +Z. Light selection must still
+    // follow race progress, rather than illuminating the section behind.
+    playerCar.position.copy(level.track.toWorld(1100, 0, 0.2))
+    assert.ok(level.track.sampleAt(1100).tangent.z > 0)
+    environment.updateStreetlightPool(1)
+    let lit = 0
+    for (const light of environment.streetlightPool) {
+      const pole = poles.find(p => Math.abs(p.position.x - light.position.x) < 1e-6 &&
+        Math.abs(p.position.z - light.position.z) < 1e-6)
+      if (!pole) continue
+      const ahead = pole.userData.streetlightDistance - 1100
+      assert.ok(ahead >= -10.1 && ahead <= 130.1, 'pool follows upcoming circuit stations')
+      assert.ok(Math.abs(light.position.y - pole.position.y - 5.2) < 1e-6,
+        'existing lamp height follows track elevation')
+      lit++
+    }
+    assert.ok(lit > 0, 'returning corner has working light pools')
+
     environment.dispose()
     assert.equal(environment.group.parent, null)
     assert.equal(

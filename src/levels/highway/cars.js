@@ -10,8 +10,8 @@ export const PLAYER_MODEL_ROTATION = 0
 export const GHOST_MODEL_ROTATION = 0
 const GHOST_COLOR = 0x44dddd
 const GHOST_EMISSIVE = 0x228888
-const GHOST_EMISSIVE_INTENSITY = 1.5
-const GHOST_OPACITY = 0.5
+const GHOST_EMISSIVE_INTENSITY = 0.65
+const GHOST_OPACITY = 0.62
 
 // Fresh resources per level instance: the existing level teardown owns them.
 // Attach fulfilled loads immediately so teardown also covers a partial failure.
@@ -68,14 +68,21 @@ function prepareCarVisual(car, scene, ghost) {
     bounds.union(object.geometry.boundingBox.clone().applyMatrix4(object.matrixWorld))
     object.castShadow = !ghost
     object.receiveShadow = true
-    if (ghost) {
-      const materials = Array.isArray(object.material) ? object.material : [object.material]
-      for (const material of materials) {
+    const materials = Array.isArray(object.material) ? object.material : [object.material]
+    for (const material of materials) {
+      // Keep authored textures and glass. Only lift opaque bodywork: modest
+      // roughness prevents tiny blown-out highlights under the spotlights.
+      if (!material.transparent) {
+        material.roughness = THREE.MathUtils.clamp(material.roughness ?? 0.5, 0.38, 0.75)
+        material.metalness = Math.min(material.metalness ?? 0, 0.65)
+      }
+      if (ghost) {
         material.color.setHex(GHOST_COLOR)
         material.emissive.setHex(GHOST_EMISSIVE)
         material.emissiveIntensity = GHOST_EMISSIVE_INTENSITY
         material.transparent = true
         material.opacity = GHOST_OPACITY
+        material.depthWrite = false
       }
     }
   })
