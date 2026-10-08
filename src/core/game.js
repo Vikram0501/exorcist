@@ -39,6 +39,9 @@ import { HighwayCarController }
 import { HighwayRaceController }
   from '../levels/highway/race.js'
 
+import { HighwayHUD }
+  from '../levels/highway/hud.js'
+
 import { HighwayEnvironmentManager }
   from '../levels/highway/environment.js'
 
@@ -168,6 +171,8 @@ export class Game {
     this.highwayController = null
 
     this.highwayRace = null
+
+    this.highwayHUD = null
 
     this.highwayEnvironment = null
 
@@ -572,6 +577,12 @@ if (this.loaded) {
         if (this.highwayRace) {
 
           this.highwayRace.update(dt)
+
+        }
+
+        if (this.highwayHUD) {
+
+          this.highwayHUD.update(dt)
 
         }
 
@@ -1398,6 +1409,14 @@ if (this.loaded) {
 
               }
 
+            // Arcade racing HUD (read-only overlay on the live race
+            // state; disposed with the level so restarts start fresh).
+            this.highwayHUD = new HighwayHUD({
+              controller: this.highwayController,
+              race: this.highwayRace,
+              track: this.levelData.track,
+            })
+
             this.collectibles =
               createCollectibles(
                 ghostName,
@@ -1619,7 +1638,15 @@ if (this.loaded) {
 
       this.highwayRace.dispose()
 
-      this.highwayRace = null
+    this.highwayRace = null
+
+    }
+
+    if (this.highwayHUD) {
+
+      this.highwayHUD.dispose()
+
+      this.highwayHUD = null
 
     }
 
