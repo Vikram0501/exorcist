@@ -94,8 +94,8 @@ function assertFiniteCamera(controller, label) {
 }
 
 test('chase camera sits modestly closer and lower, still looking ahead', async () => {
-  assert.equal(CAMERA_DISTANCE, 6.8)
-  assert.equal(CAMERA_HEIGHT, 3.6)
+  assert.equal(CAMERA_DISTANCE, 6.0)
+  assert.equal(CAMERA_HEIGHT, 3.05)
 
   const originalWindow = globalThis.window
   globalThis.window = { addEventListener() {}, removeEventListener() {} }
@@ -205,12 +205,12 @@ test('camera distance increases modestly with speed', () => withWindow(() => {
     `car never goes tiny, delta=${(fastGap - slowGap).toFixed(2)}`
   )
   assert.ok(
-    slowDistance >= 6.4 && slowDistance <= 6.9,
-    `low-speed distance ~6.5-6.8, got ${slowDistance.toFixed(2)}`
+    slowDistance >= 5.9 && slowDistance <= 6.1,
+    `low-speed distance ~6.0, got ${slowDistance.toFixed(2)}`
   )
   assert.ok(
-    c.currentCameraDistance >= 7.4 && c.currentCameraDistance <= 8.6,
-    `max-speed distance ~7.5-8.5, got ${c.currentCameraDistance.toFixed(2)}`
+    c.currentCameraDistance >= 6.9 && c.currentCameraDistance <= 7.3,
+    `max-speed distance ~7.1, got ${c.currentCameraDistance.toFixed(2)}`
   )
   assert.ok(
     c.currentCameraDistance <= CAMERA_MAX_DISTANCE + 1e-9,
@@ -229,7 +229,7 @@ test('camera height remains within chase bounds', () => withWindow(() => {
   const fastHeight = c.camera.position.y - c.car.position.y
   for (const [label, h] of [['slow', slowHeight], ['fast', fastHeight]]) {
     assert.ok(
-      h >= 3.3 && h <= 4.3,
+      h >= 2.8 && h <= 3.8,
       `${label} height stays a chase view, got ${h.toFixed(2)}`
     )
   }

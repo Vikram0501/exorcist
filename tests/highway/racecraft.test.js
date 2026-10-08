@@ -55,6 +55,30 @@ function makeRacecraft() {
   return { track, highway, handle }
 }
 
+test('curbs and tire wear follow banked corners without entering barriers', () => withStubs(() => {
+  const { track, handle } = makeRacecraft()
+  for (const name of ['racecraftCornerCurbs', 'racecraftSkidMarks']) {
+    const mesh = handle.group.getObjectByName(name)
+    assert.ok(mesh, `${name} exists`)
+    const p = mesh.geometry.getAttribute('position')
+    const v = new THREE.Vector3()
+    for (let i = 0; i < p.count; i += 17) {
+      v.fromBufferAttribute(p, i)
+      const solved = track.toTrack(v)
+      const frame = track.sampleAt(solved.s)
+      const lift = v.clone().sub(track.toWorld(solved.s, solved.d, HIGHWAY_SURFACE_Y)).dot(frame.up)
+      assert.ok(lift > 0.015 && lift < 0.08, `${name} sits just above asphalt: ${lift}`)
+      if (name === 'racecraftCornerCurbs') {
+        assert.ok(Math.abs(solved.d) > 6.15 && Math.abs(solved.d) < 6.85,
+          'curbs clear the driving envelope, studs and barrier')
+      } else {
+        assert.ok(Math.abs(solved.d) < 3, 'tire wear stays on the racing surface')
+      }
+    }
+  }
+  assert.equal(handle.group.getObjectByName('racecraftFloodlights'), undefined)
+}))
+
 // Markings ride the banked track with a fixed anti-z-fight lift.
 test('markings follow the track with lift', () => withStubs(() => {
   const { track, handle } = makeRacecraft()
@@ -102,33 +126,22 @@ test('no decorative race signage exists', () => withStubs(() => {
 // Structures ride elevation (no floating or burial).
 test('structures follow elevation', () => withStubs(() => {
   const { track, handle } = makeRacecraft()
-  // Barrier caps sit on the banked shoulder line (mounted 1.06 up).
-  // Box corners are checked via chunk centroids: 10 m straight boxes
-  // chord across curves exactly like the barriers they cap, so centers
-  // must match the analytic frame while corners may deviate with it.
+  // Caps now curve with the barrier, including their tops and bottoms.
   const caps = handle.group.getObjectByName('racecraftBarrierCaps')
   assert.ok(caps, 'danger-corner caps built')
   const p = caps.geometry.getAttribute('position')
-  assert.equal(p.count % 24, 0, 'whole boxes merged')
   const v = new THREE.Vector3()
-  const centroid = new THREE.Vector3()
-  let boxes = 0
-  for (let b = 0; b < p.count; b += 24) {
-    centroid.set(0, 0, 0)
-    for (let i = 0; i < 24; i++) {
-      v.fromBufferAttribute(p, b + i)
-      centroid.add(v)
-    }
-    centroid.multiplyScalar(1 / 24)
-    const solved = track.toTrack(centroid)
-    const expected = track.toWorld(solved.s, solved.d, 1.06)
-    assert.ok(
-      centroid.distanceTo(expected) < 0.3,
-      'cap centered on the banked shoulder'
-    )
-    boxes++
+  for (let i = 0; i < p.count; i += 31) {
+    v.fromBufferAttribute(p, i)
+    const solved = track.toTrack(v)
+    const frame = track.sampleAt(solved.s)
+    const offset = v.clone().sub(frame.position)
+    const d = offset.dot(frame.lateral)
+    assert.ok(Math.abs(d) > 7.19 && Math.abs(d) < 7.61)
+    const h = offset.dot(frame.up)
+    assert.ok(Math.min(Math.abs(h - 1), Math.abs(h - 1.12)) < 0.02,
+      'cap conforms to the curved banked barrier')
   }
-  assert.ok(boxes > 5, `${boxes} caps placed`)
   // Start/finish paint lies on the asphalt (vertices are baked in
   // world space, so the centroid — not the origin — is the reference).
   for (const name of ['racecraftStartPaint', 'racecraftFinishPaint']) {

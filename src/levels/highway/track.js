@@ -66,68 +66,58 @@ const CURVE_ARC_DIVISIONS = 2000
 const CLEARANCE_SAMPLE_COUNT = 600
 
 
-// Level 3 control points with deliberate arcade elevation (Phase 1).
-//
-// Horizontal X/Z rhythm is unchanged: acceleration straight -> gentle
-// right sweeper -> medium left complex -> short straight -> strong
-// right (drift-friendly) -> recovery straight -> large left sweeper ->
-// final fast section -> FINISH. Z decreases monotonically (no doubling
-// back, no self-intersections).
-//
-// Elevation rhythm (restrained, CatmullRom-smoothed): flat launch ->
-// steady climb -> crest (+16) over the medium-left complex -> descent
-// through the drift corner -> dip (-4) on the recovery straight ->
-// gentle rise to a stable flat finish. Steepest control-polygon grade
-// is ~6%; the smoothed curve stays below that. No jumps, no
-// rollercoaster: velocity physics remains planar (see car.js).
-// Level 3 control points: dramatic arcade street-racing geometry.
-//
-// Rhythm (8 readable sections): start straight -> uphill right sweeper
-// -> crest complex (lefts over the top) -> downhill traverse -> S-bend
-// (right then left) -> HERO right drift corner -> unwinding left
-// sweeper -> fast straight -> stable finish straight.
-// Z decreases monotonically (no doubling back, no self-intersections).
-// Elevation: flat launch -> steady climb -> crest (+15) -> descent to a
-// dip (-7) at the hero -> gentle rise to a stable finish. All radii stay
-// well above the lateral controller's comfort zone (min ~50 m).
-export const ROAD_PATH_POINTS = [
-  // Section 1: start / acceleration straight (flat launch).
-  new THREE.Vector3(0.0, 0.0, 10.0),
-  new THREE.Vector3(-0.0, 1.0, -110.0),
-  // Section 2: uphill sweeper, long right.
-  new THREE.Vector3(3.5, 2.7, -153.2),
-  new THREE.Vector3(14.0, 4.3, -195.2),
-  new THREE.Vector3(31.2, 6.0, -235.0),
-  new THREE.Vector3(48.7, 7.8, -271.0),
-  new THREE.Vector3(63.7, 9.7, -308.1),
-  new THREE.Vector3(76.1, 11.5, -346.1),
-  // Section 3: crest complex, bending left over the top. Sharpened so
-  // the climb reads against the skyline and the far side drops out of
-  // sight from the chase camera (see crest-visibility test).
-  new THREE.Vector3(83.6, 13.5, -375.2),
-  new THREE.Vector3(89.5, 14.8, -404.5),
-  new THREE.Vector3(90.9, 12.6, -451.2),
-  new THREE.Vector3(78.8, 10.2, -496.3),
-  // Section 4: downhill traverse.
-  new THREE.Vector3(54.3, 7.0, -536.0),
-  new THREE.Vector3(34.4, 6.0, -576.4),
-  new THREE.Vector3(35.4, 6.0, -621.3),
-  new THREE.Vector3(38.3, 4.0, -666.2),
-  // Section 5: S-bend, right then left.
-  new THREE.Vector3(23.9, 2.0, -708.9),
-  new THREE.Vector3(-1.1, 0.0, -752.2),
-  new THREE.Vector3(-13.9, -2.3, -797.1),
-  // Section 6: HERO drift corner, big banked right.
-  new THREE.Vector3(-3.8, -4.7, -842.6),
-  new THREE.Vector3(26.8, -7.0, -877.9),
-  new THREE.Vector3(58.9, -6.3, -916.2),
-  // Section 7: unwinding left sweeper, fast and open.
-  new THREE.Vector3(67.6, -5.7, -965.5),
-  new THREE.Vector3(50.5, -5.0, -1012.4),
-  new THREE.Vector3(16.1, -3.0, -1061.6),
-  // Section 8: finish straight, stable and readable.
-  new THREE.Vector3(-6.0, 0.0, -1110.0),
+// Authored circuit rhythm: lengths are plan metres, turns are degrees to
+// the driver's right. These generate control points ONLY; the existing
+// centripetal curve, banking, arc-distance API and all gameplay remain the
+// authority. The 145-degree hero actually turns back across the skyline,
+// rather than every corner simply wavering down the same highway axis.
+// This is still a single point-to-point race, with a safe finish runoff.
+const CIRCUIT_SECTIONS = [
+  { length: 180, turn: 0 },    // Launch straight.
+  { length: 200, turn: 75 },   // Wide uphill right sweeper.
+  { length: 160, turn: 0 },    // High-speed back straight over the crest.
+  { length: 180, turn: -100 }, // Braking/drift-friendly left.
+  { length: 100, turn: 35 },   // Linked S: right ...
+  { length: 100, turn: -35 },  // ... then left.
+  { length: 200, turn: 145 },  // Hero right, minimum radius ~52 m.
+  { length: 260, turn: -120 }, // Broad exit sweeper opens onto the finish.
+  { length: 200, turn: 0 },    // Final sprint, including 60 m of runoff.
 ]
+
+function buildCircuitPoints() {
+  const heights = [[0, 0], [160, 0], [440, 13], [480, 15], [520, 13], [880, -5], [1120, -3], [1380, 0], [1580, 0]]
+  const ease = t => t * t * (3 - 2 * t)
+  const elevation = s => {
+    for (let i = 1; i < heights.length; i++) {
+      const [end, y1] = heights[i]
+      if (s > end) continue
+      const [start, y0] = heights[i - 1]
+      return THREE.MathUtils.lerp(y0, y1, ease((s - start) / (end - start)))
+    }
+    return 0
+  }
+  const points = [new THREE.Vector3(0, 0, 10)]
+  let x = 0, z = 10, heading = 0, distance = 0
+  for (const section of CIRCUIT_SECTIONS) {
+    const turn = THREE.MathUtils.degToRad(section.turn)
+    // Midpoint integration at 1 m authors repeatable control points every
+    // 10 m. Smoothstep heading eases curvature to zero at every join, so
+    // straights/S transitions do not introduce steering or banking snaps.
+    for (let s = 0; s < section.length; s++) {
+      const angle = heading + turn * ease((s + 0.5) / section.length)
+      x += Math.sin(angle)
+      z -= Math.cos(angle)
+      if ((s + 1) % 10 === 0) {
+        points.push(new THREE.Vector3(x, elevation(distance + s + 1), z))
+      }
+    }
+    heading += turn
+    distance += section.length
+  }
+  return points
+}
+
+export const ROAD_PATH_POINTS = buildCircuitPoints()
 
 
 // Legacy piecewise-linear arc-length table. Kept for compatibility checks

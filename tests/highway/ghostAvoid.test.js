@@ -592,7 +592,7 @@ test('ghost finishes a race with obstacle interactions', () => withStubs(() => {
   const field = []
   const lanes = [-3, 0, 3, -1.5, 1.5, -3, 0.5, 3]
   for (let i = 0; i < 8; i++) {
-    field.push(zombie(150 + i * 100, lanes[i % lanes.length]))
+    field.push(zombie(150 + i * (finish - 250) / 7, lanes[i % lanes.length]))
   }
   race.obstacles = field
   race.ghostPathProgress = 60
@@ -602,7 +602,18 @@ test('ghost finishes a race with obstacle interactions', () => withStubs(() => {
     player.keys = {}
     player.update(1 / 60)
     race.update(1 / 60)
-    if (steps % 600 === 0) finiteGhost(race, `race frame ${steps}`)
+    if (steps % 30 === 0) {
+      finiteGhost(race, `race frame ${steps}`)
+      const solved = track.toTrack(race.ghostCar.position)
+      assert.ok(Math.abs(solved.s - race.ghostPathProgress) < 0.1,
+        'ghost stays on the correct section through the returning corner')
+      assert.ok(Math.abs(solved.d) <= GHOST_AVOID_LANE_BOUND + 0.1,
+        'ghost remains inside the racing surface')
+      const frame = track.sampleAt(solved.s)
+      const d = race.ghostCar.position.clone().sub(frame.position).dot(frame.lateral)
+      assert.ok(Math.abs(d - race.ghostLateralOffset) < 0.01,
+        'ghost world pose agrees with collision coordinates')
+    }
   }
   assert.ok(
     race.ghostPathProgress >= finish,

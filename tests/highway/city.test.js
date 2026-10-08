@@ -151,6 +151,18 @@ test('the city surrounds both sides of the road and leaves the highway clear', a
       `city reaches to ${minClearance.toFixed(2)} of the road centre`
     )
 
+    // Whole city footprints (not just their origins) are pulled behind the
+    // circuit landmarks. The pits/stands occupy only |d|=12..23.
+    const reserved = sections.filter(section => section.userData.circuitSite)
+    assert.ok(reserved.length >= 10, 'landmarks have city backdrop reservations')
+    assert.equal(new Set(reserved.map(section => section.userData.circuitSite)).size, 3)
+    for (const section of reserved) {
+      assert.ok(environment.measureCityClearance(section, box) >= 35.9,
+        `${section.userData.circuitSite} is not buried in a city block`)
+    }
+    const wrecks = environment.group.children.filter(object => object.name === 'circuitWreck')
+    assert.equal(wrecks.length, 12, 'existing wreck field is preserved')
+
     // Every metre of the race sits inside some section's length.
     for (let d = 0; d <= level.totalRoadLength; d += 2) {
       const point = environment.getPathSample(d)

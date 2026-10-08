@@ -12,7 +12,7 @@ import { CITY_MODEL_URL } from '../../src/levels/highway/city.js'
 import { STREETLIGHT_MODEL_URL } from '../../src/levels/highway/streetlights.js'
 import { OBSTACLE_MODEL_URLS } from '../../src/levels/highway/obstacles.js'
 
-test('actual GLB covers the unchanged race path, including seams, cars and finish', async () => {
+test('road covers the circuit, including seams, cars and finish', async () => {
   const assets = new Map(await Promise.all(
     [HIGHWAY_MODEL_URL, PLAYER_MODEL_URL, GHOST_MODEL_URL, CITY_MODEL_URL, STREETLIGHT_MODEL_URL, ...OBSTACLE_MODEL_URLS].map(async url =>
       [url, await readFile(new URL(`../../public${url}`, import.meta.url))])
@@ -67,14 +67,12 @@ test('actual GLB covers the unchanged race path, including seams, cars and finis
       assert.ok(Math.abs(center.x - root.position.x) < 1e-3)
       assert.ok(Math.abs(center.z - root.position.z) < 1e-3)
     }
-    assert.ok(Math.abs(level.totalRoadLength - 1207.48571328137) < 1e-6)
-    assert.ok(Math.abs(level.finishZ - -1055.9217938457568) < 1e-6)
+    assert.ok(Math.abs(level.totalRoadLength - 1581.046503009062) < 1e-6)
+    assert.ok(Math.abs(level.finishZ - level.track.sampleAt(level.track.getFinishDistance()).position.z) < 1e-6)
     assert.deepEqual(level.colliders, [])
     const road = level.model.getObjectByName('highwayRoadGLB')
     assert.equal(road.userData.segmentLength, 20)
-    // 61 twenty-metre tiles over the ~1207 m route, plus the
-    // start-runoff tile.
-    assert.equal(road.children.length, 62)
+    assert.equal(road.children.length, Math.ceil(level.totalRoadLength / 20) + 1)
     assert.equal(road.children.at(-1).userData.endDistance, level.totalRoadLength)
     assert.equal(new Set(road.children.map(tile => tile.material)).size, 1)
     assert.ok(road.children[0].material.isMeshStandardMaterial)
@@ -135,6 +133,20 @@ test('actual GLB covers the unchanged race path, including seams, cars and finis
       }
     }
 
+    const barriers = level.model.children.filter(mesh => mesh.name === 'circuitBarrier')
+    level.model.updateMatrixWorld(true)
+    const barrierRay = new THREE.Raycaster()
+    for (let s = 5; s < level.totalRoadLength - 5; s += 29) {
+      for (const side of [-1, 1]) {
+        barrierRay.set(level.track.toWorld(s, side * 6, 0.5),
+          level.track.sampleAt(s).lateral.clone().multiplyScalar(side))
+        const hits = barrierRay.intersectObjects(barriers, false)
+        assert.ok(hits.length > 0, `outward-facing barrier exists at ${s}`)
+        assert.ok(hits[0].distance > 1.1 && hits[0].distance < 1.18,
+          `sloped concrete face stays outside the 7 m road edge: ${hits[0].distance}`)
+      }
+    }
+
     const camera = new THREE.PerspectiveCamera()
     const car = new HighwayCarController(level.playerCar, camera, level.roadPath, level.arcLengths)
     const race = new HighwayRaceController(car, level.ghostCar, level.finishZ,
@@ -169,11 +181,16 @@ test('actual GLB covers the unchanged race path, including seams, cars and finis
         Math.abs(object.position.y - seatY) < 1e-3,
         'car origin rides the elevated road'
       )
-      // Grade pitch plus bank roll can dip bodywork corners below the
-      // plane, so the body box only bounds gross floating/sinking.
+      // A world-axis bounding box's low corner is below centre-road Y on
+      // a slope even with perfect seating. Account for the actual grade,
+      // bank and footprint rather than the old mild-highway fixed margin.
+      const body = new THREE.Box3().setFromObject(object)
+      const size = body.getSize(new THREE.Vector3())
+      const up = level.track.sampleAt(sExact).up
+      const slopeAllowance = (Math.abs(up.x) * size.x + Math.abs(up.z) * size.z) / (2 * up.y)
       assert.ok(
-        Math.abs(new THREE.Box3().setFromObject(object).min.y - meshY) < 0.25,
-        'car body rests on the asphalt'
+        Math.abs(body.min.y - meshY) < slopeAllowance + 0.15,
+        `car body rests on asphalt at ${sExact}, delta=${body.min.y - meshY}`
       )
     }
     // Dense fixed-step sampling covers both smoothed player and ghost

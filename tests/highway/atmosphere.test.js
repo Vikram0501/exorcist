@@ -167,12 +167,18 @@ test('neutral fill and red rim lights follow the player without shadows', async 
 
   environment.updateShadowFollowing()
 
+  // Direction-agnostic: the circuit turns through >90 deg, so follow lights
+  // are defined relative to car forward, not world -Z.
+  const forward = new THREE.Vector3(0, 0, 1)
+    .applyQuaternion(playerCar.quaternion).setY(0).normalize()
+  const fillOffset = fill.position.clone().sub(playerCar.position)
+  const rimOffset = rim.position.clone().sub(playerCar.position)
   assert.ok(
-    fill.position.z > playerCar.position.z,
-    'fill rides the camera side'
+    fillOffset.dot(forward) < 0,
+    'fill rides the camera side (behind the car)'
   )
   assert.ok(
-    rim.position.z < playerCar.position.z,
+    rimOffset.dot(forward) > 0,
     'rim stays down-road for edge light'
   )
   assert.ok(

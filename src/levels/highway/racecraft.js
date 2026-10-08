@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { mergeGeometries }
   from 'three/addons/utils/BufferGeometryUtils.js'
-import { HIGHWAY_SURFACE_Y }
+import { HIGHWAY_SURFACE_Y, createTrackBoxGeometry }
   from './road.js'
 
 // ============================================
@@ -9,9 +9,8 @@ import { HIGHWAY_SURFACE_Y }
 // ============================================
 //
 // Procedural racing visual language that lives ON the road: worn edge
-// lines, centre dashes, reflective studs, danger-corner barrier caps,
-// curve-tracing lamps, start/finish paint, and small floodlight heads on
-// the original finish arch. No gantries, no banners, no text boards, no
+// lines, corner curbs, tire wear, reflective studs, danger-corner barrier caps,
+// curve-tracing lamps and start/finish paint. No gantries, no banners, no text boards, no
 // sponsor aesthetic: the racetrack feel comes from the road, curves,
 // elevation, barriers, lighting and composition instead.
 //
@@ -30,16 +29,12 @@ export const DANGER_CORNER_BANK = (4 * Math.PI) / 180
 
 // Marking layout (lateral offsets from centre, road half-width is 7).
 // Deliberately restrained: thin worn lines, never colourful stripes.
-export const EDGE_LINE_INNER = 6.1
-export const EDGE_LINE_OUTER = 6.55
-export const RED_LINE_INNER = 6.62
-export const RED_LINE_OUTER = 6.92
-export const CENTRE_DASH_HALF = 0.18
+export const EDGE_LINE_INNER = 5.95
+export const EDGE_LINE_OUTER = 6.08
 export const MARKING_LIFT = 0.025
 
 const WHITE_LINE = new THREE.Color(0xcfc9b8)
 const RED_LINE = new THREE.Color(0x7a1c1c)
-const SULFUR_DASH = new THREE.Color(0x9a8852)
 const DARK_STEEL = new THREE.Color(0x232228)
 
 function canvasTexture(width, height, draw) {
@@ -78,7 +73,8 @@ function drawChecker(ctx, width, height) {
 // y rides the banked cross-section plus lift along the banked up.
 function ribbonGeometries(track, s0, s1, step, dInner, dOuter, lift, color, geos) {
   let prev = null
-  for (let s = s0; s <= s1 + 1e-6; s += step) {
+  for (let i = 0; i <= Math.ceil((s1 - s0) / step); i++) {
+    const s = s0 + i * step
     const sc = Math.min(s, s1)
     const a = track.toWorld(sc, dInner, lift)
     const b = track.toWorld(sc, dOuter, lift)
@@ -121,17 +117,14 @@ function pushStrip(geos, r0, r1, color) {
 // Flat quad strip lying across the road (start/finish paint, no text).
 function paintStrip(track, s, depth, texture) {
   const group = new THREE.Group()
-  const geo = new THREE.PlaneGeometry(14, depth, 24, 1)
+  const geo = new THREE.PlaneGeometry(11.8, depth, 24, 4)
   const pos = geo.getAttribute('position')
-  const frame = track.sampleAt(s)
   // Bake the banked frame into the vertices: local X across the road,
   // local Y along travel.
   for (let i = 0; i < pos.count; i++) {
     const lx = pos.getX(i)
     const ly = pos.getY(i)
-    const p = track.toWorld(s, lx, HIGHWAY_SURFACE_Y + MARKING_LIFT)
-    // Advance along the tangent for the strip depth.
-    p.addScaledVector(frame.tangent, -ly)
+    const p = track.toWorld(s - ly, lx, HIGHWAY_SURFACE_Y + MARKING_LIFT)
     pos.setXYZ(i, p.x, p.y, p.z)
   }
   geo.computeVertexNormals()
@@ -185,29 +178,10 @@ export function createRacecraft({ track, highway, finishDistance }) {
     const lift = HIGHWAY_SURFACE_Y + MARKING_LIFT
     for (const side of [1, -1]) {
       ribbonGeometries(
-        track, 0, totalLength, 2,
+        track, 0, totalLength, 1,
         side * EDGE_LINE_INNER, side * EDGE_LINE_OUTER,
         lift, WHITE_LINE, geos
       )
-      ribbonGeometries(
-        track, 0, totalLength, 2,
-        side * RED_LINE_INNER, side * RED_LINE_OUTER,
-        lift, RED_LINE, geos
-      )
-    }
-    // Centre dashes: 3 m paint every 9 m.
-    for (let s = 6; s < totalLength - 3; s += 9) {
-      const s1 = Math.min(s + 3, totalLength)
-      let prev = null
-      for (let d = s; d <= s1 + 1e-6; d += 1) {
-        const sc = Math.min(d, s1)
-        const a = track.toWorld(sc, -CENTRE_DASH_HALF, lift)
-        const b = track.toWorld(sc, CENTRE_DASH_HALF, lift)
-        const n = track.sampleAt(sc).up
-        const row = { a, b, n }
-        if (prev) pushStrip(geos, prev, row, SULFUR_DASH)
-        prev = row
-      }
     }
     const merged = mergeGeometries(geos, false)
     for (const geo of geos) geo.dispose()
@@ -253,6 +227,77 @@ export function createRacecraft({ track, highway, finishDistance }) {
     return mesh
   }
 
+  // Low-profile rumble curbs stay inside the existing barriers and outside
+  // the driving envelope. Sample each metre like the asphalt, including the
+  // last partial segment; never orient straight boxes across a bend.
+  {
+    const geos = []
+    for (const zone of zones) {
+      for (let s = zone.s0; s < zone.s1; s += 2) {
+        const end = Math.min(s + 2, zone.s1)
+        const color = (Math.floor((s - zone.s0) / 2) % 2 ? WHITE_LINE : RED_LINE).clone()
+        color.multiplyScalar(0.78 + 0.16 * (0.5 + 0.5 * Math.sin(s * 1.73)))
+        for (const side of [-1, 1]) {
+          for (const [a, b, ha, hb] of [
+            [6.2, 6.32, 0.025, 0.065],
+            [6.32, 6.65, 0.065, 0.065],
+            [6.65, 6.8, 0.065, 0.025],
+          ]) {
+            let prev = null
+            for (let i = 0; i <= Math.ceil(end - s); i++) {
+              const d = Math.min(s + i, end)
+              const row = {
+                a: track.toWorld(d, side * a, HIGHWAY_SURFACE_Y + ha),
+                b: track.toWorld(d, side * b, HIGHWAY_SURFACE_Y + hb),
+                n: track.sampleAt(d).up,
+              }
+              if (prev) pushStrip(geos, prev, row, color)
+              prev = row
+            }
+          }
+        }
+      }
+    }
+    const mesh = addTextured(geos, new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.96, side: THREE.DoubleSide,
+      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+    }), 'racecraftCornerCurbs')
+    if (mesh) mesh.receiveShadow = true
+  }
+
+  // Faded paired tire arcs at selected corner entries. These are visual-only
+  // ribbons, not physics objects; all vertices inherit the banked road frame.
+  {
+    const geos = []
+    const rubber = new THREE.Color(0x111214)
+    for (const zone of zones) {
+      const start = Math.max(8, zone.s0 - 12)
+      const end = Math.min(zone.s1, start + 55)
+      const direction = Math.sign(track.sampleBank(zone.s0 + 5)) || 1
+      for (const tire of [-0.8, 0.8]) {
+        let prev = null
+        for (let i = 0; i <= Math.ceil(end - start); i++) {
+          const s = Math.min(start + i, end)
+          const t = (s - start) / (end - start)
+          const center = direction * (Math.sin(t * Math.PI) * 2 - 0.7) + tire
+          const width = 0.10 * Math.sin(t * Math.PI)
+          const row = {
+            a: track.toWorld(s, center - width, HIGHWAY_SURFACE_Y + MARKING_LIFT),
+            b: track.toWorld(s, center + width, HIGHWAY_SURFACE_Y + MARKING_LIFT),
+            n: track.sampleAt(s).up,
+          }
+          if (prev) pushStrip(geos, prev, row, rubber)
+          prev = row
+        }
+      }
+    }
+    addTextured(geos, new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 1, transparent: true, opacity: 0.28,
+      depthWrite: false, side: THREE.DoubleSide,
+      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+    }), 'racecraftSkidMarks')
+  }
+
   // ---- Reflective edge studs (both sides, alternating colors) ----
   let studRedMat
   let studAmberMat
@@ -291,13 +336,8 @@ export function createRacecraft({ track, highway, finishDistance }) {
     const capGeos = []
     for (let s = 10; s < totalLength - 5; s += 10) {
       if (Math.abs(track.sampleBank(s)) < DANGER_CORNER_BANK) continue
-      const side = (track.sampleBank(s) >= 0 ? 1 : -1) * 7.2
-      const p = track.toWorld(s, side, 1.06)
-      const frame = track.sampleAt(s)
-      const geo = new THREE.BoxGeometry(0.5, 0.12, 10)
-      geo.rotateZ(frame.bank)
-      geo.rotateY(frame.angle)
-      geo.translate(p.x, p.y, p.z)
+      const side = (track.sampleBank(s) >= 0 ? 1 : -1) * 7.4
+      const geo = createTrackBoxGeometry(track, s - 5, s + 5, side, 1.06, 0.38, 0.12)
       capGeos.push(geo)
       counts.caps++
     }
@@ -349,34 +389,13 @@ export function createRacecraft({ track, highway, finishDistance }) {
     }
   }
 
-  // ---- Floodlight heads on the original finish arch (lighting, no text) ----
-  {
-    const floodGeos = []
-    const s = finishDistance
-    const frame = track.sampleAt(s)
-    for (const d of [-5, 5]) {
-      const p = track.toWorld(s, d, 5.4)
-      const fgeo = new THREE.BoxGeometry(0.5, 0.3, 0.3)
-      fgeo.rotateY(frame.angle)
-      fgeo.translate(p.x, p.y, p.z)
-      floodGeos.push(fgeo)
-    }
-    const floodMat = new THREE.MeshStandardMaterial({
-      color: 0x444444,
-      emissive: 0xfff2d8,
-      emissiveIntensity: 1.4,
-      roughness: 0.5,
-    })
-    addTextured(floodGeos, floodMat, 'racecraftFloodlights')
-  }
-
   // ---- Start/finish paint (checkered, no text) ----
   {
     const checkerTex = canvasTexture(128, 32, drawChecker)
-    const startPaint = paintStrip(track, 4, 1.4, checkerTex)
+    const startPaint = paintStrip(track, 3, 2, checkerTex)
     startPaint.name = 'racecraftStartPaint'
     group.add(startPaint)
-    const finishPaint = paintStrip(track, finishDistance, 1.6, checkerTex)
+    const finishPaint = paintStrip(track, finishDistance, 2, checkerTex)
     finishPaint.name = 'racecraftFinishPaint'
     group.add(finishPaint)
   }

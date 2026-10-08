@@ -10,8 +10,76 @@ export const HIGHWAY_MODEL_SCALE = 1 // Asset: 20 long × 14 wide in game units.
 export const ROAD_SAMPLE_STEP = 1.0
 const START_RUNOFF_SEGMENTS = 1 // Ground behind the starting cars/chase camera.
 const ROAD_ANISOTROPY = 8
-const ROAD_ROUGHNESS = 0.85 // Slight sheen so the asphalt catches the red
-  // sky and streetlight pools without turning glossy.
+const ROAD_ROUGHNESS = 0.94
+
+// One deterministic, tileable aggregate map shared by the whole circuit.
+// No painted highway lanes are carried over from the source quad's texture.
+function asphaltTexture() {
+  const size = 512
+  const data = new Uint8Array(size * size * 4)
+  let seed = 731
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+    return seed / 4294967296
+  }
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size * Math.PI * 2
+      const v = y / size * Math.PI * 2
+      const mottling = Math.sin(u * 3 + Math.sin(v * 2)) * 4 +
+        Math.cos(v * 5 + Math.sin(u)) * 3
+      const value = Math.round(60 + mottling + (random() - 0.5) * 25)
+      const i = (y * size + x) * 4
+      data[i] = value
+      data[i + 1] = value + 1
+      data[i + 2] = value + 2
+      data[i + 3] = 255
+    }
+  }
+  // Hairline fissures wrap at the tile boundary, avoiding hard texture seams.
+  for (let crack = 0; crack < 7; crack++) {
+    let x = random() * size
+    let y = random() * size
+    const angle = random() * Math.PI * 2
+    for (let j = 0; j < 35 + crack * 9; j++) {
+      x += Math.cos(angle) + (random() - 0.5) * 2
+      y += Math.sin(angle) + (random() - 0.5) * 2
+      const i = (((Math.floor(y) + size) % size) * size +
+        (Math.floor(x) + size) % size) * 4
+      data[i] = 30
+      data[i + 1] = 31
+      data[i + 2] = 32
+    }
+  }
+  const texture = new THREE.DataTexture(data, size, size)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping
+  texture.magFilter = THREE.LinearFilter
+  texture.minFilter = THREE.LinearMipmapLinearFilter
+  texture.generateMipmaps = true
+  texture.anisotropy = ROAD_ANISOTROPY
+  texture.needsUpdate = true
+  return texture
+}
+
+// Shared visual extrusion for barriers and their caps. Sampling rather than
+// yawing a long box keeps the inside edge clear of the curbs on tight bends.
+export function createTrackBoxGeometry(track, s0, s1, d, height, width, thickness) {
+  const geometry = new THREE.BoxGeometry(width, thickness, s1 - s0,
+    1, 1, Math.ceil(s1 - s0))
+  const positions = geometry.getAttribute('position')
+  for (let i = 0; i < positions.count; i++) {
+    // lateral/up/-tangent is right-handed; using +tangent would invert
+    // the box winding and hide its outside faces with FrontSide materials.
+    const s = (s0 + s1) / 2 - positions.getZ(i)
+    const p = track.toWorld(s, d + positions.getX(i), height + positions.getY(i))
+    positions.setXYZ(i, p.x, p.y, p.z)
+  }
+  geometry.computeVertexNormals()
+  geometry.computeBoundingBox()
+  geometry.computeBoundingSphere()
+  return geometry
+}
 
 export async function loadHighwayRoad(options) {
   const gltf = await new GLTFLoader().loadAsync(HIGHWAY_MODEL_URL)
@@ -80,21 +148,21 @@ export function createHighwayRoad(scene, {
     })
   )
 
-  // Only adapt the explicitly unlit material: otherwise headlights and car
-  // shadows would disappear from the asphalt. Retain its original color/map,
-  // UVs, color space and sidedness. Already-lit assets retain their material.
-  let material = source.material
-  if (material.isMeshBasicMaterial) {
-    material = new THREE.MeshStandardMaterial({
-      map: source.material.map,
-      color: source.material.color,
-      side: source.material.side,
-      roughness: ROAD_ROUGHNESS,
-      metalness: 0,
-    })
-    source.material.dispose()
+  const map = asphaltTexture()
+  const bumpMap = map.clone()
+  bumpMap.colorSpace = THREE.NoColorSpace
+  const material = new THREE.MeshStandardMaterial({
+    map,
+    bumpMap,
+    bumpScale: 0.018,
+    side: source.material.side,
+    roughness: ROAD_ROUGHNESS,
+    metalness: 0,
+  })
+  for (const value of Object.values(source.material)) {
+    if (value?.isTexture) value.dispose()
   }
-  material.map.anisotropy = ROAD_ANISOTROPY
+  source.material.dispose()
 
   const length = size.x * HIGHWAY_MODEL_SCALE
   const totalLength = arcLengths[arcLengths.length - 1]
