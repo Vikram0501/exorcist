@@ -201,6 +201,16 @@ function getPlacementBox(root) {
 
 export function updateDoors(doors, dt) {
   for (const door of doors) {
+    if (door.type === 'animation') {
+      door.mixer.update(dt)
+      const duration = door.activeAction?.getClip().duration || 0
+      const clipProgress = duration > 0
+        ? THREE.MathUtils.clamp(door.activeAction.time / duration, 0, 1)
+        : 0
+      door.openProgress = door.isOpen ? clipProgress : 1 - clipProgress
+      continue
+    }
+
     if (door.type === 'slide') {
       const current =
         door.object.position[door.slideAxis]
@@ -249,6 +259,21 @@ export function updateDoors(doors, dt) {
 
 export function toggleDoor(door, playerWorldPosition = null) {
   door.isOpen = !door.isOpen
+
+  if (door.type === 'animation') {
+    const progress = door.openProgress
+    const action = door.isOpen ? door.openAction : door.closeAction
+    const duration = action.getClip().duration
+
+    door.activeAction?.stop()
+    action.reset()
+    action.time = (door.isOpen ? progress : 1 - progress) * duration
+    action.setLoop(THREE.LoopOnce, 1)
+    action.clampWhenFinished = true
+    action.play()
+    door.activeAction = action
+    return
+  }
 
   if (door.type === 'slide') {
     door.targetPosition.copy(

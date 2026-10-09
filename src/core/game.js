@@ -2431,7 +2431,7 @@ if (this.loaded) {
 
     if (
       !this.input.isLocked ||
-      !this.model
+      this.doors.length === 0
     ) {
 
       return null
@@ -2442,8 +2442,8 @@ if (this.loaded) {
 
 
     const hits =
-      this.raycaster.intersectObject(
-        this.model,
+      this.raycaster.intersectObjects(
+        this.doors.map(door => door.object),
         true
       )
 
