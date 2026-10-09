@@ -10,7 +10,7 @@ async function extractTriangles(model, offset) {
   const meshes = []
   let vertexCount = 0
   model.traverse(object => {
-    if (!object.isMesh || !object.geometry.attributes.position) return
+    if (!object.isMesh || object.userData.dynamicDoor || !object.geometry.attributes.position) return
     meshes.push(object)
     vertexCount += object.geometry.index?.count ?? object.geometry.attributes.position.count
   })

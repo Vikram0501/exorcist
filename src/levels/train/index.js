@@ -51,18 +51,47 @@ function cloneCarriage(gltf) {
   return model
 }
 
-function placeCarriage(gltf, z, level, carriages, carriageType, instanceIndex, options = {}) {
+export function createTrainCarriageDoor(model, animations = []) {
+  const object = model.getObjectByName('Rear_Lower_Door')
+  const openClip = animations.find(clip => clip.name === 'Door_Open')
+  const closeClip = animations.find(clip => clip.name === 'Door_Close')
+
+  if (!object || !openClip || !closeClip) return null
+
+  object.traverse(child => {
+    child.userData.dynamicDoor = true
+  })
+
+  const mixer = new THREE.AnimationMixer(model)
+  return {
+    type: 'animation',
+    name: 'Rear lower carriage door',
+    object,
+    mixer,
+    openAction: mixer.clipAction(openClip),
+    closeAction: mixer.clipAction(closeClip),
+    activeAction: null,
+    isOpen: false,
+    openProgress: 0,
+  }
+}
+
+function placeCarriage(gltf, z, level, carriages, doors, carriageType, instanceIndex, options = {}) {
   const model = cloneCarriage(gltf)
   const group = new THREE.Group()
   group.name = 'carriage'
   group.add(model)
+  const door = carriageType === '02'
+    ? createTrainCarriageDoor(model, gltf.animations)
+    : null
+  if (door) doors.push(door)
   const controller = createCarriageLights(group, carriageType, instanceIndex, options)
   group.position.z = z
   level.add(group)
   // Refresh the parent transform before measuring the child model. Otherwise
   // every carriage gets bounds at z=0, hiding the train and misplacing floors.
   group.updateWorldMatrix(true, true)
-  carriages.push({ group, model, controller, collisionSource: gltf.scene, bounds: new THREE.Box3().setFromObject(model) })
+  carriages.push({ group, model, controller, door, collisionSource: gltf.scene, bounds: new THREE.Box3().setFromObject(model) })
 }
 
 export function updateTrainCarriageVisibility(carriages, playerZ) {
@@ -153,18 +182,19 @@ export function loadTrain(level) {
   loadModel(ZOMBIE_PATH).catch(() => null)
   return Promise.all([loadModel(CARRIAGE_01_PATH), loadModel(CARRIAGE_02_PATH)]).then(async () => {
     const carriages = []
+    const doors = []
 
     // Only the starting carriage — the type 02 furthest from carriage 01 —
     // is lit, and it uses the warm/normal preset so the player can see on
     // arrival. Every other carriage stays dark.
-    placeCarriage(cachedGltf[CARRIAGE_01_PATH], 0, level, carriages, '01', 0, { lit: false })
-    placeCarriage(cachedGltf[CARRIAGE_02_PATH], 0, level, carriages, '02', 0, { lit: false })
+    placeCarriage(cachedGltf[CARRIAGE_01_PATH], 0, level, carriages, doors, '01', 0, { lit: false })
+    placeCarriage(cachedGltf[CARRIAGE_02_PATH], 0, level, carriages, doors, '02', 0, { lit: false })
     const carriage02Size = carriages[1].bounds.getSize(new THREE.Vector3())
 
     // 4x [02] going negative Z. i === 3 is the spawn carriage at the far end.
     for (let i = 1; i < 4; i++) {
       const spawnCarriage = i === 3
-      placeCarriage(cachedGltf[CARRIAGE_02_PATH], -i * carriage02Size.z, level, carriages, '02', i, {
+      placeCarriage(cachedGltf[CARRIAGE_02_PATH], -i * carriage02Size.z, level, carriages, doors, '02', i, {
         lit: spawnCarriage,
         presetIndex: spawnCarriage ? 0 : i,
       })
@@ -192,7 +222,7 @@ export function loadTrain(level) {
       colliders,
       colliderHelpers: [],
       lightHelpers: [],
-      doors: [],
+      doors,
       ramps: [],
       model: carriages[0].model,
       spawn,
