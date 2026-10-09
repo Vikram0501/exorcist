@@ -38,7 +38,7 @@ test('loaded carriage bounds follow their parents, expose the spawn car, and all
     assert.ok(spawnLights.length > 0, 'the spawn carriage must be lit')
     assert.ok(spawnLights.every(light => light.color.getHex() === 0xffcc88), 'the spawn carriage uses the warm/normal preset')
     assert.ok(carriages.slice(0, -1).every(c => c.controller.lights.length === 0), 'every other carriage stays dark')
-    const input = { yaw: 0, pitch: 0, isDown: code => code === 'KeyW' }
+    const input = { yaw: 0, pitch: 0, isDown: code => code === 'KeyW', consumePressed: () => false }
     const player = new Player(new THREE.PerspectiveCamera(), input)
     player.reset(spawn, level.spawnYaw)
     for (let frame = 0; frame < 120; frame++) player.update(1 / 60, colliders)

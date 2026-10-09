@@ -3,6 +3,8 @@ import { Input } from './input.js'
 import { Player } from './player.js'
 import { HauntedHouseAudio } from '../levels/house/audio.js'
 import { HighwayAudio } from '../levels/highway/audio.js'
+import { TrainAudio } from '../levels/train/audio.js'
+import { TrainCameraShake } from '../levels/train/shake.js'
 import { HouseStory } from '../levels/house/story.js'
 import { HouseStoryView, renderJournal } from '../levels/house/story-view.js'
 
@@ -141,6 +143,8 @@ export class Game {
 
     this.houseAudio = new HauntedHouseAudio()
     this.highwayAudio = new HighwayAudio()
+    this.trainAudio = new TrainAudio()
+    this.trainShake = new TrainCameraShake(this.camera)
     this.houseStory = null
     this.houseStoryView = null
 
@@ -405,6 +409,7 @@ export class Game {
     // A click is required by browsers before Web Audio may play.
     this.houseAudio.unlock()
     this.highwayAudio.unlock()
+    this.trainAudio.unlock()
 
 
     // Lock mouse immediately from the button click.
@@ -954,6 +959,10 @@ if (this.loaded) {
           this.holdProgressFill.style.width = `${(this.trainStory.progress * 100).toFixed(1)}%`
         }
         this.holdProgressEl?.classList.remove('hidden')
+        if (finished && storyItem.kind === 'note') {
+          this.holdProgressEl?.classList.add('hidden')
+          this.openNewspaperReader(storyItem)
+        }
       } else {
         this.trainStory.releaseHold()
         this.holdProgressEl?.classList.add('hidden')
@@ -994,6 +1003,10 @@ if (this.loaded) {
       if (outcome === 'caught') this.onPlayerCaught()
     }
 
+    if (this.currentLevel === 'train') {
+      this.trainAudio.update(this.player, this.trainZombie)
+    }
+
     if (this.currentLevel === 'house') {
       this.houseAudio.update(this.player)
       if (!this.newspaperOpen && !this.houseStoryView?.open) {
@@ -1031,10 +1044,14 @@ if (this.loaded) {
     // RENDER
     // ----------------------------------------
 
+    if (this.loaded && this.currentLevel === 'train') this.trainShake.apply(dt)
+
     this.renderer.render(
       this.scene,
       this.camera
     )
+
+    this.trainShake.clear()
 
     this.startHouseAudioAfterRender()
 
@@ -1514,6 +1531,8 @@ if (this.loaded) {
             return false
           }
 
+          if (levelName === 'train') this.trainAudio.setTrainActive(true)
+
 
           this.loaded = true
 
@@ -1579,6 +1598,7 @@ if (this.loaded) {
 
     this.houseAudio.setHouseActive(false)
     this.highwayAudio?.setHighwayActive(false)
+    this.trainAudio?.setTrainActive(false)
 
     // Clean up finale state
 

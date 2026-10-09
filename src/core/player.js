@@ -427,7 +427,7 @@ export class Player {
     const forward = this.getForward()
     const right = this.getRight()
 
-    this.setCrouching(!this.flying && this.input.isDown('KeyC'))
+    if (this.input.consumePressed('ControlLeft')) this.setCrouching(!this.crouching)
 
     const moveX = (this.input.isDown('KeyD') ? 1 : 0) - (this.input.isDown('KeyA') ? 1 : 0)
     const moveZ = (this.input.isDown('KeyW') ? 1 : 0) - (this.input.isDown('KeyS') ? 1 : 0)

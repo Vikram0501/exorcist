@@ -30,6 +30,7 @@ export class TrainStory {
   prompt(item) {
     if (!item) return ''
     if (this.found.has(item.id)) return `${item.title} · recorded in field notes`
+    if (item.kind === 'note') return 'Hold E · Read the letter'
     return item.kind === 'residue' ? 'Hold E · Read the residue' : 'Hold E · Read the mark'
   }
 
@@ -67,7 +68,7 @@ export class TrainStory {
     if (item.kind === 'letter') {
       const mark = item.slot + 1
       this.onMessage(`IT REMEMBERS · ${item.char} · mark ${mark} of ${this.total}`)
-    } else {
+    } else if (item.kind !== 'note') {
       this.onMessage(`INFERRED · ${item.title} · read its field note`)
     }
     return true
@@ -75,18 +76,20 @@ export class TrainStory {
 
   update(dt, player) {
     this.time += dt
-    if (!this.journalSeen.has('the-boarding')) this.journalSeen.add('the-boarding')
     if (player && player.position.z >= this.frontZ) this.journalSeen.add('the-fire')
   }
 
   objective() {
-    if (this.found.size === 0) return 'FIND ITS NAME · DO NOT BE SEEN'
+    if (this.slotsDone.size === 0) return 'FIND ITS NAME · DO NOT BE SEEN'
     if (this.slotsDone.size >= this.total) return 'ITS NAME IS COMPLETE · REACH THE FRONT CAR'
     return `READ ITS NAME · ${this.slotsDone.size} / ${this.total} · DO NOT BE SEEN`
   }
 
   journalEntries() {
-    const entries = JOURNAL_ENTRIES.filter((entry) => entry.at === 'start')
+    const entries = []
+    for (const item of this.items) {
+      if (item.kind === 'note' && this.found.has(item.id)) entries.push(item)
+    }
     for (const item of this.items) {
       if (item.kind === 'residue' && this.found.has(item.id)) entries.push(item)
     }

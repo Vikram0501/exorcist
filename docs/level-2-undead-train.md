@@ -73,8 +73,9 @@ per frame and shows the retry screen when it reports a catch.
   keeps moving: it paces the aisle `1.5` units past the target and back,
   holding position in front of the player rather than freezing where the
   geometry stopped it.
-- **Hidden** when crouched, torch off, and at least `0.95` units off the aisle
-  line, which puts the player between the seat backs. Hidden players are
+- **Hidden** when crouched, torch off, and anywhere the zombie does not walk:
+  outside the corridor lane at the player's depth (`lane ± 0.2`), which covers
+  the seat backs and every other spot off the patrol line. Hidden players are
   undetectable regardless of distance; a stationary player in the aisle is only
   found by touch.
 - **Caught** when a hidden player is within `0.45` units or an exposed player
@@ -87,8 +88,9 @@ per frame and shows the retry screen when it reports a catch.
   `0.4` unit deck. It is culled past the same `40` unit distance used for
   carriage visibility.
 
-Hold **C** to crouch. Crouching lowers the eye height to `0.55`, keeps the feet
-planted, and walks at `0.45` speed; releasing it restores the stance in place.
+Press **Ctrl** to crouch, and again to stand. Crouching lowers the eye height
+to `0.55`, keeps the feet planted, and walks at `0.45` speed, so the stance
+holds without touching the key.
 
 ## Clues and field notes
 
@@ -97,10 +99,17 @@ four ghost profiles, each a short kana name with a romaji reading and two
 residue hints. Every run picks one at random, so a retry after a catch rolls a
 new name and a new layout.
 
+- A letter laid flat on the floor ahead of the spawn teaches the level in
+  story voice: the stalker's weakness, the hidden name marks, the residues, the
+  field notes and the front-carriage goal. It is read by holding **E** like any
+  other clue, opens the shared inspection panel, and becomes the first field
+  note entry — replacing the old opening summary. Its height is probed from the
+  collision deck so the paper sits on the floor in every run.
 - The name is split into individual kana marks. `createCluePlan` shuffles the
-  marks across a pool of seatback, window and end-section anchors, one per
-  carriage across the rear four cars, so the reading order never matches the
-  name order. Selection is driven by an injectable RNG, which keeps the tests
+  marks across a pool of floor anchors — each glyph lies flat on the deck
+  between the seat banks, in the walking lane — one per carriage across
+  the rear four cars, so the reading order never matches the name order.
+  Selection is driven by an injectable RNG, which keeps the tests
   deterministic.
 - Two fixed residue clues — a torn ticket and a half-burned name tag — sit low
   in the dark carriages. Reading one hands over a single mark, so a cautious
@@ -112,16 +121,23 @@ new name and a new layout.
 - Reading fills a slot on the name board, reusing Level 3's `createGhostNameUI`
   (`revealLetter`), shown in kana with a counter of collected marks.
 - Field notes (**I** / Evidence) use the same book as Level 1. `game.js` now
-  takes a per-level journal builder, and the train renders the boarding note,
-  read residue, read marks in name order, then the fire note once the front
-  carriage is reached.
-- Clue props are unlit, canvas-textured planes (kana, romaji and index number)
-  parented to their carriage groups, so the carriage visibility culling still
-  applies and the raycast reaches them across the whole train. Textures are
-  skipped when there is no DOM, so the modules load under `node --test`.
-- Placement is verified against the shipped collision: every clue must have
-  standing room in a walking lane and must be seen before the carriage surface
-  behind it (a ray from the lane has to hit the prop first).
+  takes a per-level journal builder, and the train renders the rear-carriage
+  letter once read, read residue, read marks in name order, then the fire note
+  once the front carriage is reached.
+- Clue props are canvas-textured planes — a mark is nothing but the red kana
+  glyph, no panel, outline or transliteration, so it reads as paint on the
+  deck — parented to their carriage groups, so the carriage visibility culling
+  still applies and the raycast reaches them across the whole train. Their
+  materials are light-reactive, so a mark in a dark carriage only reads
+  clearly inside the flashlight beam or a carriage's own lights — sweeping
+  the torch is how you search, and the torch is what the stalker notices.
+  Textures are skipped when there is no DOM, so the modules load under
+  `node --test`.
+- Placement is verified against the shipped collision: every clue must lie on
+  walkable floor and must be seen first from a standing player's eye height
+  (the descending ray has to hit the prop before the carriage surface). The
+  seeded plan is checked in one test, and every anchor in the pool is checked
+  in its own.
 
 The exorcism finale is designed — assemble the kana in the burnt front carriage
 and speak the name — but not built yet; the clue system is complete without it.

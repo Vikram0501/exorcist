@@ -179,7 +179,7 @@ export function loadTrain(level) {
     const zombie = await placeBurntZombie(level)
 
     const plan = createCluePlan()
-    const clues = createTrainClues({ carriages, plan })
+    const clues = createTrainClues({ carriages, plan, colliders })
     const trainStory = new TrainStory({ plan, items: clues.items })
     trainStory.frontZ = carriages[1] ? carriages[1].bounds.min.z : -Infinity
 

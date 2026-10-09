@@ -189,7 +189,7 @@ Element IDs that JS depends on — **do not rename without updating JS**:
 
 CSS lives in `<style>` in `index.html` (no separate stylesheet). Controls:
 **WASD** move, **mouse** look, **E** interact with doors, **Space** jump,
-**Shift** sprint, **C** crouch (hold), **F** toggle fly, **Esc** release.
+**Shift** sprint, **Ctrl** crouch (toggle), **F** toggle fly, **Esc** release.
 
 ## 7. Collision System (Important)
 

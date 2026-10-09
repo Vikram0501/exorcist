@@ -3,21 +3,39 @@ import assert from 'node:assert/strict'
 import * as THREE from 'three'
 import { Player } from '../../src/core/player.js'
 
-function makePlayer(keys) {
+function makeInput() {
+  const down = new Set()
+  const pressed = new Set()
+  return {
+    yaw: 0,
+    pitch: 0,
+    isDown: code => down.has(code),
+    consumePressed: code => pressed.delete(code),
+    press(code) {
+      if (!down.has(code)) pressed.add(code)
+      down.add(code)
+    },
+    release(code) {
+      down.delete(code)
+    },
+  }
+}
+
+function makePlayer(input) {
   const previousWindow = globalThis.window
   globalThis.window = { addEventListener() {} }
   try {
-    const input = { yaw: 0, pitch: 0, isDown: code => keys.has(code) }
     return new Player(new THREE.PerspectiveCamera(), input)
   } finally {
     globalThis.window = previousWindow
   }
 }
 
-test('crouching lowers the eye height, keeps the feet planted, and slows the walk', () => {
-  const keys = new Set(['KeyW'])
-  const player = makePlayer(keys)
+test('crouching toggles with Ctrl, keeps the feet planted, and slows the walk', () => {
+  const input = makeInput()
+  const player = makePlayer(input)
 
+  input.press('KeyW')
   player.updateVelocity(2)
   assert.equal(player.crouching, false)
   assert.equal(player.eyeHeight, 1)
@@ -25,7 +43,7 @@ test('crouching lowers the eye height, keeps the feet planted, and slows the wal
 
   const feet = player.position.y - player.eyeHeight
 
-  keys.add('KeyC')
+  input.press('ControlLeft')
   player.updateVelocity(2)
   assert.equal(player.crouching, true)
   assert.equal(player.eyeHeight, 0.55)
@@ -35,29 +53,36 @@ test('crouching lowers the eye height, keeps the feet planted, and slows the wal
   const capsule = player.getCollisionCapsule()
   assert.ok(capsule.end.y < feet + 1, 'the collision capsule shortens while crouched')
 
-  keys.delete('KeyC')
+  input.release('ControlLeft')
+  player.updateVelocity(2)
+  assert.equal(player.crouching, true, 'releasing Ctrl keeps the stance, it is a toggle')
+
+  input.press('ControlLeft')
   player.updateVelocity(2)
   assert.equal(player.crouching, false)
   assert.equal(player.eyeHeight, 1)
   assert.ok(Math.abs((player.position.y - player.eyeHeight) - feet) < 0.000001, 'standing restores the same stance')
 })
 
-test('flying overrides the crouch key so C keeps descending', () => {
-  const keys = new Set(['KeyC'])
-  const player = makePlayer(keys)
-
-  player.updateVelocity(2)
-  assert.equal(player.crouching, true)
+test('C no longer crouches and still descends while flying', () => {
+  const input = makeInput()
+  const player = makePlayer(input)
 
   player.flying = true
+  input.press('KeyC')
   player.updateVelocity(2)
-  assert.equal(player.crouching, false)
+  assert.equal(player.crouching, false, 'C is free for fly-down')
+
+  input.press('ControlLeft')
+  player.updateVelocity(2)
+  assert.equal(player.crouching, true, 'the crouch toggle works while flying')
   assert.ok(player.velocity.y < 0, 'C still flies down')
 })
 
 test('reset clears the crouch stance', () => {
-  const keys = new Set(['KeyC'])
-  const player = makePlayer(keys)
+  const input = makeInput()
+  const player = makePlayer(input)
+  input.press('ControlLeft')
   player.updateVelocity(2)
   assert.equal(player.crouching, true)
 

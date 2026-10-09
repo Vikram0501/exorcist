@@ -6,7 +6,7 @@ import { Player } from '../../src/core/player.js'
 test('switching levels preserves house movement and the newer train tuning', () => {
   const keys = new Set(['KeyW'])
   const player = Object.assign(Object.create(Player.prototype), {
-    input: { yaw: 0, isDown: key => keys.has(key) },
+    input: { yaw: 0, isDown: key => keys.has(key), consumePressed: () => false },
     position: new THREE.Vector3(0, 1, 0),
     velocity: new THREE.Vector3(),
     isGrounded: true,

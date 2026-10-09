@@ -30,7 +30,7 @@ function playerWithKeys(keys, start, colliders, frames = 120) {
   const previousWindow = globalThis.window
   globalThis.window = { addEventListener() {} }
   try {
-    const input = { yaw: 0, pitch: 0, isDown: code => keys.includes(code) }
+    const input = { yaw: 0, pitch: 0, isDown: code => keys.includes(code), consumePressed: () => false }
     const player = new Player(new THREE.PerspectiveCamera(), input)
     player.reset(start)
     for (let frame = 0; frame < frames; frame++) player.update(0.05, colliders)

@@ -94,6 +94,26 @@ test('it stalks the aisle forwards and backwards between the carriage ends', () 
   assert.ok(Math.abs(group.position.x - AISLE_X) < 0.05, 'it holds the aisle line')
 })
 
+test('it turns back toward the player every twenty seconds instead of walking away forever', () => {
+  const { zombie, group } = harness()
+  const watcher = playerAt(AISLE_X, 6)
+
+  step(zombie, watcher, 1)
+  assert.equal(zombie.state, 'patrol')
+  assert.equal(zombie.direction, -1, 'it starts out walking away from the player')
+
+  step(zombie, watcher, 380)
+  assert.equal(zombie.direction, -1, 'nothing turns it before the interval elapses')
+  assert.ok(group.position.z < -15, `it kept walking the wrong way, reached ${group.position.z}`)
+
+  step(zombie, watcher, 40)
+  assert.equal(zombie.direction, 1, 'the timer swings it back toward the player')
+
+  const turned = group.position.z
+  step(zombie, watcher, 60)
+  assert.ok(group.position.z > turned, 'it now closes the distance instead of drifting off')
+})
+
 test('it hunts a moving player nearby and catches them', () => {
   const { zombie, group } = harness()
 
@@ -127,17 +147,32 @@ test('a stationary player is found by touch, not by sight', () => {
   assert.equal(zombie.update(0.05, still), 'caught')
 })
 
-test('crouching between the seats with the torch off hides the player', () => {
-  const { zombie, group } = harness()
+function seatedHarness() {
+  const group = new THREE.Group()
+  const carriages = [carriage(0, 35), carriage(-35, 0), carriage(-70, -35)]
+  const world = { capsuleIntersect: capsule => capsule.start.x < 2.5 || capsule.start.x > 3.3 }
+  const colliders = [{ type: 'mesh', world }]
+  const zombie = new TrainZombie({ group, carriages, colliders })
+  return { zombie, group }
+}
+
+test('crouching anywhere off the zombie path with the torch off hides the player', () => {
+  const { zombie, group } = seatedHarness()
   step(zombie, playerAt(AISLE_X, 6), 1)
   assert.equal(zombie.state, 'patrol')
 
-  const hidden = playerAt(AISLE_X - 1.5, group.position.z, { crouching: true, speed: 4 })
+  const inAisle = playerAt(AISLE_X, group.position.z + 4, { crouching: true, speed: 4 })
+  assert.equal(zombie.update(0.05, inAisle), null)
+  assert.equal(zombie.hidden, false, 'the aisle is the path, so a crouched player there is seen')
+  assert.equal(zombie.state, 'hunt')
 
-  assert.equal(zombie.update(0.05, hidden), null)
-  assert.equal(zombie.hidden, true)
-  assert.equal(step(zombie, hidden, 120), null, 'it cannot find a hidden player')
-  assert.equal(zombie.state, 'patrol')
+  const elsewhere = seatedHarness()
+  step(elsewhere.zombie, playerAt(AISLE_X, 6), 1)
+  const hidden = playerAt(AISLE_X - 1.5, elsewhere.group.position.z, { crouching: true, speed: 4 })
+  assert.equal(elsewhere.zombie.update(0.05, hidden), null)
+  assert.equal(elsewhere.zombie.hidden, true, 'anywhere off the path hides them')
+  assert.equal(step(elsewhere.zombie, hidden, 120), null, 'it cannot find a hidden player')
+  assert.equal(elsewhere.zombie.state, 'patrol')
 })
 
 test('it follows the corridor around the furniture at the carriage end', async () => {

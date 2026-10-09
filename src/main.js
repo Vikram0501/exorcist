@@ -262,6 +262,9 @@ document.addEventListener(
     if (
       !game.loaded ||
       game.input.isLocked ||
+      game.newspaperOpen ||
+      game.evidenceBookOpen ||
+      game.houseStoryView?.open ||
       game.currentLevel === 'house'
     ) return
 

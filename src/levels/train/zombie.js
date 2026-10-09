@@ -17,7 +17,7 @@ const PATROL_SPEED = 1.2
 const HUNT_SPEED = 2.6
 const SENSE_RADIUS = 7.5
 const SENSE_MOVE_SPEED = 0.5
-const HIDE_OFFSET = 0.95
+const PATH_MARGIN = 0.2
 const CATCH_RADIUS = 0.75
 const CONTACT_RADIUS = 0.45
 const GRAB_REACH = 0.6
@@ -35,6 +35,7 @@ const FLOOR_MIN_Y = 0.2
 const AISLE_RETURN = 6
 const TURN_SMOOTHING = 8
 const MAX_PLAYBACK_RATE = 1.6
+const ORIENT_INTERVAL = 20
 
 function probe(world, x, y, z) {
   const capsule = new Capsule(
@@ -282,6 +283,7 @@ export class TrainZombie {
     this.facing = Math.PI
     this.prowling = false
     this.prowl = -1
+    this.orientTimer = ORIENT_INTERVAL
     this.target = new THREE.Vector2(AISLE_X, 0)
 
     let minZ = Infinity
@@ -336,12 +338,14 @@ export class TrainZombie {
     return this.group ? this.group.position : null
   }
 
+  isOnPath(x, z) {
+    const lane = this.tableAt(z)
+    return x >= lane.min - PATH_MARGIN && x <= lane.max + PATH_MARGIN
+  }
+
   isHidden(player) {
-    return (
-      !!player.crouching &&
-      !player.flashlightOn &&
-      Math.abs(player.position.x - AISLE_X) >= HIDE_OFFSET
-    )
+    if (!player.crouching || player.flashlightOn) return false
+    return !this.isOnPath(player.position.x, player.position.z)
   }
 
   update(dt, player) {
@@ -354,6 +358,12 @@ export class TrainZombie {
       if (player.position.z <= this.triggerZ) return null
       this.state = 'patrol'
       this.pause = 0.5
+    }
+
+    this.orientTimer -= dt
+    if (this.orientTimer <= 0) {
+      this.orientTimer = ORIENT_INTERVAL
+      this.orientToward(player)
     }
 
     const dx = player.position.x - this.group.position.x
@@ -396,6 +406,13 @@ export class TrainZombie {
     const reach = Math.hypot(reachX, dz)
     const catchRadius = this.hidden ? CONTACT_RADIUS : CATCH_RADIUS
     return reach < catchRadius ? 'caught' : null
+  }
+
+  orientToward(player) {
+    const offsetX = player.position.x - this.group.position.x
+    const offsetZ = player.position.z - this.group.position.z
+    if (Math.abs(offsetZ) > 0.05) this.direction = offsetZ < 0 ? -1 : 1
+    if (offsetX !== 0 || offsetZ !== 0) this.facing = Math.atan2(offsetX, offsetZ)
   }
 
   patrol(dt) {

@@ -82,18 +82,18 @@ export const GHOST_PROFILES = [
 ]
 
 export const LETTER_ANCHORS = [
-  { id: 'a41', car: 4, t: 0.2, x: 2.34, y: 0.9, face: '+x', risk: 'safe' },
-  { id: 'a42', car: 4, t: 0.44, x: 3.46, y: 0.9, face: '-x', risk: 'safe' },
-  { id: 'a31', car: 3, t: 0.2, x: 2.34, y: 0.9, face: '+x', risk: 'safe' },
-  { id: 'a32', car: 3, t: 0.4, x: 3.46, y: 0.9, face: '-x', risk: 'medium' },
-  { id: 'a33', car: 3, t: 0.62, x: 1.15, y: 1.15, face: '+x', risk: 'medium' },
-  { id: 'a21', car: 2, t: 0.24, x: 2.34, y: 0.9, face: '+x', risk: 'medium' },
-  { id: 'a22', car: 2, t: 0.48, x: 3.46, y: 0.9, face: '-x', risk: 'medium' },
-  { id: 'a23', car: 2, t: 0.7, x: 4.3, y: 1.15, face: '-x', risk: 'high' },
-  { id: 'a11', car: 1, t: 0.2, x: 2.34, y: 0.9, face: '+x', risk: 'medium' },
-  { id: 'a12', car: 1, t: 0.44, x: 3.46, y: 0.9, face: '-x', risk: 'high' },
-  { id: 'a13', car: 1, t: 0.66, x: 1.15, y: 1.15, face: '+x', risk: 'high' },
-  { id: 'a14', car: 1, t: 0.86, x: 4.2, y: 1.0, face: '-x', risk: 'high' },
+  { id: 'a41', car: 4, t: 0.1, x: 2.8, floor: true, risk: 'safe' },
+  { id: 'a42', car: 4, t: 0.44, x: 2.6, floor: true, risk: 'safe' },
+  { id: 'a31', car: 3, t: 0.2, x: 2.7, floor: true, risk: 'safe' },
+  { id: 'a32', car: 3, t: 0.4, x: 2.8, floor: true, risk: 'medium' },
+  { id: 'a33', car: 3, t: 0.58, x: 2.7, floor: true, risk: 'medium' },
+  { id: 'a21', car: 2, t: 0.24, x: 2.9, floor: true, risk: 'medium' },
+  { id: 'a22', car: 2, t: 0.48, x: 3.0, floor: true, risk: 'medium' },
+  { id: 'a23', car: 2, t: 0.7, x: 2.8, floor: true, risk: 'high' },
+  { id: 'a11', car: 1, t: 0.2, x: 2.6, floor: true, risk: 'medium' },
+  { id: 'a12', car: 1, t: 0.44, x: 2.7, floor: true, risk: 'medium' },
+  { id: 'a13', car: 1, t: 0.66, x: 2.6, floor: true, risk: 'high' },
+  { id: 'a14', car: 1, t: 0.82, x: 2.7, floor: true, risk: 'high' },
 ]
 
 export const RESIDUE_ANCHORS = [
@@ -119,16 +119,21 @@ export const RESIDUE_ANCHORS = [
   },
 ]
 
+export const REAR_LETTER = {
+  id: 'rear-letter',
+  title: 'The rear-carriage letter',
+  foundAt: 'Rear carriage, on the floor ahead of the door',
+  anchor: { id: 'rear-letter', car: 4, t: 0.2, x: 2.8, floor: true },
+  storyNote:
+    'Whoever sealed this door behind me is still aboard. I am leaving this where every run begins — at the back — so the next one does not have to discover it all the hard way.\n\n' +
+    'The train does not go anywhere. It only keeps happening. Something burnt walks the aisle: it hears running and it follows your torch. Crouch, kill the light, and stand off the aisle line between the seats, and it will walk straight past you. Let it reach you and the run ends where it always ends — back here, at this letter.\n\n' +
+    'Its name was cut apart and hidden through the carriages, scratched in red. Hold E on a mark until it gives itself up; the torn ticket and the half-burnt tag give up marks as well. Every mark fills the name, and everything you read is copied into your field notes — press I to read them again.\n\n' +
+    'When the name is whole, carry it forward to the burning carriage at the head of the train. That is where the line ended, and where it has to end.',
+  riteNote:
+    'Read its name without being seen. The train does not go anywhere; it only keeps happening.',
+}
+
 export const JOURNAL_ENTRIES = [
-  {
-    id: 'the-boarding',
-    title: 'The boarding',
-    foundAt: 'Rear platform',
-    storyNote:
-      'The rusted door sealed behind me on its own. The train was empty and running, one more carriage than the track should allow. Somewhere down the length of it, a light came on as if it had been waiting.',
-    riteNote: 'Read its name without being seen. The train does not go anywhere; it only keeps happening.',
-    at: 'start',
-  },
   {
     id: 'the-fire',
     title: 'What the fire left',

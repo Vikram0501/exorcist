@@ -6,6 +6,7 @@ import {
   GHOST_PROFILES,
   LETTER_ANCHORS,
   RESIDUE_ANCHORS,
+  REAR_LETTER,
   createCluePlan,
   kanaLetters,
   residueSlot,
@@ -28,18 +29,29 @@ function seededRng(seed) {
 }
 
 function planItems(plan) {
-  const items = plan.letters.map((letter) => ({
-    id: letter.id,
-    title: letter.title,
-    foundAt: letter.foundAt,
-    storyNote: 'mark',
-    riteNote: 'mark note',
+  const items = [{
+    id: REAR_LETTER.id,
+    title: REAR_LETTER.title,
+    foundAt: REAR_LETTER.foundAt,
+    storyNote: REAR_LETTER.storyNote,
+    riteNote: REAR_LETTER.riteNote,
     story: true,
-    kind: 'letter',
-    slot: letter.slot,
-    char: letter.char,
-    total: plan.letters.length,
-  }))
+    kind: 'note',
+  }]
+  for (const letter of plan.letters) {
+    items.push({
+      id: letter.id,
+      title: letter.title,
+      foundAt: letter.foundAt,
+      storyNote: 'mark',
+      riteNote: 'mark note',
+      story: true,
+      kind: 'letter',
+      slot: letter.slot,
+      char: letter.char,
+      total: plan.letters.length,
+    })
+  }
   for (const residue of plan.residue) {
     items.push({
       id: residue.id,
@@ -152,8 +164,10 @@ test('the objective walks from the opening line to a complete name', () => {
   assert.match(story.objective(), /COMPLETE/)
 })
 
-test('field notes list the boarding, residue, letters in order, then the fire', () => {
+test('field notes list the rear letter, residue, letters in order, then the fire', () => {
   const { story, plan } = createStory()
+  assert.deepEqual(story.journalEntries(), [])
+  story.read(story.items.find((item) => item.kind === 'note'))
   plan.letters.forEach((letter, index) => {
     if (index % 2 === 0) story.read(story.items.find((item) => item.id === letter.id))
   })
@@ -161,7 +175,7 @@ test('field notes list the boarding, residue, letters in order, then the fire', 
   story.read(residue)
 
   const before = story.journalEntries().map((entry) => entry.id)
-  assert.equal(before[0], 'the-boarding')
+  assert.equal(before[0], REAR_LETTER.id)
   assert.equal(before[1], residue.id)
   const letterIds = before.slice(2)
   assert.ok(letterIds.every((id) => id.startsWith('letter-')))
@@ -171,6 +185,18 @@ test('field notes list the boarding, residue, letters in order, then the fire', 
   story.update(0.1, { position: { z: 1 } })
   const after = story.journalEntries().map((entry) => entry.id)
   assert.equal(after[after.length - 1], 'the-fire')
+})
+
+test('the rear letter is held open like a mark and recorded once read', () => {
+  const { story } = createStory()
+  const note = story.items.find((item) => item.kind === 'note')
+  assert.equal(note.story, true)
+  assert.equal(story.prompt(note), 'Hold E · Read the letter')
+  assert.equal(story.hold(HOLD_SECONDS - 0.01, note), false)
+  assert.equal(story.hold(0.02, note), true)
+  assert.equal(story.read(note), true)
+  assert.match(story.prompt(note), /recorded/)
+  assert.equal(story.journalEntries()[0].id, REAR_LETTER.id)
 })
 
 test('clue props parent to their carriages and expose one item per plan entry', async () => {
@@ -183,10 +209,14 @@ test('clue props parent to their carriages and expose one item per plan entry', 
   const plan = createCluePlan(seededRng(21))
   const clues = createTrainClues({ carriages, plan })
 
-  assert.equal(clues.items.length, plan.letters.length + plan.residue.length)
+  assert.equal(clues.items.length, plan.letters.length + plan.residue.length + 1)
+  const note = clues.items.find((item) => item.kind === 'note')
+  assert.ok(note, 'the rear letter is always created')
+  assert.ok(Math.abs(note.object.rotation.x - Math.PI / 2) < 1e-9, 'the letter lies flat on the floor')
   for (const item of clues.items) {
-    assert.equal(item.object.parent, group)
+    assert.ok(item.object.parent === group, `${item.id} parents to its carriage`)
     assert.equal(item.object.visible, true)
+    assert.ok(item.object.material.isMeshStandardMaterial, `${item.id} responds to scene light`)
   }
   clues.dispose()
   assert.equal(group.children.filter((child) => child.name.startsWith('train-clue-')).length, 0)
@@ -200,19 +230,32 @@ test('every clue sits in clear space and is seen before the seat behind it', asy
   const carriage = { group, model, bounds: new THREE.Box3().setFromObject(model) }
   const carriages = [carriage, carriage, carriage, carriage, carriage]
   const plan = createCluePlan(seededRng(21))
-  const clues = createTrainClues({ carriages, plan })
   const colliders = await createTrainCollision([{ model }])
+  const clues = createTrainClues({ carriages, plan, colliders })
   const world = colliders[0].world
+
+  const standingRoom = (x, z) => !world.capsuleIntersect(new Capsule(
+    new THREE.Vector3(x, 0.72, z),
+    new THREE.Vector3(x, 1.18, z),
+    0.2,
+  ))
 
   for (const item of clues.items) {
     const prop = item.object
     const position = prop.getWorldPosition(new THREE.Vector3())
+
+    if (item.kind === 'note' || prop.rotation.x > 0) {
+      assert.ok(standingRoom(position.x, position.z), `${item.id} blocks the aisle`)
+      const origin = new THREE.Vector3(position.x, position.y + 0.9, position.z - 1.2)
+      assert.ok(standingRoom(origin.x, origin.z), `${item.id} has no standing room before it`)
+      const direction = position.clone().sub(origin).normalize()
+      const hits = new THREE.Raycaster(origin, direction).intersectObjects([model, prop], true)
+      assert.ok(hits.length > 0, `${item.id} is hidden from the aisle`)
+      assert.ok(hits[0].object === prop, `${item.id} is buried under the carriage`)
+      continue
+    }
+
     const toAisle = prop.rotation.y > 0 ? 1 : -1
-    const standingRoom = (x, z) => !world.capsuleIntersect(new Capsule(
-      new THREE.Vector3(x, 0.72, z),
-      new THREE.Vector3(x, 1.18, z),
-      0.2,
-    ))
     let origin = null
     for (let offset = 0.6; offset <= 2.0; offset += 0.1) {
       const x = position.x + toAisle * offset
@@ -225,7 +268,53 @@ test('every clue sits in clear space and is seen before the seat behind it', asy
     const direction = position.clone().sub(origin).normalize()
     const hits = new THREE.Raycaster(origin, direction).intersectObjects([model, prop], true)
     assert.ok(hits.length > 0, `${item.id} is hidden from the lane`)
-    assert.equal(hits[0].object, prop, `${item.id} is buried behind the carriage`)
+    assert.ok(hits[0].object === prop, `${item.id} is buried behind the carriage`)
+  }
+  clues.dispose()
+})
+
+test('every floor anchor can be reached and read from the aisle', async () => {
+  const model = await loadTrainGeometry('02')
+  const group = new THREE.Group()
+  group.add(model)
+  group.updateWorldMatrix(true, true)
+  const carriage = { group, model, bounds: new THREE.Box3().setFromObject(model) }
+  const carriages = [carriage, carriage, carriage, carriage, carriage]
+  const chars = kanaLetters(GHOST_PROFILES[0])
+  const plan = {
+    profile: GHOST_PROFILES[0],
+    letters: LETTER_ANCHORS.map((anchor, index) => ({
+      id: `mark-${anchor.id}`,
+      slot: index % chars.length,
+      char: chars[index % chars.length],
+      anchor,
+      title: 'Mark',
+      foundAt: 'Floor',
+    })),
+    residue: [],
+  }
+  const colliders = await createTrainCollision([{ model }])
+  const clues = createTrainClues({ carriages, plan, colliders })
+  const world = colliders[0].world
+
+  const standingRoom = (x, z) => !world.capsuleIntersect(new Capsule(
+    new THREE.Vector3(x, 0.72, z),
+    new THREE.Vector3(x, 1.18, z),
+    0.2,
+  ))
+
+  for (const item of clues.items) {
+    if (item.kind !== 'letter') continue
+    const prop = item.object
+    assert.ok(prop.rotation.x > 0, `${item.id} should lie flat on the floor`)
+    const position = prop.getWorldPosition(new THREE.Vector3())
+    assert.ok(standingRoom(position.x, position.z), `${item.id} blocks the aisle`)
+    const origin = new THREE.Vector3(position.x, position.y + 0.9, position.z - 1.2)
+    assert.ok(standingRoom(origin.x, origin.z), `${item.id} has no standing room before it`)
+    const direction = position.clone().sub(origin).normalize()
+    const hits = new THREE.Raycaster(origin, direction).intersectObjects([model, prop], true)
+    assert.ok(hits.length > 0, `${item.id} is hidden from the aisle`)
+    assert.ok(hits[0].object === prop, `${item.id} is buried under the carriage`)
   }
   clues.dispose()
 })
