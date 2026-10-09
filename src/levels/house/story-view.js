@@ -117,10 +117,10 @@ export class HouseStoryView {
       ? (wrongAnswer
           ? 'Elias broke the rite. Your field notes are safe. Try again at the grave.'
           : 'Your field notes are safe. You can try again from the front of the house.')
-      : 'Evelyn Vale is free. Elias Wren is gone.'
+      : 'Evelyn Vale is free. Elias Wren is gone. Continue to Level 2.'
     const action = document.createElement('button')
     action.type = 'button'
-    action.textContent = type === 'caught' ? 'Try again' : 'Play Level 1 again'
+    action.textContent = type === 'caught' ? 'Try again' : 'Continue to Level 2'
     action.addEventListener('click', () => {
       if (type === 'caught') {
         this.game.houseStory.retryPursuit(this.game.player, this.game.spawnPoint, this.game.spawnYaw)
@@ -128,8 +128,7 @@ export class HouseStoryView {
         this.closeRite()
       } else {
         this.closeRite(false)
-        this.game.currentLevel = null
-        this.game.loadLevel('house')
+        this.game.loadLevel('train')
         this.game.input.lock()
       }
     })

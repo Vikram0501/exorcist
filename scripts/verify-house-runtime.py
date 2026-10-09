@@ -5,9 +5,9 @@ import json
 import struct
 from pathlib import Path
 
-root = Path(__file__).resolve().parents[1]
+root = Path(__file__).resolve().parents[1] / 'public/levels/house/models'
 digests = []
-for name in ('source-assets/house.glb', 'public/levels/house/models/house-runtime.glb'):
+for name in ('house.glb', 'house-runtime.glb'):
     path = root / name
     with path.open('rb') as source:
         header = source.read(20)

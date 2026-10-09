@@ -1,7 +1,8 @@
 import * as THREE from 'three'
 import { Capsule } from 'three/addons/math/Capsule.js'
 
-const MOVEMENT = { radius: 0.35, walk: 2.5, sprint: 4, acceleration: 25, jump: 7.5 }
+const DEFAULT_MOVEMENT = { radius: 0.2, walk: 3, sprint: 5, acceleration: 20, jump: 5 }
+const HOUSE_MOVEMENT = { radius: 0.35, walk: 2.5, sprint: 4, acceleration: 25, jump: 7.5 }
 const EYE_HEIGHT = 1
 const CROUCH_EYE_HEIGHT = 0.55
 const CROUCH_SPEED = 0.45
@@ -13,7 +14,7 @@ export class Player {
   constructor(camera, input) {
     this.camera = camera
     this.input = input
-    this.movement = MOVEMENT
+    this.movement = DEFAULT_MOVEMENT
     this.velocity = new THREE.Vector3()
     this.position = camera.position
     this.position.set(20, EYE_HEIGHT, 25)
@@ -27,6 +28,10 @@ export class Player {
         this.velocity.y = 0
       }
     })
+  }
+
+  configureForLevel(levelName) {
+    this.movement = levelName === 'house' ? HOUSE_MOVEMENT : DEFAULT_MOVEMENT
   }
 
   get eyeHeight() {
@@ -78,7 +83,7 @@ export class Player {
 
 
     // ============================================
-    // CHECK FOR TRIANGLE COLLISION (HOUSE OCTREE)
+    // CHECK FOR TRIANGLE COLLISION (HOUSE OCTREE / TRAIN BVH)
     // ============================================
 
     const octreeCollider =
