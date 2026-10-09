@@ -392,7 +392,6 @@ export class Game {
       new THREE.Clock()
 
 
-    this.fpsSamples = []
 
 
     window.addEventListener(
@@ -1837,100 +1836,12 @@ if (this.loaded) {
   // ============================================
 
   updateHud(dt) {
-
     if (dt <= 0) return
 
-
-    this.fpsSamples.push(
-      1 / dt
-    )
-
-
-    if (
-      this.fpsSamples.length > 20
-    ) {
-
-      this.fpsSamples.shift()
-    }
-
-
-    const avg =
-      this.fpsSamples.reduce(
-        (a, b) => a + b,
-        0
-      ) /
-      this.fpsSamples.length
-
-
-    const pos =
-      this.player.position
-
-
-    const hudPos =
-      document.getElementById(
-        'hudPos'
-      )
-
-
-    if (hudPos) {
-
-      hudPos.textContent =
-        `${pos.x.toFixed(1)}, ` +
-        `${pos.y.toFixed(1)}, ` +
-        `${pos.z.toFixed(1)}`
-    }
-
-
-    const hudFps =
-      document.getElementById(
-        'hudFps'
-      )
-
-
-    if (hudFps) {
-
-      hudFps.textContent =
-        avg.toFixed(0)
-    }
-
-
-    const hudMode =
-      document.getElementById(
-        'hudMode'
-      )
-
-
-    if (hudMode) {
-
-      hudMode.textContent =
-        this.currentLevel
-          ? this.player.flying
-            ? 'UNNATURAL ELEVATION'
-            : this.trainZombie?.hidden ? 'UNSEEN' : 'ON FOOT'
-          : 'AWAITING ENTRY'
-    }
-
-    const movementHud = document.getElementById('hudActions')
-    if (movementHud) movementHud.style.display = this.currentLevel === 'house' || this.currentLevel === 'train' ? '' : 'none'
-    const moving = Math.hypot(this.player.velocity.x, this.player.velocity.z) > 0.3
-    const sprinting = moving && !this.player.crouching &&
-      (this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight'))
-    document.getElementById('hudSprint')?.classList.toggle('active', sprinting)
-    document.getElementById('hudCrouch')?.classList.toggle('active', this.player.crouching)
-    document.getElementById('hudTorch')?.classList.toggle('active',
-      this.currentLevel === 'house' ? this.houseStory?.flashlightOn === true : (this.flashlight?.intensity || 0) > 0)
-
-    const hudLevel = document.getElementById('hudLevel')
-
-    if (hudLevel) {
-
-      const names = {
-        house: 'VALE MANOR',
-        train: 'NIGHT TRAIN',
-        highway: 'OLD HIGHWAY',
-      }
-
-      hudLevel.textContent = names[this.currentLevel] || 'NO LOCATION'
+    const onFootHud = this.currentLevel === 'house' || this.currentLevel === 'train'
+    for (const id of ['hud', 'hudControls']) {
+      const element = document.getElementById(id)
+      if (element) element.style.display = onFootHud ? '' : 'none'
     }
 
     const hudObjective =

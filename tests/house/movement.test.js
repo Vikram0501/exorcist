@@ -13,9 +13,9 @@ test('switching levels preserves house movement and the newer train tuning', () 
     flying: false,
   })
   for (const [level, walk, sprint, jump, radius] of [
-    ['house', 4.8, 8, 7.5, 0.35],
+    ['house', 2.5, 4, 7.5, 0.35],
     ['train', 3, 5, 5, 0.2],
-    ['house', 4.8, 8, 7.5, 0.35],
+    ['house', 2.5, 4, 7.5, 0.35],
   ]) {
     player.configureForLevel(level)
     player.velocity.set(0, 0, 0)

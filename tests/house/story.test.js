@@ -155,6 +155,7 @@ test('the chase follows the walked route and only stops when the grave is activa
   assert.equal(pursuit.position.x, 0)
   pursuit.update(0.4, new THREE.Vector3(4, 1, 0), grave)
   pursuit.update(0.8, new THREE.Vector3(7, 1, 0), grave)
+  pursuit.update(0.5, new THREE.Vector3(7, 1, 0), grave)
   assert.ok(pursuit.position.x > 0)
   pursuit.state = 'caught'
   assert.deepEqual(pursuit.retry().toArray(), start.toArray())

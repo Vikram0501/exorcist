@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-const CHASE_SPEED = 5.6
+const CHASE_SPEED = 2.8
 
 // Follow the route the player actually walked, including stairs and doorways.
 // A short head start gives time to read the warning and orient toward the grave.
