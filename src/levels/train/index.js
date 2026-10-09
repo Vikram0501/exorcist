@@ -7,6 +7,7 @@ import { createTrainTerrain, preloadTrainTerrain } from './terrain.js'
 import { createTrainCollision } from './collision.js'
 import { createCluePlan } from './story-data.js'
 import { createTrainClues } from './clues.js'
+import { createExorcismChamber } from './exorcism.js'
 import { TrainStory } from './story.js'
 
 const TRAIN_SCALE = 0.1
@@ -181,6 +182,9 @@ export function loadTrain(level) {
   preloadTrainTerrain()
   loadModel(ZOMBIE_PATH).catch(() => null)
   return Promise.all([loadModel(CARRIAGE_01_PATH), loadModel(CARRIAGE_02_PATH)]).then(async () => {
+    if (typeof document !== 'undefined' && document.fonts?.load) {
+      await document.fonts.load('100px "hakidame"', 'アイウエオカキクケコあいうえおREAD THE RESIDUE').catch(() => null)
+    }
     const carriages = []
     const doors = []
 
@@ -210,8 +214,11 @@ export function loadTrain(level) {
 
     const plan = createCluePlan()
     const clues = createTrainClues({ carriages, plan, colliders })
+    const exorcism = createExorcismChamber({ carriages, colliders })
+    if (exorcism) clues.items.push(exorcism.item)
     const trainStory = new TrainStory({ plan, items: clues.items })
     trainStory.frontZ = carriages[1] ? carriages[1].bounds.min.z : -Infinity
+    trainStory.exitZ = exorcism ? exorcism.carriage.bounds.min.z : -Infinity
 
     // Player spawns at the far end, facing back toward carriage 01.
     const spawn = new THREE.Vector3(2.8, 2, -127)
@@ -235,6 +242,7 @@ export function loadTrain(level) {
       investigationItems: clues.items,
       trainStory,
       trainClues: clues,
+      exorcism,
     }
   })
 }

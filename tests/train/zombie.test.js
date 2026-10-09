@@ -220,7 +220,7 @@ test('it keeps moving toward a player it cannot reach', async () => {
   const seated = playerAt(0.8, -15, { flashlightOn: true })
   step(zombie, playerAt(AISLE_X, 9), 1)
   assert.equal(zombie.state, 'patrol')
-  group.position.set(AISLE_X, group.position.y, -8)
+  group.position.set(AISLE_X, group.position.y, -11)
 
   let outcome = null
   let still = 0
@@ -263,6 +263,32 @@ test('standing, staying lit, or lingering in the aisle gives the player away', (
     const player = playerAt(x, group.position.z + 4, options)
     assert.equal(step(zombie, player, 300), 'caught', label)
   }
+})
+
+test('a broken rite sends the stalker at the player and the finished name sends it away', () => {
+  const { zombie, group } = harness()
+  step(zombie, playerAt(AISLE_X, 6), 1)
+  assert.equal(zombie.state, 'patrol')
+
+  assert.equal(zombie.stalk(2.9, -30), true)
+  assert.equal(zombie.state, 'hunt')
+  assert.equal(zombie.target.y, -30, 'it is sent to the spot where the rite broke')
+  assert.equal(zombie.target.x, 2.9)
+
+  const far = playerAt(AISLE_X, -67)
+  const before = group.position.z
+  step(zombie, far, 40)
+  assert.ok(group.position.z < before, `it walks the length of the aisle toward ${zombie.target.y}`)
+  assert.equal(zombie.state, 'hunt', 'the alarm outlasts a few seconds of quiet')
+
+  const reached = group.position.z
+  assert.equal(zombie.banish(), true)
+  assert.equal(zombie.banished, true)
+  assert.equal(group.visible, false, 'the banished spirit leaves the aisle')
+  assert.equal(zombie.update(0.05, playerAt(AISLE_X, 6)), null, 'it can never move again')
+  assert.equal(zombie.stalk(2.9, 0), false, 'a banished stalker cannot be called back')
+  assert.equal(zombie.banish(), false, 'banishing twice changes nothing')
+  assert.equal(group.position.z, reached, 'the aisle stays exactly where it was left')
 })
 
 test('the floor probe falls back to ground level without collision data', () => {

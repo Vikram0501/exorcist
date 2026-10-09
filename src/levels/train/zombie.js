@@ -15,8 +15,8 @@ const CORRIDOR_RADIUS = 0.2
 const CORRIDOR_BINARY_STEPS = 6
 const PATROL_SPEED = 1.2
 const HUNT_SPEED = 2.6
-const SENSE_RADIUS = 7.5
-const SENSE_MOVE_SPEED = 0.5
+const SENSE_RADIUS = 5.5
+const SENSE_MOVE_SPEED = 2
 const PATH_MARGIN = 0.2
 const CATCH_RADIUS = 0.75
 const CONTACT_RADIUS = 0.45
@@ -276,6 +276,7 @@ export class TrainZombie {
     this.mixer = mixer || null
     this.footOffset = footOffset
     this.state = 'dormant'
+    this.banished = false
     this.hidden = false
     this.direction = -1
     this.pause = 0
@@ -338,6 +339,26 @@ export class TrainZombie {
     return this.group ? this.group.position : null
   }
 
+  banish() {
+    if (!this.group || this.banished) return false
+    this.banished = true
+    this.state = 'banished'
+    this.prowling = false
+    this.memory = 0
+    this.group.visible = false
+    return true
+  }
+
+  stalk(x, z) {
+    if (!this.group || this.banished) return false
+    this.state = 'hunt'
+    this.memory = MEMORY_TIME
+    this.pause = 0
+    this.prowling = false
+    this.target.set(x, z)
+    return true
+  }
+
   isOnPath(x, z) {
     const lane = this.tableAt(z)
     return x >= lane.min - PATH_MARGIN && x <= lane.max + PATH_MARGIN
@@ -349,7 +370,7 @@ export class TrainZombie {
   }
 
   update(dt, player) {
-    if (!this.group) return null
+    if (!this.group || this.banished) return null
 
     this.hidden = this.isHidden(player)
     this.group.visible = Math.abs(player.position.z - this.group.position.z) < VISIBLE_RANGE

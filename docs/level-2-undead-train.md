@@ -63,8 +63,8 @@ per frame and shows the retry screen when it reports a catch.
   re-trimmed with a handful of probes at the zombie's exact depth, so edges
   that fall between two samples cannot be stepped into. The zombie has no
   collision of its own; the lane is the fence.
-- **Hunt** whenever the player is exposed and within `7.5` units. Exposure
-  means not meeting the hiding rule below: standing, moving at more than a
+- **Hunt** whenever the player is exposed and within `5.5` units. Exposure
+  means not meeting the hiding rule below: standing, moving faster than a
   crouch, or shining the torch anywhere in the carriage. Moving and lit are
   tracked separately, so a brief torch beam holds its interest for `4.5`
   seconds after the beam leaves. It closes both axes at once at a constant
@@ -139,8 +139,56 @@ new name and a new layout.
   seeded plan is checked in one test, and every anchor in the pool is checked
   in its own.
 
-The exorcism finale is designed — assemble the kana in the burnt front carriage
-and speak the name — but not built yet; the clue system is complete without it.
+The exorcism finale lives in the burnt front carriage — the type `01` car the
+level opens with — as an ash seal ringed by candles.
+
+- `createExorcismChamber` (`exorcism.js`) picks the carriage with the greatest
+  `bounds.max.z`, lays a `1.05` radius circle a hair above the deck at the
+  `RITE_SEAL` anchor (`x: 2.7`, `t: 0.62` → world `z ≈ 19.0`), and adds six
+  candles plus exactly one `PointLight`. The carriages stay dark by design, so
+  the chamber carries its own glow; the seal and candles are plain meshes and
+  never join the collider, so the aisle stays walkable. The seal material is
+  canvas-drawn (ring, thirty-six ticks, a cross, ash speckle) and drops the
+  texture when there is no DOM, keeping the module loadable under
+  `node --test`. The returned root is parented to the carriage group, so the
+  visibility cull and the investigation raycast treat it like any clue.
+- Placement is checked against the shipped collision: the anchor reads the real
+  deck through `trainFloorAt`, a standing capsule fits before and on the seal,
+  and a descending ray from eye height hits the seal before the carriage floor.
+- The seal is an investigation item of `kind: 'rite'`. Looking at it reports
+  `The name is not whole · n of N marks` until every slot is filled, then
+  `Hold E · Speak the name`. Holding **E** charges for `RITE_HOLD_SECONDS`
+  (`2.5`, twice a clue's `1.2`) and opens the rite panel — a longer charge is
+  the last exposure window, since the stalker still patrols the carriage.
+- `#trainRite` mirrors Level 1's rite dialog: the game freezes while it is open
+  (releasing pointer lock clears `active`), the shuffled `riteMarks` tray
+  rebuilds the name mark by mark into numbered slots, and the field notes can
+  be opened over the top at a higher z-index without losing the assembly.
+  `TrainRiteView` owns the DOM, traps Tab, and re-locks the pointer when it
+  closes.
+- A wrong mark calls `failRite('wrong-mark')`: the order resets, an outcome
+  screen explains that something heard the syllables, and dismissing it clears
+  `failureReason` and calls `zombie.stalk(player.x, player.z)` so the stalker
+  comes to the player instead of resuming its patrol. Everything already read
+  stays in the field notes, so a break costs the walk back to the seal, not the
+  investigation.
+- **SPEAK THE NAME** runs `speakName()`, which sets `released`, announces the
+  name, and makes the next frame of `game.js` call `zombie.banish()` — the
+  stalker leaves the aisle for good (`state: 'banished'`, hidden, `update`
+  returns `null`). The objective becomes
+  `THE NAME IS SPOKEN · LEAVE THE BURNT CARRIAGE` and the journal gains
+  `the-name-spoken`.
+- `exitZ` is the front carriage's `bounds.min.z`. Stepping back across it after
+  the name is spoken sets `complete`, switches the objective to
+  `CASE CLOSED · THE TRAIN RUNS ON QUIET`, and records `the-run-ends`; five
+  seconds later the outcome screen offers **Return to the case menu**, which
+  un-hides `#overlay` exactly as Level 1 does.
+- Nothing new is drawn per frame: `TrainRiteView.update` only watches
+  `story.complete`, and `game.js` disposes the view and the chamber in
+  `unloadCurrentLevel`, so a restart or a level change tears both down.
+- `tests/train/exorcism.test.js` covers the placement against real geometry,
+  the gating, the assembly, the failure, and the run's end; `zombie.test.js`
+  covers `stalk` and `banish`.
 
 
 

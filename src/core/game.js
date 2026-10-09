@@ -9,6 +9,7 @@ import { HouseStory } from '../levels/house/story.js'
 import { HouseStoryView, renderJournal } from '../levels/house/story-view.js'
 import { HouseAvatar } from '../levels/house/avatar.js'
 import { installBathroomMirror } from '../levels/house/mirror.js'
+import { TrainRiteView } from '../levels/train/rite-view.js'
 
 import {
   createHighwayLevel,
@@ -209,6 +210,10 @@ export class Game {
     this.trainStory = null
 
     this.trainClues = null
+
+    this.trainRiteView = null
+
+    this.trainExorcism = null
 
     this.journalBuilder = null
 
@@ -762,8 +767,9 @@ if (this.loaded) {
   // ======================================
 
   else {
-    const active = this.input.isLocked && !this.newspaperOpen && !this.evidenceBookOpen && !this.houseStoryView?.open
+    const active = this.input.isLocked && !this.newspaperOpen && !this.evidenceBookOpen && !this.houseStoryView?.open && !this.trainRiteView?.open
     this.houseStoryView?.update(dt, active)
+    this.trainRiteView?.update(dt)
     if (this.levelCaptionRemaining > 0) {
       this.levelCaptionRemaining = Math.max(0, this.levelCaptionRemaining - dt)
       this.levelCaptionEl?.classList.toggle('hidden', this.levelCaptionRemaining <= 0)
@@ -969,9 +975,22 @@ if (this.loaded) {
 
     if (this.currentLevel === 'train' && this.trainStory) {
       const storyItem = investigationItem && investigationItem.story ? investigationItem : null
-      const reading = storyItem && this.input.isDown('KeyE') && !this.trainStory.found.has(storyItem.id)
+      const riteItem = storyItem?.kind === 'rite' ? storyItem : null
+      const reading = storyItem && !riteItem && this.input.isDown('KeyE') && !this.trainStory.found.has(storyItem.id)
+      const beginning = riteItem && this.input.isDown('KeyE') && this.trainStory.canBeginRite()
 
-      if (reading) {
+      if (beginning) {
+        const started = this.trainStory.hold(dt, riteItem)
+        if (this.holdProgressFill) {
+          this.holdProgressFill.style.width = `${(this.trainStory.progress * 100).toFixed(1)}%`
+        }
+        this.holdProgressEl?.classList.remove('hidden')
+        if (started) {
+          this.holdProgressEl?.classList.add('hidden')
+          this.trainStory.releaseHold()
+          this.trainRiteView?.openRite()
+        }
+      } else if (reading) {
         const finished = this.trainStory.hold(dt, storyItem)
         if (finished) this.trainStory.read(storyItem)
         if (this.holdProgressFill) {
@@ -1012,6 +1031,8 @@ if (this.loaded) {
     }
 
     if (this.currentLevel === 'train' && this.trainZombie && !this.trainCaught) {
+      if (this.trainStory?.released && !this.trainZombie.banished) this.trainZombie.banish()
+
       const outcome = this.trainZombie.update(dt, {
         position: this.player.position,
         velocity: this.player.velocity,
@@ -1197,6 +1218,7 @@ if (this.loaded) {
             investigationItems,
             trainStory,
             trainClues,
+            exorcism,
             moonLight,
             roadPath,
             arcLengths,
@@ -1293,6 +1315,10 @@ if (this.loaded) {
           this.trainStory = levelName === 'train' ? trainStory || null : null
 
           this.trainClues = levelName === 'train' ? trainClues || null : null
+
+          this.trainExorcism = levelName === 'train' ? exorcism || null : null
+
+          this.trainRiteView = levelName === 'train' ? new TrainRiteView(this) : null
 
           this.journalBuilder = levelName === 'train' && this.trainStory
             ? (game) => game.trainStory.journalEntries()
@@ -1816,6 +1842,12 @@ if (this.loaded) {
 
     this.trainClues?.dispose()
     this.trainClues = null
+
+    this.trainRiteView?.dispose()
+    this.trainRiteView = null
+
+    this.trainExorcism?.dispose()
+    this.trainExorcism = null
 
     this.journalBuilder = null
 
@@ -2349,7 +2381,9 @@ if (this.loaded) {
   openEvidenceBook() {
 
     const supportsEvidence = this.currentLevel === 'house' || this.currentLevel === 'train'
-    if (!supportsEvidence || this.evidenceBookOpen || this.newspaperOpen || this.houseStoryView?.outcome) {
+    const riteOpen = this.houseStoryView?.open || this.trainRiteView?.open
+    const riteOutcome = this.houseStoryView?.outcome || this.trainRiteView?.outcome
+    if (!supportsEvidence || this.evidenceBookOpen || this.newspaperOpen || riteOutcome) {
 
       return
     }
@@ -2367,7 +2401,7 @@ if (this.loaded) {
     this.updateJournalEntries()
 
     evidenceBook.classList.remove('hidden')
-    evidenceBook.style.zIndex = this.houseStoryView?.open ? '111' : ''
+    evidenceBook.style.zIndex = riteOpen ? '111' : ''
 
     this.input.release()
     document.getElementById('closeEvidenceNotepadBtn')?.focus()
@@ -2398,11 +2432,17 @@ if (this.loaded) {
     evidenceBook?.classList.add('hidden')
     if (evidenceBook) evidenceBook.style.zIndex = ''
 
-    if (!fromLevelUnload && this.loaded && !this.houseStoryView?.open) {
+    const openRiteView = this.houseStoryView?.open
+      ? this.houseStoryView
+      : this.trainRiteView?.open
+        ? this.trainRiteView
+        : null
+
+    if (!fromLevelUnload && this.loaded && !openRiteView) {
 
       this.input.lock()
-    } else if (!fromLevelUnload && this.houseStoryView?.open) {
-      this.houseStoryView.dialog.querySelector('button')?.focus()
+    } else if (!fromLevelUnload && openRiteView) {
+      openRiteView.dialog.querySelector('button')?.focus()
     }
   }
 

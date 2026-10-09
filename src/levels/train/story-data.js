@@ -133,6 +133,16 @@ export const REAR_LETTER = {
     'Read its name without being seen. The train does not go anywhere; it only keeps happening.',
 }
 
+export const RITE_SEAL = {
+  id: 'exorcism-seal',
+  title: 'The ashen seal',
+  foundAt: 'Burnt carriage, at the head of the train',
+  storyNote:
+    'Salt and ash drawn in a ring on the burned deck, still warm. The carriages were never the trap — the name was. Say it here and the line lets go.',
+  riteNote: 'Hold E to begin. Rebuild the name from your field notes, then speak it.',
+  anchor: { id: 'rite-seal', x: 2.7, t: 0.62 },
+}
+
 export const JOURNAL_ENTRIES = [
   {
     id: 'the-fire',
@@ -142,6 +152,24 @@ export const JOURNAL_ENTRIES = [
       'The carriage is a burned shell — scorched seats, bone fused into the floor, old blood drying in the shape of handwriting. This is where the line ended, and where the thing that walks it was made.',
     riteNote: 'The spirit died trapped and unheard. It hunts to be seen.',
     at: 'front',
+  },
+  {
+    id: 'the-name-spoken',
+    title: 'The name spoken',
+    foundAt: 'Burnt carriage, in the ash ring',
+    storyNote:
+      'I rebuilt the name mark by mark inside the burned carriage and spoke it aloud. The thing that walked the aisle stopped mid-stride, as if it had been waiting years to be answered.',
+    riteNote: 'The stalker is released. The aisle is empty.',
+    at: 'rite',
+  },
+  {
+    id: 'the-run-ends',
+    title: 'The run ends',
+    foundAt: 'Doorway of the burnt carriage',
+    storyNote:
+      'I walked out of the burning carriage and the train ran on quieter than before. Whatever kept happening here has finished happening.',
+    riteNote: 'Case closed. Its name was carried forward and given back.',
+    at: 'end',
   },
 ]
 
@@ -161,7 +189,7 @@ export function residueSlot(profile, residue) {
     : givenLength + residue.slot.index
 }
 
-function shuffle(list, rng) {
+export function shuffle(list, rng) {
   const copy = [...list]
   for (let i = copy.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1))

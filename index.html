@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Exorcist: The Last Rites</title>
     <style>
+      @font-face {
+        font-family: "hakidame";
+        src: url("/fonts/hakidame-subset.ttf") format("truetype");
+        font-display: block;
+      }
       * {
         margin: 0;
         padding: 0;
@@ -369,6 +374,14 @@
       #houseCaption { position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%); z-index: 15; width: min(700px, calc(100% - 48px)); padding: 16px 24px; color: #ede4d2; background: linear-gradient(90deg, transparent, rgba(5, 9, 12, .94) 12%, rgba(5, 9, 12, .94) 88%, transparent); text-align: center; font: 17px/1.65 Georgia, serif; pointer-events: none; text-shadow: 0 2px 8px #000; }
       #houseRite { position: fixed; inset: 0; z-index: 110; display: grid; place-items: center; padding: 24px; overflow-y: auto; background: rgba(4, 9, 12, .86); backdrop-filter: blur(5px); }
       #houseRite.hidden, #houseCaption.hidden { display: none; }
+      #trainRite { position: fixed; inset: 0; z-index: 110; display: grid; place-items: center; padding: 24px; overflow-y: auto; background: rgba(16, 5, 3, .93); backdrop-filter: blur(6px); }
+      #trainRite.hidden { display: none; }
+      .rite-slots { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 4px 0 22px; }
+      .rite-slot { display: grid; place-items: center; min-width: 46px; height: 54px; padding: 0 6px; border: 1px solid #7a4038; background: rgba(8, 6, 4, .78); color: #e6dcc9; font: 28px/1 "hakidame", "Yu Gothic", "Meiryo", "Hiragino Sans", "Noto Sans CJK JP", sans-serif; }
+      .rite-slot.filled { color: #e8564a; border-color: #c42a20; box-shadow: inset 0 0 14px rgba(196, 42, 32, .4); }
+      .rite-tray { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 8px; }
+      .rite-panel .rite-tray button { display: grid; place-items: center; width: 56px; height: 56px; margin: 0; padding: 0; text-align: center; font: 26px/1 "hakidame", "Yu Gothic", "Meiryo", "Hiragino Sans", "Noto Sans CJK JP", sans-serif; }
+      .rite-panel .rite-speak { text-align: center; letter-spacing: .18em; background: #3a1512; border-color: #a4372c; }
       #levelCaption { position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%); z-index: 15; width: min(700px, calc(100% - 48px)); padding: 16px 24px; color: #ede4d2; background: linear-gradient(90deg, transparent, rgba(5, 9, 12, .94) 12%, rgba(5, 9, 12, .94) 88%, transparent); text-align: center; font: 17px/1.65 Georgia, serif; pointer-events: none; text-shadow: 0 2px 8px #000; }
       #levelCaption.hidden { display: none; }
       #holdProgress { position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%); z-index: 16; width: 220px; height: 6px; border: 1px solid #7a4038; background: rgba(8, 6, 4, .8); pointer-events: none; }
