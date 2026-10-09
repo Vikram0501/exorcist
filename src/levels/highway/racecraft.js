@@ -3,6 +3,7 @@ import { mergeGeometries }
   from 'three/addons/utils/BufferGeometryUtils.js'
 import { HIGHWAY_SURFACE_Y, createTrackBoxGeometry }
   from './road.js'
+import { createRaceBanner, START_BANNER_DISTANCE } from './race-banners.js'
 
 // ============================================
 // LEVEL 3 RACECRAFT — ROAD-DRIVEN RACE DRESSING
@@ -10,7 +11,7 @@ import { HIGHWAY_SURFACE_Y, createTrackBoxGeometry }
 //
 // Procedural racing visual language that lives ON the road: worn edge
 // lines, corner curbs, tire wear, reflective studs, danger-corner barrier caps,
-// curve-tracing lamps and start/finish paint. No gantries, no banners, no text boards, no
+// curve-tracing lamps and paired start/finish gantries with road paint. No
 // sponsor aesthetic: the racetrack feel comes from the road, curves,
 // elevation, barriers, lighting and composition instead.
 //
@@ -50,14 +51,14 @@ function canvasTexture(width, height, draw) {
 }
 
 function drawChecker(ctx, width, height) {
-  const cols = 8
-  const rows = 2
+  const cols = 12
+  const rows = 3
   for (let i = 0; i < cols; i++) {
     for (let j = 0; j < rows; j++) {
       const worn = Math.random() < 0.12
       ctx.fillStyle =
         (i + j) % 2 === 0
-          ? worn ? '#5a5a58' : '#cfcfc8'
+          ? worn ? '#aaa493' : '#f1ecdc'
           : worn ? '#3a3434' : '#101010'
       ctx.fillRect(
         (i * width) / cols,
@@ -128,10 +129,9 @@ function paintStrip(track, s, depth, texture) {
     pos.setXYZ(i, p.x, p.y, p.z)
   }
   geo.computeVertexNormals()
-  const mat = new THREE.MeshStandardMaterial({
+  const mat = new THREE.MeshBasicMaterial({
     map: texture,
-    roughness: 0.9,
-    metalness: 0,
+    toneMapped: false,
     polygonOffset: true,
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
@@ -389,15 +389,17 @@ export function createRacecraft({ track, highway, finishDistance }) {
     }
   }
 
-  // ---- Start/finish paint (checkered, no text) ----
+  // ---- One paired gantry + checkered strip per race endpoint ----
   {
-    const checkerTex = canvasTexture(128, 32, drawChecker)
-    const startPaint = paintStrip(track, 3, 2, checkerTex)
+    const checkerTex = canvasTexture(192, 48, drawChecker)
+    const startPaint = paintStrip(track, START_BANNER_DISTANCE, 3, checkerTex)
     startPaint.name = 'racecraftStartPaint'
     group.add(startPaint)
-    const finishPaint = paintStrip(track, finishDistance, 2, checkerTex)
+    const finishPaint = paintStrip(track, finishDistance, 3, checkerTex)
     finishPaint.name = 'racecraftFinishPaint'
     group.add(finishPaint)
+    group.add(createRaceBanner(track, START_BANNER_DISTANCE, 'START'))
+    group.add(createRaceBanner(track, finishDistance, 'FINISH'))
   }
 
   // Flicker channels (shared materials only — zero per-object cost).

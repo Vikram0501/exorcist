@@ -1,24 +1,6 @@
 import * as THREE from 'three'
 import { asTrack } from './track.js'
-
-
-const PICKUP_RADIUS = 2.5
-
-
-const ROAD_HALF_WIDTH = 6.5
-
-
-function getPositionOnRoad(
-  roadPathOrTrack,
-  arcLengths,
-  distance
-) {
-  // Delegates to the shared Track (same note as obstacles.js: positions
-  // unchanged, yaw now blended and valid at endpoints).
-  const track = asTrack(roadPathOrTrack, arcLengths)
-  const frame = track.sampleAt(distance)
-  return { position: frame.position, angle: frame.angle, lateral: frame.lateral }
-}
+import { PICKUP_RADIUS, planLetterPositions } from './collectible-placement.js'
 
 
 function shuffleArray(arr) {
@@ -249,7 +231,8 @@ export function createCollectibles(
   ghostNameUI,
   roadPath,
   arcLengths,
-  totalRoadLength
+  totalRoadLength,
+  obstacles = []
 ) {
   const spaceIndex =
     ghostName.indexOf(' ')
@@ -291,6 +274,8 @@ export function createCollectibles(
   }
 
   const numLetters = letters.length
+  const track = asTrack(roadPath, arcLengths)
+  const positions = planLetterPositions(track, numLetters, obstacles)
 
   const safeEnd = totalRoadLength * 0.25
 
@@ -304,46 +289,8 @@ export function createCollectibles(
     i < numLetters;
     i++
   ) {
-    const segmentStart =
-      (i / numLetters) *
-      totalRoadLength
-
-    const segmentEnd =
-      ((i + 1) / numLetters) *
-      totalRoadLength
-
-    const distance =
-      segmentStart +
-      Math.random() *
-        (segmentEnd - segmentStart)
-
-    const roadSample =
-      getPositionOnRoad(
-        roadPath,
-        arcLengths,
-        distance
-      )
-
-    const dir = roadSample.angle
-
-    const perpX = -Math.cos(dir)
-    const perpZ = Math.sin(dir)
-
-    const lateralOffset =
-      (Math.random() - 0.5) *
-      ROAD_HALF_WIDTH *
-      1.6
-
-    const position =
-      new THREE.Vector3(
-        roadSample.position.x +
-          perpX * lateralOffset,
-        roadSample.position.y +
-          roadSample.lateral.y * lateralOffset +
-          0.2,
-        roadSample.position.z +
-          perpZ * lateralOffset
-      )
+    const { progress: distance, lateralOffset } = positions[i]
+    const position = track.toWorld(distance, lateralOffset, 0.2)
 
     let risk = 'high'
 
@@ -362,6 +309,8 @@ export function createCollectibles(
       )
 
     pickup.risk = risk
+    pickup.progress = distance
+    pickup.lateralOffset = lateralOffset
 
     collectibles.push(pickup)
   }

@@ -6,6 +6,7 @@ import {
   DRIFT_GRIP,
   DRIFT_RECOVERY_RATE,
   NORMAL_GRIP,
+  MAX_FORWARD_SPEED,
   HighwayCarController,
 } from '../../src/levels/highway/car.js'
 import { HighwayRaceController } from '../../src/levels/highway/race.js'
@@ -407,7 +408,7 @@ test('drift physics survives hitches', () => withWindow(() => {
   step(c, 0.2, { KeyW: true, KeyA: true, Space: true })
   finite(c)
   assert.ok(c.canDrive, 'no phantom crash from a hitch')
-  assert.ok(Math.abs(c.speed) <= 36)
+  assert.ok(Math.abs(c.speed) <= MAX_FORWARD_SPEED + 1)
   c.dispose()
 }))
 

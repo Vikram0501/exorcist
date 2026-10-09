@@ -526,7 +526,7 @@ test('camera never generates NaN or Infinity', () => withWindow(() => {
   c.dispose()
 }))
 
-test('driving physics constants are unchanged by the camera phase', () => withWindow(() => {
+test('camera uses the current arcade driving tuning', () => withWindow(() => {
   assert.equal(NORMAL_GRIP, 10)
   assert.equal(DRIFT_GRIP, 2.8)
   assert.equal(DRIFT_ENTER_RATE, 6)
@@ -534,7 +534,7 @@ test('driving physics constants are unchanged by the camera phase', () => withWi
   assert.equal(DRIFT_YAW_MULTIPLIER, 1.15)
   assert.equal(MAX_DRIFT_YAW_RATE, 2.2)
   assert.equal(DRIFT_FORWARD_DRAG, 22)
-  assert.equal(MAX_FORWARD_SPEED, 35)
+  assert.equal(MAX_FORWARD_SPEED, 40)
   assert.equal(ENGINE_ACCELERATION, 18)
   assert.equal(BRAKE_DECELERATION, 28)
 }))

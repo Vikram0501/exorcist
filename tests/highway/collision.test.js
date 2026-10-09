@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import * as THREE from 'three'
-import { HighwayCarController } from '../../src/levels/highway/car.js'
+import { HighwayCarController, MAX_FORWARD_SPEED } from '../../src/levels/highway/car.js'
 import {
   CAR_COLLISION_COOLDOWN,
   GHOST_PREFERRED_LANE,
@@ -105,7 +105,7 @@ test('player rear-ending ghost loses pace', () => withStubs(() => {
     const { player, race } = makeRace()
     player.placeAt(40, GHOST_PREFERRED_LANE)
     const f = player.forwardVector(new THREE.Vector3())
-    player.velocity.set(f.x * 35, 0, f.z * 35)
+    player.velocity.set(f.x * MAX_FORWARD_SPEED, 0, f.z * MAX_FORWARD_SPEED)
     parkGhost(race, ghostS, GHOST_PREFERRED_LANE, 20)
     let kickFrame = -1
     let preSpeed = 0
@@ -359,16 +359,15 @@ test('harder contact produces stronger response', () => withStubs(() => {
     player.velocity.set(f.x * playerSpeed, 0, f.z * playerSpeed)
     parkGhost(race, 46, GHOST_PREFERRED_LANE, ghostSpeed)
     let maxKick = 0
-    const v0 = player.velocity.length()
     for (let i = 0; i < 60; i++) {
       player.keys = { KeyW: true }
       player.update(1 / 60)
       const before = player.velocity.length()
       race.update(1 / 60)
       if (race.carCollisionCooldown > 0) {
-        maxKick = Math.max(maxKick, Math.abs(player.velocity.length() - v0))
+        // Measure contact's immediate pace loss, excluding engine recovery.
+        maxKick = Math.max(maxKick, before - player.velocity.length())
       }
-      void before
     }
     const out = { maxKick, endSpeed: player.velocity.length() }
     player.dispose()
@@ -376,7 +375,7 @@ test('harder contact produces stronger response', () => withStubs(() => {
     return out
   }
   const soft = run(26, 24)
-  const hard = run(35, 20)
+  const hard = run(MAX_FORWARD_SPEED, 20)
   assert.ok(
     hard.maxKick > soft.maxKick + 1,
     `hard kick ${hard.maxKick.toFixed(1)} > soft ${soft.maxKick.toFixed(1)}`

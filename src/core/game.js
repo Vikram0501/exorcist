@@ -1294,6 +1294,9 @@ if (this.loaded) {
             roadPath,
             arcLengths,
             totalRoadLength,
+            // Production obstacle list: collectible generation validates
+            // letter positions against these (never silently undefined).
+            obstacles,
           }
 
           this.obstacles = obstacles
@@ -1442,7 +1445,8 @@ if (this.loaded) {
                 this.levelData.track ||
                   this.levelData.roadPath,
                 this.levelData.arcLengths,
-                this.levelData.totalRoadLength
+                this.levelData.totalRoadLength,
+                this.levelData.obstacles
               )
 
             this.roadSigns =

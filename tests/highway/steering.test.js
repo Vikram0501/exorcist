@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import * as THREE from 'three'
 import {
   BOUNDARY_D,
+  ENGINE_ACCELERATION,
+  HIGH_SPEED_STEER_FACTOR,
   MAX_FORWARD_SPEED,
   MAX_REVERSE_SPEED,
   NORMAL_GRIP,
@@ -54,6 +56,56 @@ test('W accelerates the vehicle forward', () => withWindow(() => {
   // Forward along the straight: -Z.
   assert.ok(c.car.position.z < start.z)
   c.dispose()
+}))
+
+for (const dt of [1 / 120, 1 / 60, 1 / 30, 0.05]) {
+  test(`full throttle reaches the increased cap naturally at dt=${dt}`, () => withWindow(() => {
+    const c = makeController()
+    try {
+      assert.ok(MAX_FORWARD_SPEED / 35 >= 1.10 && MAX_FORWARD_SPEED / 35 <= 1.15)
+      assert.equal(ENGINE_ACCELERATION, 18)
+      let previous = c.pathProgress
+      for (let i = 1; i <= Math.round(4 / dt); i++) {
+        step(c, dt, { KeyW: true })
+        const expected = Math.min(18 * i * dt, MAX_FORWARD_SPEED)
+        assert.ok(Math.abs(c.speed - expected) < 1e-8, `natural speed ${c.speed} vs ${expected}`)
+        const distance = c.pathProgress - previous
+        // Nearest-track search refines to 0.05 m, rather than exact arithmetic.
+        assert.ok(distance >= 0 && distance <= MAX_FORWARD_SPEED * dt + 0.1)
+        assert.ok(Math.abs(c.pathProgress - (10 - c.car.position.z)) < 0.05)
+        previous = c.pathProgress
+      }
+      assert.equal(c.speed, MAX_FORWARD_SPEED)
+      assert.equal(c.steeringAuthority(c.speed), HIGH_SPEED_STEER_FACTOR)
+    } finally {
+      c.dispose()
+    }
+  }))
+}
+
+test('top-speed obstacle sweep catches a thin obstacle during a hitch and allows a clear lane', () => withWindow(() => {
+  for (const lane of [0, 4]) {
+    const c = makeController()
+    try {
+      c.placeAt(40, lane)
+      c.velocity.copy(c.forwardVector()).multiplyScalar(MAX_FORWARD_SPEED)
+      const obstacle = { progress: 40.3, lateralOffset: 0, halfWidth: 0.1, halfDepth: 0.1 }
+      c.obstacles = [obstacle]
+      let crashes = 0
+      c.onCrash = hit => { assert.equal(hit, obstacle); crashes++ }
+      step(c, 0.2, { KeyW: true })
+      assert.equal(c.canDrive, lane !== 0)
+      assert.equal(crashes, lane === 0 ? 1 : 0)
+      if (lane === 0) {
+        assert.equal(c.speed, 0)
+        assert.equal(c.velocity.length(), 0)
+      } else {
+        assert.ok(Math.abs(c.pathProgress - 48) < 1e-8)
+      }
+    } finally {
+      c.dispose()
+    }
+  }
 }))
 
 test('releasing W causes drag deceleration without going negative', () => withWindow(() => {
@@ -319,6 +371,53 @@ test('swept obstacle collision still crashes, and dodging still passes', () => w
     c.dispose()
   }
 }))
+
+for (const throttle of [true, false]) {
+  test(`straight race finishes correctly with throttle=${throttle}`, () => withWindow(() => {
+    const originalDocument = globalThis.document
+    globalThis.document = {
+      createElement: () => ({ style: {}, remove() {} }),
+      body: { appendChild() {} },
+    }
+    const player = makeController()
+    let race
+    try {
+      race = new HighwayRaceController(
+        player, new THREE.Object3D(), -880, 'TEST GHOST', null,
+        new THREE.Scene(), player.track, null, player.track.totalLength
+      )
+      let finishes = 0
+      race.onFinish = () => { finishes++ }
+      let peakSpeed = 0
+      for (let i = 0; i < 3000 && !race.raceFinished; i++) {
+        player.keys = { KeyW: throttle }
+        player.update(1 / 30)
+        peakSpeed = Math.max(peakSpeed, player.speed)
+        race.update(1 / 30)
+      }
+      assert.equal(race.winner, throttle ? 'player' : 'ghost')
+      assert.equal(finishes, 1)
+      assert.equal(player.canDrive, false)
+      assert.equal(player.speed, 0)
+      assert.equal(race.ghostSpeed, 0)
+      if (throttle) {
+        assert.equal(peakSpeed, MAX_FORWARD_SPEED)
+        assert.ok(player.pathProgress >= race.finishDistance)
+        assert.ok(player.pathProgress - race.finishDistance < MAX_FORWARD_SPEED / 30)
+        assert.equal(race.brakeCutPhase, 'done')
+        assert.equal(player.brakesWorking, true)
+      } else {
+        assert.ok(race.ghostPathProgress >= race.finishDistance)
+      }
+      race.update(1 / 30)
+      assert.equal(finishes, 1, 'finish callback is one-shot')
+    } finally {
+      player.dispose()
+      race?.dispose()
+      globalThis.document = originalDocument
+    }
+  }))
+}
 
 test('deterministic pursuit completes the curved highway', () => withWindow(() => {
   const track = createDefaultTrack()

@@ -71,7 +71,9 @@ export const CAMERA_FULL_SLIP_ANGLE = 0.35
 // Normal driving (Space released) is the planted baseline; drifting
 // interpolates grip/yaw/drag on top of it and recovers progressively.
 
-export const MAX_FORWARD_SPEED = 35
+// +14.3% over the original 35 m/s: matches the ghost's catch-up cap.
+// Existing acceleration reaches this naturally in about 2.22 seconds.
+export const MAX_FORWARD_SPEED = 40
 export const MAX_REVERSE_SPEED = 10
 export const ENGINE_ACCELERATION = 18
 export const BRAKE_DECELERATION = 28
@@ -81,8 +83,8 @@ export const ROLLING_DRAG = 8
 // so a real lateral component exists for the future drift phase.
 export const NORMAL_GRIP = 10
 
-// Fastest heading change at full steering authority (rad/s). At 35 m/s
-// this allows ~19 m turn radius, far inside the track's ~95.7 m minimum,
+// Fastest heading change at full steering authority (rad/s). At 40 m/s
+// the tapered authority allows ~38 m turn radius, inside the ~95.7 m minimum,
 // so the strongest corner stays comfortable.
 export const MAX_YAW_RATE = 1.9
 

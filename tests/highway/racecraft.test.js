@@ -8,6 +8,7 @@ import {
   updateRacecraft,
   MARKING_LIFT,
 } from '../../src/levels/highway/racecraft.js'
+import { START_BANNER_DISTANCE } from '../../src/levels/highway/race-banners.js'
 
 function withStubs(fn) {
   const originalWindow = globalThis.window
@@ -100,27 +101,29 @@ test('markings follow the track with lift', () => withStubs(() => {
   }
 }))
 
-// No decorative race signage remains: no gantries, banners, boards.
-test('no decorative race signage exists', () => withStubs(() => {
-  const { handle } = makeRacecraft()
-  const names = []
+test('exactly one START and FINISH gantry share stations with their road markings', () => withStubs(() => {
+  const { track, handle } = makeRacecraft()
+  const gantries = []
   handle.group.traverse((object) => {
-    if (object.name) names.push(object.name)
+    if (/Gantry$/.test(object.name)) gantries.push(object)
   })
-  for (const name of names) {
-    assert.ok(
-      !/banner|gantry|chevron|warning|startred|startgreen|boardback/i.test(name),
-      `no signage object: ${name}`
-    )
+  assert.equal(gantries.length, 2)
+  for (const [label, s] of [['Start', START_BANNER_DISTANCE], ['Finish', track.getFinishDistance()]]) {
+    const gantry = handle.group.getObjectByName(`racecraft${label}Gantry`)
+    assert.equal(gantry.userData.label, label.toUpperCase())
+    assert.equal(gantry.userData.progress, s)
+    const paint = handle.group.getObjectByName(`racecraft${label}Paint`)
+    const mesh = paint.children[0]
+    assert.ok(mesh.material.isMeshBasicMaterial, 'road checker stays visible in red lighting')
+    assert.equal(mesh.material.toneMapped, false)
+    const p = mesh.geometry.getAttribute('position')
+    for (let i = 0; i < p.count; i++) {
+      const point = new THREE.Vector3().fromBufferAttribute(p, i)
+      const solved = track.toTrack(point)
+      assert.ok(Math.abs(solved.s - s) < 1.6, 'paint directly below gantry, 3m deep')
+      assert.ok(Math.abs(solved.d) < 6, 'paint spans road inside curbs')
+    }
   }
-  assert.ok(
-    !('gantries' in handle.counts),
-    'no gantry counter'
-  )
-  assert.ok(
-    !('boardSpots' in handle),
-    'no board placement telemetry'
-  )
 }))
 
 // Structures ride elevation (no floating or burial).
