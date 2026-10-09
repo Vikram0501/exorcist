@@ -26,7 +26,6 @@ All Level 1 assets live in `public/levels/house/`:
 ```text
 models/house.glb            Original house export and authored story props
 models/house-runtime.glb    Optimized house asset loaded by the game
-models/vale-manor.glb       Previous environment export
 textures/moon.png          Moon texture
 audio/ambience.ogg         Background music
 audio/footsteps-house.ogg  Indoor footsteps

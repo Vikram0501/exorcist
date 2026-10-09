@@ -147,7 +147,6 @@ exorcist/
     levels/house/
       models/house.glb          Original Blender export and authored props
       models/house-runtime.glb  Optimized Level 1 asset loaded by the game
-      models/vale-manor.glb     Previous Level 1 export
       textures/moon.png
       audio/                   Descriptively named house recordings
         screams/               scream-01.ogg through scream-04.ogg

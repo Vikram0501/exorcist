@@ -83,7 +83,8 @@ exorcist/
       shared/                  Shared lighting
   public/
     levels/house/
-      models/vale-manor.glb     Active Level 1 environment
+      models/house.glb          Editable Level 1 source
+      models/house-runtime.glb  Level 1 asset loaded by the game
       textures/moon.png
       audio/                   Descriptively named house recordings
         screams/               scream-01.ogg through scream-04.ogg
@@ -147,7 +148,7 @@ Stateless input aggregator:
 Level 1 loader. Exports `loadHouse(level)`, resolving to the model, spawn,
 spawn yaw, model size, doors, investigation items, collider data, and helper arrays.
 
-- Loads `public/levels/house/models/vale-manor.glb` with `GLTFLoader` and
+- Loads `public/levels/house/models/house-runtime.glb` with `GLTFLoader` and
   `MeshoptDecoder`, at scale 0.15, centered using the visible environment bounds.
 - Preserves the authored hierarchy, named objects, door pivots, and transforms.
 - Builds an Octree from selected structural and furniture meshes using their
@@ -162,9 +163,9 @@ spawn yaw, model size, doors, investigation items, collider data, and helper arr
 Shared first-person controller wrapping the camera. It owns velocity, grounded
 state, fly mode, rotation, movement, and collision resolution.
 
-House tuning: radius 0.35, eye height 1, walk speed 4.8, sprint speed 8,
-acceleration 45, gravity -20, jump velocity 7.5, and step height 0.5.
-The pursuing house ghost moves at 5.6 units per second in `house/pursuit.js`.
+House tuning: radius 0.35, eye height 1, walk speed 2.5, sprint speed 4,
+acceleration 25, gravity -20, jump velocity 7.5, and step height 0.5.
+The pursuing house ghost moves at 2.8 units per second in `house/pursuit.js`.
 `configureForLevel()` preserves the newer train defaults separately: radius 0.2,
 walk 3, sprint 5, acceleration 20, and jump 5; eye height remains 1.
 

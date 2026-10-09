@@ -404,20 +404,6 @@ export async function loadHouse(level) {
   model.position.y -= initialBox.min.y
   model.updateMatrixWorld(true)
 
-  // Optional authored clue. Export it with the manor's original origin so it
-  // inherits the same scale and placement as the house model.
-  try {
-    const panelResponse = await fetch('/levels/house/models/annex-scratches.glb')
-    if (panelResponse.ok && !panelResponse.headers.get('content-type')?.includes('text/html')) {
-      const panel = await loader.parseAsync(await panelResponse.arrayBuffer(), '/levels/house/models/')
-      panel.scene.name = 'Annex Scratches'
-      model.add(panel.scene)
-      model.updateMatrixWorld(true)
-    }
-  } catch (error) {
-    console.warn('Could not load the annex scratches panel:', error)
-  }
-
   // Give the added barn meshes existing house materials and make their
   // interior-facing surfaces visible.
   prepareBarnVisuals(model)
