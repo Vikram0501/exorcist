@@ -10,8 +10,8 @@ import { asTrack } from './track.js'
 // ============================================
 
 // Car collision half-extents
-const CAR_HALF_DEPTH = 2.0
-const CAR_HALF_WIDTH = 0.9
+export const CAR_HALF_DEPTH = 2.0
+export const CAR_HALF_WIDTH = 0.9
 
 // Minimum progress before obstacles appear
 // (avoids the start/countdown area)

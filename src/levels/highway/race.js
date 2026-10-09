@@ -3,7 +3,7 @@ import { removeGhostNameUI }
   from './index.js'
 import { checkPlayerObstacleCollision }
   from './obstacles.js'
-import { CAR_RIDE_HEIGHT }
+import { CAR_RIDE_HEIGHT, BOUNDARY_D }
   from './car.js'
 import { asTrack, FINISH_DISTANCE_BUFFER, LEGACY_TOTAL_ROAD_LENGTH }
   from './track.js'
@@ -27,14 +27,21 @@ function seatGhostPitch(ghostCar, sample) {
 const LEGACY_BRAKE_CUT_WARNING_PROGRESS = 230
 const LEGACY_BRAKE_CUT_TRIGGER_PROGRESS = 250
 
+// Brake-cut timing: 1.5 s warning, then 5.0 s of disabled brakes (within
+// the 4-6 s design window) with the failure message visible throughout,
+// then automatic restore. The restore is explicit so controls can never
+// be left permanently disabled.
+export const BRAKE_CUT_WARNING_DURATION = 1.5
+export const BRAKE_CUT_DISABLED_DURATION = 5.0
+
 
 // ============================================
 // GHOST RUBBER-BAND TUNING
 // ============================================
 //
-// Fair-rival values (player max is 35 m/s). The ghost drives the racing
-// line automatically, so its cruise sits just under the player's top
-// speed and its catch-up maximum just above it; obstacle hits and the
+// Fair-rival values (player max is 40 m/s). The ghost drives the racing
+// line automatically, so its cruise sits below the player's top
+// speed and its catch-up maximum matches it; obstacle hits and the
 // rubber-band easing give a clean player the edge, while mistakes let
 // the ghost through. See GHOST TUNING in the constructor.
 export const GHOST_CRUISE_SPEED = 35
@@ -121,6 +128,25 @@ export const GHOST_HIT_SLOW_MIN = 0.92
 export const GHOST_HIT_SLOW_MAX = 0.65
 // Player heading disturbance per hit is capped (rad).
 export const PLAYER_HIT_MAX_YAW_KICK = 0.35
+
+// Occasional side-by-side racecraft, never a speed boost or a rear-end attack.
+// The slow setup is a visible cue; a dodge, bend or obstacle cancels the move.
+export const GHOST_BUMP_COOLDOWN = 10
+export const GHOST_BUMP_INITIAL_DELAY = 6
+export const GHOST_BUMP_SETUP_TIME = 0.45
+export const GHOST_BUMP_DURATION = 1.4
+export const GHOST_BUMP_LATERAL_SPEED = 1.8
+export const GHOST_BUMP_MAX_IMPULSE = 2
+export const GHOST_BUMP_SPEED_LOSS = 0.03
+
+// Player-initiated contact must cost the ghost pace even when a rear-end
+// transfers forward momentum. A short recovery window and longer damage
+// cooldown reward one clean bump without allowing a chain of stunlock hits.
+export const GHOST_PLAYER_HIT_MIN_LOSS = 0.06
+export const GHOST_PLAYER_HIT_MAX_LOSS = 0.18
+export const GHOST_PLAYER_HIT_COOLDOWN = 3
+export const GHOST_HIT_RECOVERY_DURATION = 1.25
+export const GHOST_HIT_RECOVERY_ACCELERATION = 4
 
 
 export class HighwayRaceController {
@@ -234,6 +260,20 @@ export class HighwayRaceController {
     this.carCollisionCooldown = 0
     this.lastPlayerCollisionPos = null
     this.lastGhostCollisionPos = null
+    // Latch only after an actual impulse. Touching gently can still become
+    // one impact, but sustained rubbing cannot re-arm it on a 0.25 s timer.
+    // Cleared only after the swept footprints separate by a small margin.
+    this.carContactActive = false
+
+    this.ghostBumpPhase = 'idle'
+    this.ghostBumpCooldown = GHOST_BUMP_INITIAL_DELAY
+    this.ghostBumpTimer = 0
+    this.ghostBumpSide = 0
+    this.ghostBumpStartD = GHOST_PREFERRED_LANE
+    this.ghostBumpPlayerD = 0
+    this.ghostBumpTargetD = GHOST_PREFERRED_LANE
+    this.ghostPlayerHitCooldown = 0
+    this.ghostHitRecoveryTimer = 0
 
     // Finish distance along path (authoritative: track progress).
     this.finishDistance = (totalRoadLength ??
@@ -615,7 +655,7 @@ export class HighwayRaceController {
 
 
             if (
-                this.brakeCutTimer >= 1.5
+                this.brakeCutTimer >= BRAKE_CUT_WARNING_DURATION
             ) {
 
                 this.brakeCutPhase = 'cut'
@@ -629,6 +669,12 @@ export class HighwayRaceController {
                 // Disable brakes
                 this.carController
                     .brakesWorking = false
+
+                // Failure message stays up for the whole disabled window,
+                // not just the aftermath, so the warning always matches
+                // the actual control state.
+                this.brakeCutAftermathEl.style.display =
+                    'block'
 
             }
 
@@ -670,40 +716,51 @@ export class HighwayRaceController {
 
 
             if (
-                this.brakeCutTimer >= 1.0
+                this.brakeCutTimer >= BRAKE_CUT_DISABLED_DURATION
             ) {
 
                 this.brakeCutPhase =
-                    'aftermath'
+                    'done'
 
                 this.brakeCutTimer = 0
 
+                // Temporary failure ends here: restore normal braking so
+                // controls can never be left permanently disabled.
+                this.carController
+                    .brakesWorking = true
 
-                // Show aftermath message
+                // Hide aftermath message
                 this.brakeCutAftermathEl
-                    .style.display = 'block'
+                    .style.display = 'none'
 
             }
 
         }
 
 
-        // ============================================
-        // PHASE: AFTERMATH
-        // ============================================
-
+        // Legacy 'aftermath' phase retained as a no-op alias: older saves
+        // or tests may still set it directly. It shares the same disabled
+        // window and restore path as 'cut'.
         if (
             this.brakeCutPhase === 'aftermath'
         ) {
+
+            // Ensure the failure message is visible even if this phase was
+            // entered directly without passing through 'cut'.
+            this.brakeCutAftermathEl.style.display =
+                'block'
 
             this.brakeCutTimer += dt
 
 
             if (
-                this.brakeCutTimer >= 4.0
+                this.brakeCutTimer >= BRAKE_CUT_DISABLED_DURATION
             ) {
 
                 this.brakeCutPhase = 'done'
+
+                this.carController
+                    .brakesWorking = true
 
                 this.brakeCutAftermathEl
                     .style.display = 'none'
@@ -720,6 +777,11 @@ export class HighwayRaceController {
         // a single 60 Hz step so bad clocks can never NaN the ghost.
         // Large (but valid) dt integrates linearly and stays bounded.
         const gdt = Number.isFinite(dt) && dt > 0 ? dt : 1 / 60
+        this.ghostPlayerHitCooldown = Math.max(0, this.ghostPlayerHitCooldown - gdt)
+        // Split a frame that straddles recovery expiry; no instant speed
+        // restoration and no frame-rate-dependent acceleration jump.
+        const recoveryStep = Math.min(gdt, this.ghostHitRecoveryTimer)
+        this.ghostHitRecoveryTimer = Math.max(0, this.ghostHitRecoveryTimer - gdt)
 
 
         // ============================================
@@ -803,8 +865,10 @@ export class HighwayRaceController {
             desiredSpeed
         ) {
 
-            this.ghostSpeed +=
-            this.ghostAcceleration * gdt
+            const accelerationStep =
+                Math.min(this.ghostAcceleration, GHOST_HIT_RECOVERY_ACCELERATION) * recoveryStep +
+                this.ghostAcceleration * (gdt - recoveryStep)
+            this.ghostSpeed = Math.min(desiredSpeed, this.ghostSpeed + accelerationStep)
 
         }
 
@@ -813,8 +877,7 @@ export class HighwayRaceController {
             desiredSpeed
         ) {
 
-            this.ghostSpeed -=
-            this.ghostBraking * gdt
+            this.ghostSpeed = Math.max(desiredSpeed, this.ghostSpeed - this.ghostBraking * gdt)
 
         }
 
@@ -902,6 +965,8 @@ export class HighwayRaceController {
         }
 
 
+        this.updateGhostBump(gdt)
+
         // Lateral servo toward the avoidance target (or the preferred
         // lane when free). Velocity-based with accel limits and arrival
         // braking: fast enough to dodge at race speed, no snapping, no
@@ -914,17 +979,23 @@ export class HighwayRaceController {
             const step = Math.min(rawStep, 0.1)
             const target = this.ghostAvoiding
                 ? this.ghostAvoidanceTargetD
-                : GHOST_PREFERRED_LANE
+                : this.ghostBumpPhase !== 'idle'
+                    ? this.ghostBumpTargetD
+                    : GHOST_PREFERRED_LANE
+            const bumping = this.ghostBumpPhase !== 'idle'
+            const lateralMax = bumping
+                ? (this.ghostBumpPhase === 'setup' ? 0.5 : GHOST_BUMP_LATERAL_SPEED)
+                : GHOST_LATERAL_MAX_SPEED
             const err = target - this.ghostLateralOffset
             const desired = THREE.MathUtils.clamp(
                 err * GHOST_LATERAL_GAIN,
-                -GHOST_LATERAL_MAX_SPEED,
-                GHOST_LATERAL_MAX_SPEED
+                -lateralMax,
+                lateralMax
             )
             const dv = THREE.MathUtils.clamp(
                 desired - this.ghostLateralVelocity,
-                -GHOST_LATERAL_ACCEL * step,
-                GHOST_LATERAL_ACCEL * step
+                -(bumping ? 4 : GHOST_LATERAL_ACCEL) * step,
+                (bumping ? 4 : GHOST_LATERAL_ACCEL) * step
             )
             this.ghostLateralVelocity += dv
             // Arrival braking: kill overshoot so the ghost settles
@@ -984,6 +1055,87 @@ export class HighwayRaceController {
 
         }
 
+
+    // Reserve a clear corridor for BOTH cars, the outward nudge, and the
+    // ghost's return to its preferred lane. Rechecked throughout the move.
+    canGhostBump(starting = false) {
+        const player = this.carController
+        if (!this.raceStarted || this.raceFinished || this.frozen ||
+            !player?.canDrive || player.hasCrashed || player.isDrifting ||
+            player.driftFactor > 0.1 || this.ghostAvoiding || this.ghostAvoidBlocked ||
+            this.ghostHitRecoveryTimer > 0 ||
+            this.ghostObstacleCooldowns.size > 0 || this.carCollisionCooldown > 0 ||
+            this.carContactActive) return false
+        const s = player.pathProgress
+        const d = player.lateralOffset
+        const gap = d - this.ghostLateralOffset
+        const speed = player.velocity.dot(player.forwardVector(new THREE.Vector3()))
+        if (![s, d, gap, speed, player.heading, this.ghostSpeed].every(Number.isFinite)) return false
+        if (speed < 18 || this.ghostSpeed < 18 || Math.abs(speed - this.ghostSpeed) > 3 ||
+            Math.abs(s - this.ghostPathProgress) > 2 || Math.abs(player.yawRate) > 0.25 ||
+            Math.abs(player.velocity.dot(player.rightVector(new THREE.Vector3()))) > 1) return false
+        if (starting) {
+            if (Math.abs(gap) < 2.7 || Math.abs(gap) > 4.8 ||
+                Math.abs(this.ghostLateralOffset - GHOST_PREFERRED_LANE) > 0.5 ||
+                Math.abs(this.ghostLateralVelocity) > 0.5) return false
+        } else if (Math.sign(gap) !== this.ghostBumpSide || Math.abs(gap) < 2 ||
+            Math.abs(d - this.ghostBumpPlayerD) > 0.6) return false
+
+        // At least 1.5 m of room beyond the anticipated small outward shove.
+        const side = starting ? Math.sign(gap) : this.ghostBumpSide
+        const pushedD = d + side * 0.8
+        if (Math.max(Math.abs(d), Math.abs(pushedD)) > BOUNDARY_D - 1.5) return false
+        const horizon = Math.max(speed, this.ghostSpeed) *
+            (GHOST_BUMP_SETUP_TIME + GHOST_BUMP_DURATION + 0.6)
+        const from = Math.min(s, this.ghostPathProgress) - 8
+        const to = Math.max(s, this.ghostPathProgress) + horizon
+        if (from < 40 || to > this.finishDistance - 10) return false
+        const frame = this.track.sampleAt(s)
+        if (Math.cos(player.heading - frame.angle) < 0.99) return false
+        for (let ahead = 0; ahead <= horizon; ahead += 5) {
+            if (Math.cos(this.track.sampleAt(s + ahead).angle - frame.angle) < 0.99) return false
+        }
+        const lo = Math.min(this.ghostLateralOffset, GHOST_PREFERRED_LANE, d, pushedD) - 1.5
+        const hi = Math.max(this.ghostLateralOffset, GHOST_PREFERRED_LANE, d, pushedD) + 1.5
+        // Include the player's colliders too: integrations may provide them
+        // separately. Cooling/just-hit obstacles are still unsafe here.
+        return [...(this.obstacles ?? []), ...(player.obstacles ?? [])].every(obs =>
+            obs.progress + obs.halfDepth < from || obs.progress - obs.halfDepth > to ||
+            obs.lateralOffset + obs.halfWidth < lo || obs.lateralOffset - obs.halfWidth > hi)
+    }
+
+    endGhostBump() {
+        this.ghostBumpPhase = 'idle'
+        this.ghostBumpTimer = 0
+        this.ghostBumpTargetD = GHOST_PREFERRED_LANE
+        this.ghostBumpCooldown = GHOST_BUMP_COOLDOWN
+    }
+
+    updateGhostBump(dt) {
+        this.ghostBumpCooldown = Math.max(0, this.ghostBumpCooldown - dt)
+        if (this.ghostBumpPhase !== 'idle') {
+            if (!this.canGhostBump() || dt > 0.1) {
+                this.endGhostBump()
+                return
+            }
+            this.ghostBumpTimer += dt
+            if (this.ghostBumpPhase === 'setup' && this.ghostBumpTimer >= GHOST_BUMP_SETUP_TIME) {
+                this.ghostBumpPhase = 'bump'
+                this.ghostBumpTimer = 0
+                // Commit to a shallow side overlap, never chase a dodging player.
+                this.ghostBumpTargetD = this.ghostBumpPlayerD - this.ghostBumpSide * 2.1
+            } else if (this.ghostBumpPhase === 'bump' && this.ghostBumpTimer >= GHOST_BUMP_DURATION) {
+                this.endGhostBump()
+            }
+        } else if (this.ghostBumpCooldown === 0 && dt <= 0.1 && this.canGhostBump(true)) {
+            this.ghostBumpPhase = 'setup'
+            this.ghostBumpTimer = 0
+            this.ghostBumpStartD = this.ghostLateralOffset
+            this.ghostBumpPlayerD = this.carController.lateralOffset
+            this.ghostBumpSide = Math.sign(this.ghostBumpPlayerD - this.ghostBumpStartD)
+            this.ghostBumpTargetD = this.ghostBumpStartD + this.ghostBumpSide * 0.25
+        }
+    }
 
     // ============================================
     // GHOST OBSTACLE AVOIDANCE (local arcade navigation)
@@ -1257,6 +1409,7 @@ export class HighwayRaceController {
             !player || !playerPos || !ghostPos ||
             !player.canDrive || this.raceFinished
         ) {
+            this.carContactActive = false
             if (playerPos) {
                 this.lastPlayerCollisionPos =
                     this.lastPlayerCollisionPos ?? new THREE.Vector3()
@@ -1325,7 +1478,13 @@ export class HighwayRaceController {
 
         const penetration =
             CAR_COLLISION_RADIUS * 2 - best.distance
-        if (penetration <= 0) return
+        if (penetration <= 0) {
+            if (penetration < -0.15) this.carContactActive = false
+            return
+        }
+        const newContact = !this.carContactActive
+        const intentionalBump = this.ghostBumpPhase !== 'idle'
+        if (intentionalBump) this.endGhostBump()
 
         // Contact normal: ghost -> player on the ground plane. Degenerate
         // (exact centre overlap) falls back to the lateral axis.
@@ -1363,16 +1522,23 @@ export class HighwayRaceController {
         const relX = player.velocity.x - ghostVel.x
         const relZ = player.velocity.z - ghostVel.z
         const closing = -(relX * normal.x + relZ * normal.z)
+        // Determine who is driving into the contact normal BEFORE applying
+        // impulses. Common forward motion cancels in closing; side swipes
+        // use lateral approach, rear-ends use longitudinal approach.
+        const playerApproach = -(player.velocity.x * normal.x + player.velocity.z * normal.z)
+        const ghostApproach = ghostVel.x * normal.x + ghostVel.z * normal.z
+        const playerInitiated = !intentionalBump && playerApproach > 0 && playerApproach > ghostApproach
 
         if (
             closing > CAR_COLLISION_MIN_IMPACT &&
-            this.carCollisionCooldown <= 0
+            this.carCollisionCooldown <= 0 && newContact
         ) {
             this.carCollisionCooldown = CAR_COLLISION_COOLDOWN
+            this.carContactActive = true
 
             const impulse = Math.min(
                 closing * (1 + CAR_COLLISION_RESTITUTION) * 0.5,
-                CAR_COLLISION_MAX_IMPULSE
+                intentionalBump ? GHOST_BUMP_MAX_IMPULSE : CAR_COLLISION_MAX_IMPULSE
             )
 
             // Player: bounce plus a small pace cost; a modest yaw kick
@@ -1380,14 +1546,14 @@ export class HighwayRaceController {
             player.velocity.x += normal.x * impulse
             player.velocity.z += normal.z * impulse
             const playerDrag =
-                1 - Math.min(0.06, closing * 0.004)
+                1 - (intentionalBump ? GHOST_BUMP_SPEED_LOSS : Math.min(0.06, closing * 0.004))
             player.velocity.multiplyScalar(playerDrag)
             const playerRight = player.rightVector(new THREE.Vector3())
             const sidePush = normal.x * playerRight.x + normal.z * playerRight.z
             const yawKick = THREE.MathUtils.clamp(
                 sidePush * closing * 0.02,
-                -PLAYER_HIT_MAX_YAW_KICK,
-                PLAYER_HIT_MAX_YAW_KICK
+                intentionalBump ? -0.08 : -PLAYER_HIT_MAX_YAW_KICK,
+                intentionalBump ? 0.08 : PLAYER_HIT_MAX_YAW_KICK
             )
             player.yawRate = THREE.MathUtils.clamp(
                 player.yawRate + yawKick,
@@ -1401,6 +1567,7 @@ export class HighwayRaceController {
             // a reset, never a teleport.
             const backX = -normal.x * impulse
             const backZ = -normal.z * impulse
+            const ghostSpeedBeforeImpact = this.ghostSpeed
             this.ghostSpeed = THREE.MathUtils.clamp(
                 this.ghostSpeed + (backX * tangent.x + backZ * tangent.z),
                 0,
@@ -1412,11 +1579,27 @@ export class HighwayRaceController {
                 -8,
                 8
             )
-            this.ghostSpeed *= THREE.MathUtils.clamp(
-                1 - closing * 0.025,
-                GHOST_HIT_SLOW_MAX,
-                GHOST_HIT_SLOW_MIN
-            )
+            if (playerInitiated) {
+                // Keep the existing lateral impulse/separation, but absorb
+                // forward momentum into bodywork instead of rewarding a ram
+                // with extra ghost speed (including during the damage cooldown).
+                this.ghostSpeed = Math.min(this.ghostSpeed, ghostSpeedBeforeImpact)
+                if (this.ghostPlayerHitCooldown <= 0) {
+                    const longitudinal = Math.abs(normal.x * tangent.x + normal.z * tangent.z)
+                    const severity = THREE.MathUtils.clamp(
+                        closing * 0.012, GHOST_PLAYER_HIT_MIN_LOSS, GHOST_PLAYER_HIT_MAX_LOSS)
+                    // A glancing side swipe costs less pace than a direct ram.
+                    const loss = severity * (0.7 + 0.3 * longitudinal)
+                    this.ghostSpeed = Math.min(this.ghostSpeed, ghostSpeedBeforeImpact * (1 - loss))
+                    this.ghostPlayerHitCooldown = GHOST_PLAYER_HIT_COOLDOWN
+                    this.ghostHitRecoveryTimer = GHOST_HIT_RECOVERY_DURATION
+                }
+            } else {
+                // Preserve the ghost-initiated bump's existing reciprocal
+                // pace cost and controlled response to the player.
+                this.ghostSpeed *= THREE.MathUtils.clamp(
+                    1 - closing * 0.025, GHOST_HIT_SLOW_MAX, GHOST_HIT_SLOW_MIN)
+            }
 
             // Shoving the player can put it inside a lethal obstacle: the
             // player's own swept check already ran this frame, so test the
@@ -1427,6 +1610,8 @@ export class HighwayRaceController {
         // The ghost world position was derived before the push above;
         // re-seat it from the updated track state immediately.
         this.seatGhostFromTrack()
+        player.refreshTelemetry()
+        player.speed = player.velocity.dot(player.forwardVector(new THREE.Vector3()))
     }
 
 
@@ -1612,6 +1797,7 @@ export class HighwayRaceController {
 
 
         this.raceFinished = true
+        this.endGhostBump()
 
         this.winner = winner
 
@@ -1621,6 +1807,11 @@ export class HighwayRaceController {
 
         this.carController
             .setDrivingEnabled(false)
+
+        // A finish during the disabled window must not leave brakes off
+        // for any post-race driving or controller reuse.
+        this.carController
+            .brakesWorking = true
 
 
 
@@ -1669,6 +1860,12 @@ export class HighwayRaceController {
   // ============================================
 
   dispose() {
+
+    // Never leave the shared car controller brakeless after level teardown.
+    if (this.carController) {
+      this.carController
+        .brakesWorking = true
+    }
 
     if (this.countdownElement) {
 

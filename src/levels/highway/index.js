@@ -388,7 +388,7 @@ export async function createHighwayLevel(
 
 
   // ============================================
-  // FINISH COORDINATE (visual paint is owned by racecraft)
+  // FINISH COORDINATE (visual gantry and paint are owned by racecraft)
   // ============================================
 
   const finishSample =
@@ -429,7 +429,7 @@ export async function createHighwayLevel(
 
   // Synchronous procedural pass over the finished track: worn road
   // markings, reflective studs, curve lamps, danger-corner barrier caps
-  // and text-free start/finish paint. Lives under the highway group so
+  // and START/FINISH gantries with matching paint. Lives under the highway group so
   // level disposal covers it.
   const racecraft =
     createRacecraft({
