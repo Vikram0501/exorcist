@@ -14,6 +14,8 @@ the pursuing caretaker Elias Wren, and complete the exorcism at Evelyn's grave.
 | `src/levels/house/story-assets.js` | Authored ghost and grave helpers |
 | `src/levels/house/story-view.js` | Captions, journal, and rite UI |
 | `src/levels/house/pursuit.js` | Ghost chase and retry state |
+| `src/levels/house/avatar.js` | Priest model, walking animation, and view switching |
+| `src/levels/house/mirror.js` | Bathroom reflection when the named plane is present |
 | `tests/house/` | Story, audio, and music startup tests |
 
 Paths in this table are relative to the repository root. Shared game orchestration
@@ -21,12 +23,11 @@ remains in `src/core/game.js`.
 
 ## Assets and adding models
 
-All Level 1 assets live in `public/levels/house/`:
+The editable house and original priest files live in `source-assets/`. Served Level 1 assets live in `public/levels/house/`:
 
 ```text
-models/house.glb            Original house export and authored story props
 models/house-runtime.glb    Optimized house asset loaded by the game
-models/vale-manor.glb       Previous environment export
+models/priest-player.glb    Priest gameplay model
 textures/moon.png          Moon texture
 audio/ambience.ogg         Background music
 audio/footsteps-house.ogg  Indoor footsteps
@@ -56,9 +57,7 @@ Replacement exports need their evidence placement and collision checked in game.
 ## Story and verification
 
 - [Current playable route and behavior](playthrough.md)
-- [Original design brief](archive/design-brief.md): historical planning, including
-  ideas that are not implemented; use the playable route for current behavior.
-- [Project conventions](../BUILDSPEC.md)
+- [Bathroom mirror setup](../level-1-bathroom-mirror.md)
 
 From the repository root, run `npm test` and `npm run build`. For a manual check,
 run `npm run dev`, start the house, and follow the playable route. Music should

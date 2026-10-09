@@ -369,11 +369,6 @@
       #houseCaption { position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%); z-index: 15; width: min(700px, calc(100% - 48px)); padding: 16px 24px; color: #ede4d2; background: linear-gradient(90deg, transparent, rgba(5, 9, 12, .94) 12%, rgba(5, 9, 12, .94) 88%, transparent); text-align: center; font: 17px/1.65 Georgia, serif; pointer-events: none; text-shadow: 0 2px 8px #000; }
       #houseRite { position: fixed; inset: 0; z-index: 110; display: grid; place-items: center; padding: 24px; overflow-y: auto; background: rgba(4, 9, 12, .86); backdrop-filter: blur(5px); }
       #houseRite.hidden, #houseCaption.hidden { display: none; }
-      #levelCaption { position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%); z-index: 15; width: min(700px, calc(100% - 48px)); padding: 16px 24px; color: #ede4d2; background: linear-gradient(90deg, transparent, rgba(5, 9, 12, .94) 12%, rgba(5, 9, 12, .94) 88%, transparent); text-align: center; font: 17px/1.65 Georgia, serif; pointer-events: none; text-shadow: 0 2px 8px #000; }
-      #levelCaption.hidden { display: none; }
-      #holdProgress { position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%); z-index: 16; width: 220px; height: 6px; border: 1px solid #7a4038; background: rgba(8, 6, 4, .8); pointer-events: none; }
-      #holdProgress.hidden { display: none; }
-      #holdProgressFill { width: 0; height: 100%; background: linear-gradient(90deg, #7a1f18, #c42a20); }
       .rite-panel { width: min(590px, 100%); padding: clamp(24px, 5vw, 46px); border: 1px solid #796e58; background: radial-gradient(ellipse at top, #252c2b, #101517); color: #e6dcc9; box-shadow: 0 25px 100px #000; }
       .rite-panel .evidence-label { margin-bottom: 18px; color: #b8ab8e; }
       .rite-panel h2 { font: 30px/1.2 Georgia, serif; margin-bottom: 16px; }
@@ -402,7 +397,7 @@
         #evidenceBtn { top: 12px; right: 12px; padding: 10px 9px; font-size: 9px; }
         #hudControls { bottom: 12px; max-width: calc(100vw - 24px); gap: 5px 10px; font-size: 8px; }
         #respawnBtn { right: 12px; bottom: 65px; }
-        #houseCaption, #levelCaption { bottom: 100px; }
+        #houseCaption { bottom: 100px; }
       }
       @media (prefers-reduced-motion: reduce) { .level-card { transition: none; } }
     </style>
@@ -418,12 +413,11 @@
       <span><kbd>WASD</kbd> MOVE</span><span><kbd>E</kbd> INTERACT</span>
       <span><kbd>I</kbd> EVIDENCE</span><span><kbd>T</kbd> TORCH</span>
       <span><kbd>SHIFT</kbd> SPRINT</span><span><kbd>C</kbd> CROUCH</span>
+      <span><kbd>V</kbd> VIEW</span>
     </div>
     <button id="respawnBtn" class="hidden" type="button">RESPAWN <kbd>R</kbd></button>
     <div id="crosshair" aria-hidden="true"></div>
     <div id="interactionPrompt" class="hidden"></div>
-    <div id="levelCaption" class="hidden" role="status"></div>
-    <div id="holdProgress" class="hidden" aria-hidden="true"><div id="holdProgressFill"></div></div>
     <button id="evidenceBtn" class="hidden" type="button">FIELD NOTES <kbd>I</kbd></button>
     <div id="newspaperReader" class="hidden" role="dialog" aria-modal="true" aria-labelledby="newspaperInspectTitle">
       <img id="newspaperTexturePreview" class="hidden" alt="Inspectable evidence" decoding="sync" />
@@ -481,22 +475,12 @@
     <div id="overlay">
       <div class="title-kicker">A SUPERNATURAL INVESTIGATION</div>
       <h1>EXORCIST<span class="title-subtitle">THE LAST RITES</span></h1>
-      <p class="title-intro">You are an exorcist. Uncover each haunting's truth, then complete the rite.</p>
+      <p class="title-intro">Investigate Vale Manor, uncover Evelyn's story, and complete the rite.</p>
       <nav class="level-menu" aria-label="Case files">
         <div class="level-menu-label">SELECT CASE FILE</div>
         <button id="playBtn" class="level-card" type="button">
           <span class="level-card-number">LEVEL 01</span>
           <span><strong class="level-card-title">Vale Manor</strong><small class="level-card-copy">Old Mill Road · A missing-person investigation</small></span>
-          <span class="level-card-action">ENTER</span>
-        </button>
-        <button id="trainBtn" class="level-card" type="button">
-          <span class="level-card-number">LEVEL 02</span>
-          <span><strong class="level-card-title">Night Train</strong><small class="level-card-copy">The dead ride at midnight</small></span>
-          <span class="level-card-action">ENTER</span>
-        </button>
-        <button id="highwayBtn" class="level-card" type="button">
-          <span class="level-card-number">LEVEL 03</span>
-          <span><strong class="level-card-title">Old Highway</strong><small class="level-card-copy">Nowhere to stop</small></span>
           <span class="level-card-action">ENTER</span>
         </button>
       </nav>
@@ -518,6 +502,7 @@
       </dl>
       <h3>Vale Manor</h3>
       <dl class="controls-list">
+        <dt>Switch first/third-person view</dt><dd>V</dd>
         <dt>Toggle torch</dt><dd>T</dd>
         <dt>Open field notes</dt><dd>I</dd>
         <dt>Respawn</dt><dd>R</dd>

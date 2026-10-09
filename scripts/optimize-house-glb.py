@@ -10,7 +10,7 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / 'public/levels/house/models/house.glb'
+SOURCE = ROOT / 'source-assets/house.glb'
 TARGET = ROOT / 'public/levels/house/models/house-runtime.glb'
 TEMP = ROOT / 'public/levels/house/models/.house-texture-work'
 

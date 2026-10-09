@@ -36,7 +36,7 @@ test('C toggles crouch, keeps the feet planted, and slows the walk', () => {
   player.updateVelocity(2)
   assert.equal(player.crouching, false)
   assert.equal(player.eyeHeight, 1)
-  assert.ok(Math.abs(player.velocity.z + 3) < 0.000001)
+  assert.ok(Math.abs(player.velocity.z + 2.5) < 0.000001)
   const feet = player.position.y - player.eyeHeight
 
   input.press('KeyC')
@@ -44,7 +44,7 @@ test('C toggles crouch, keeps the feet planted, and slows the walk', () => {
   assert.equal(player.crouching, true)
   assert.equal(player.eyeHeight, 0.55)
   assert.ok(Math.abs((player.position.y - player.eyeHeight) - feet) < 0.000001)
-  assert.ok(Math.abs(player.velocity.z + 3 * 0.45) < 0.000001)
+  assert.ok(Math.abs(player.velocity.z + 2.5 * 0.45) < 0.000001)
   assert.ok(player.getCollisionCapsule().end.y < feet + 1)
 
   input.release('KeyC')
