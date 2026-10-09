@@ -22,7 +22,8 @@ export function darkenGraves(model) {
       if (!object.isMesh) return
       const darken = material => {
         const copy = material.clone()
-        copy.color?.setHex(0x0c1112)
+        // Retain enough albedo for the player's torch to reveal the stone.
+        copy.color?.setHex(0x555a58)
         if (copy.emissive) copy.emissive.setRGB(0, 0, 0)
         if ('roughness' in copy) copy.roughness = Math.max(copy.roughness, 0.92)
         if ('metalness' in copy) copy.metalness = 0

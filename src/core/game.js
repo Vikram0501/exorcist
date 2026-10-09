@@ -763,7 +763,7 @@ if (this.loaded) {
     if (this.currentLevel === 'house') this.houseAudio.setPaused(!active && !this.newspaperOpen && !this.houseStoryView?.open && !this.houseStory?.jumpScareTime)
     if (active) {
     if (this.houseStory && this.input.consumePressed('KeyT')) {
-      this.houseStory.flashlight.visible = !this.houseStory.flashlight.visible
+      this.houseStory.toggleFlashlight()
     }
 
     updateDoors(
@@ -1910,6 +1910,16 @@ if (this.loaded) {
           : 'AWAITING ENTRY'
     }
 
+    const movementHud = document.getElementById('hudActions')
+    if (movementHud) movementHud.style.display = this.currentLevel === 'house' || this.currentLevel === 'train' ? '' : 'none'
+    const moving = Math.hypot(this.player.velocity.x, this.player.velocity.z) > 0.3
+    const sprinting = moving && !this.player.crouching &&
+      (this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight'))
+    document.getElementById('hudSprint')?.classList.toggle('active', sprinting)
+    document.getElementById('hudCrouch')?.classList.toggle('active', this.player.crouching)
+    document.getElementById('hudTorch')?.classList.toggle('active',
+      this.currentLevel === 'house' ? this.houseStory?.flashlightOn === true : (this.flashlight?.intensity || 0) > 0)
+
     const hudLevel = document.getElementById('hudLevel')
 
     if (hudLevel) {
@@ -2083,7 +2093,7 @@ if (this.loaded) {
 
     const inspectAsObject = investigationItem.inspectionMode === 'object'
     const inspectionObject = inspectAsObject
-      ? investigationItem.object.clone(true)
+      ? new THREE.Group()
       : new THREE.Mesh(
           sourceMesh.geometry,
           Array.isArray(sourceMesh.material)
@@ -2093,14 +2103,15 @@ if (this.loaded) {
 
     if (inspectAsObject) {
       investigationItem.object.updateWorldMatrix(true, true)
-      investigationItem.object.matrixWorld.decompose(
-        inspectionObject.position, inspectionObject.quaternion, inspectionObject.scale,
-      )
-      inspectionObject.traverse(child => {
-        if (!child.isMesh) return
-        child.material = Array.isArray(child.material)
+      investigationItem.object.traverse(child => {
+        if (!child.isMesh || !child.visible) return
+        const copy = child.clone(false)
+        child.matrixWorld.decompose(copy.position, copy.quaternion, copy.scale)
+        copy.material = Array.isArray(child.material)
           ? child.material.map(material => createInspectionMaterial(material, true))
           : createInspectionMaterial(child.material, true)
+        copy.visible = true
+        inspectionObject.add(copy)
       })
     } else {
       inspectionObject.position.set(0, 0, 0)

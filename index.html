@@ -33,16 +33,22 @@
         width: min(360px, calc(100vw - 40px));
         overflow: hidden;
         color: #ddd5c5;
-        background: linear-gradient(90deg, rgba(7, 8, 9, 0.87), rgba(7, 8, 9, 0.3));
-        border-left: 2px solid rgba(156, 44, 39, 0.9);
-        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+        background: linear-gradient(135deg, rgba(10, 14, 17, 0.94), rgba(18, 19, 20, 0.77));
+        border: 1px solid rgba(204, 183, 148, 0.25);
+        border-left: 3px solid #a13932;
+        border-radius: 3px;
+        box-shadow: 0 14px 42px rgba(0, 0, 0, 0.5), inset 0 1px rgba(255, 255, 255, 0.04);
         pointer-events: none;
         user-select: none;
         font-variant-numeric: tabular-nums;
       }
       .hud-title { padding: 10px 13px 3px; font: 700 10px Georgia, serif; letter-spacing: 0.2em; color: #a59a88; }
       .hud-level { padding: 2px 13px 5px; font: 700 18px Georgia, serif; letter-spacing: 0.06em; text-shadow: 1px 1px 3px #000; }
-      .hud-status { padding: 0 13px 11px; font-size: 9px; font-weight: 700; letter-spacing: 0.16em; color: #9b9284; }
+      .hud-status { padding: 0 13px 10px; font-size: 10px; font-weight: 700; letter-spacing: 0.16em; color: #c3b59f; }
+      .hud-actions { display: flex; gap: 7px; padding: 0 13px 12px; }
+      .hud-action { padding: 5px 8px; border: 1px solid rgba(199, 184, 154, .25); color: #a99f90; background: rgba(0, 0, 0, .24); font: 700 9px system-ui, sans-serif; letter-spacing: .12em; }
+      .hud-action.active { border-color: #c2a374; color: #fff1d2; background: rgba(157, 94, 49, .27); box-shadow: 0 0 12px rgba(194, 141, 80, .15); }
+      .hud-action.sprint.active { border-color: #d27250; background: rgba(160, 53, 42, .32); }
       .hud-stats { display: none; }
       .hud-stat { padding: 8px 12px 9px; font-size: 11px; color: #94a3b8; }
       .hud-stat + .hud-stat { border-left: 1px solid rgba(203, 213, 225, 0.16); }
@@ -197,7 +203,6 @@
       #newspaperInspectionPanel h2 { margin: 4px 0 8px; font: 700 22px Georgia, serif; }
       #newspaperInspectionPanel p { color: #c9c2b4; font-size: 13px; line-height: 1.5; }
       #inspectionStoryNote, .story-journal-entry p { white-space: pre-line; }
-      #newspaperInspectionPanel .newspaper-controls { margin-top: 10px; color: #fef3c7; font-size: 11px; }
       .newspaper-sheet {
         width: min(620px, 100%);
         padding: clamp(24px, 5vw, 48px);
@@ -385,6 +390,11 @@
       .rite-panel button:hover, .rite-panel button:focus-visible { outline: 2px solid #c1b695; outline-offset: 2px; background: #343e37; }
       .rite-panel .rite-back { background: transparent; font-size: 13px; text-align: center; }
       .rite-panel .rite-feedback { color: #d5a68b; min-height: 24px; }
+      #houseRite.failure { background: radial-gradient(circle at center, rgba(125, 14, 21, .72), rgba(30, 2, 7, .96)); }
+      #houseRite.failure .rite-panel { border-color: #d04445; background: radial-gradient(ellipse at top, #4f1119, #180509); box-shadow: 0 25px 100px #000, 0 0 60px rgba(180, 15, 28, .42); }
+      #houseRite.failure .rite-panel h2 { color: #ffd5d4; }
+      #houseRite.failure .rite-panel button { border-color: #a84247; background: #651a21; }
+      body.house-caught::after { content: ''; position: fixed; inset: 0; z-index: 109; pointer-events: none; background: radial-gradient(circle, transparent 30%, rgba(125, 0, 15, .55)); box-shadow: inset 0 0 130px rgba(220, 12, 25, .55); }
       .story-journal-entry { padding: 24px 0; border-top: 1px solid #a69a7d; }
       .story-journal-entry small { font: 10px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .12em; }
       .story-journal-entry h3 { margin: 8px 0 12px; font: 700 23px Georgia, serif; }
@@ -404,6 +414,11 @@
       <div class="hud-title">CASE FILE // 01</div>
       <div id="hudLevel" class="hud-level">NO LOCATION</div>
       <div id="hudMode" class="hud-status">AWAITING ENTRY</div>
+      <div id="hudActions" class="hud-actions" aria-label="Movement status">
+        <span id="hudSprint" class="hud-action sprint">SHIFT SPRINT</span>
+        <span id="hudCrouch" class="hud-action">C CROUCH</span>
+        <span id="hudTorch" class="hud-action">T TORCH</span>
+      </div>
       <div id="hudObjective">OBJECTIVE: FIND THE NEWSPAPER ON THE PORCH</div>
       <div class="hud-stats">
         <div class="hud-stat">POSITION<span id="hudPos">0.0, 0.0, 0.0</span></div>
@@ -413,7 +428,7 @@
     <div id="crosshair" aria-hidden="true"></div>
     <div id="hudControls"><kbd>WASD</kbd> MOVE &nbsp;&middot;&nbsp; <kbd>E</kbd> INSPECT
       &nbsp;&middot;&nbsp; <kbd>I</kbd> NOTES &nbsp;&middot;&nbsp; <kbd>T</kbd> TORCH
-      &nbsp;&middot;&nbsp; <kbd>Ctrl</kbd> CROUCH</div>
+      &nbsp;&middot;&nbsp; <kbd>SHIFT</kbd> SPRINT &nbsp;&middot;&nbsp; <kbd>C</kbd> TOGGLE CROUCH</div>
     <div id="interactionPrompt" class="hidden"></div>
     <div id="levelCaption" class="hidden" role="status"></div>
     <div id="holdProgress" class="hidden" aria-hidden="true"><div id="holdProgressFill"></div></div>
@@ -427,7 +442,6 @@
         <p id="inspectionStoryNote">Inspect the original clipping, then return to the house.</p>
         <p id="inspectionRiteNote"></p>
         <p class="inspection-log-note">Recorded in field notes · Press I to review.</p>
-        <p class="newspaper-controls">Drag to rotate Â· Scroll to zoom</p>
         <button id="closeNewspaperInspectBtn" type="button">CLOSE INSPECTION</button>
       </section>
       <article class="newspaper-sheet">
@@ -507,7 +521,7 @@
         <dt>Look around</dt><dd>Mouse</dd>
         <dt>Interact, inspect, open doors</dt><dd>E</dd>
         <dt>Sprint</dt><dd>Hold Shift</dd>
-        <dt>Crouch</dt><dd>Ctrl (toggle)</dd>
+        <dt>Crouch</dt><dd>Press C to toggle</dd>
         <dt>Jump</dt><dd>Space</dd>
         <dt>Pause / case menu</dt><dd>Esc</dd>
       </dl>

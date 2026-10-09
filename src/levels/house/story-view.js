@@ -17,7 +17,7 @@ export function buildHouseJournalEntries(game) {
   }
   if (game.houseStory?.pursuit.state === 'safe' || game.houseStory?.released) entries.push({
     id: 'evelyn-grave', title: "Evelyn's unmarked grave", foundAt: 'Backyard',
-    storyNote: 'The unmarked grave behind the house is where Daniel buried Evelyn. Elias stopped pursuing me at its edge.',
+    storyNote: 'The unmarked grave behind the house is where Daniel buried Evelyn. Elias chased me until I touched the grave and began the rite.',
     riteNote: 'The exorcism can begin here. Use the music-box melody, tell Evelyn the truth, and name Elias Wren.',
   })
   if (game.houseStory?.released) entries.push({
@@ -26,8 +26,8 @@ export function buildHouseJournalEntries(game) {
     riteNote: 'Evelyn is at rest. Elias has left the manor.',
   })
   if (game.houseStory?.complete) entries.push({
-    id: 'closed-case', title: 'Case closed', foundAt: 'Front road',
-    storyNote: 'I left Vale Manor after the rite. The truth of Evelyn’s disappearance is recorded here.',
+    id: 'closed-case', title: 'Case closed', foundAt: "Evelyn's grave",
+    storyNote: 'Evelyn vanished after thanking me. The truth of her disappearance is recorded here.',
     riteNote: 'Evelyn Vale was found and released.',
   })
   return entries
@@ -93,8 +93,9 @@ export class HouseStoryView {
     if (active) this.remaining = Math.max(0, this.remaining - dt)
     this.caption.classList.toggle('hidden', this.remaining <= 0 || !active)
     const story = this.game.houseStory
+    document.body.classList.toggle('house-caught', story?.pursuit.state === 'caught' && story?.jumpScareTime > 0)
     if (story?.pursuit.state === 'caught' && story.jumpScareTime <= 0 && this.outcome !== 'caught') this.showOutcome('caught')
-    if (story?.complete && story.time - story.endingTime > 5 && this.outcome !== 'complete') this.showOutcome('complete')
+    if (story?.complete && this.outcome !== 'complete') this.showOutcome('complete')
   }
 
   showOutcome(type) {
@@ -103,22 +104,23 @@ export class HouseStoryView {
     this.game.input.release()
     this.dialog.replaceChildren()
     this.dialog.classList.remove('hidden')
+    this.dialog.classList.toggle('failure', type === 'caught')
     const panel = document.createElement('div')
     panel.className = 'rite-panel'
     const title = document.createElement('h2')
     const wrongAnswer = type === 'caught' && this.game.houseStory.failureReason === 'wrong-answer'
     title.textContent = type === 'caught'
       ? (wrongAnswer ? 'The rite failed' : 'Elias found you')
-      : 'The exorcism is complete'
+      : 'Congratulations! Level 1 complete'
     const copy = document.createElement('p')
     copy.textContent = type === 'caught'
       ? (wrongAnswer
-          ? 'Elias broke the rite. Your field notes are safe. Return to the grave and begin again.'
+          ? 'Elias broke the rite. Your field notes are safe. Try again at the grave.'
           : 'Your field notes are safe. You can try again from the front of the house.')
-      : 'Evelyn Vale is at rest. Elias Wren has been banished from the manor.'
+      : 'Evelyn Vale is free. Elias Wren is gone. Continue to Level 2.'
     const action = document.createElement('button')
     action.type = 'button'
-    action.textContent = type === 'caught' ? 'Respawn at front of house' : 'Return to the case menu'
+    action.textContent = type === 'caught' ? 'Try again' : 'Continue to Level 2'
     action.addEventListener('click', () => {
       if (type === 'caught') {
         this.game.houseStory.retryPursuit(this.game.player, this.game.spawnPoint, this.game.spawnYaw)
@@ -126,7 +128,8 @@ export class HouseStoryView {
         this.closeRite()
       } else {
         this.closeRite(false)
-        document.getElementById('overlay')?.classList.remove('hidden')
+        this.game.loadLevel('train')
+        this.game.input.lock()
       }
     })
     panel.append(title, copy, action)
@@ -136,6 +139,7 @@ export class HouseStoryView {
 
   openRite() {
     if (this.game.houseStory.released) return
+    this.game.houseStory.pursuit.stop()
     this.open = true
     this.game.input.release()
     this.renderRite()
@@ -146,6 +150,7 @@ export class HouseStoryView {
     const question = RITE_QUESTIONS[story.riteStep]
     this.dialog.replaceChildren()
     this.dialog.classList.remove('hidden')
+    this.dialog.classList.remove('failure')
     const panel = document.createElement('div')
     panel.className = 'rite-panel'
     const label = document.createElement('p')
@@ -194,6 +199,7 @@ export class HouseStoryView {
   closeRite(resume = true) {
     this.open = false
     this.dialog.classList.add('hidden')
+    this.dialog.classList.remove('failure')
     if (resume) this.game.input.lock()
   }
 
@@ -202,6 +208,7 @@ export class HouseStoryView {
   }
 
   dispose() {
+    document.body.classList.remove('house-caught')
     this.caption.remove()
     this.dialog.remove()
     document.querySelectorAll('[data-story-entry]').forEach(entry => entry.remove())

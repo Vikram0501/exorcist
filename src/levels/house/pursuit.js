@@ -21,13 +21,8 @@ export class HousePursuit {
     this.state = 'chasing'
   }
 
-  update(dt, position, grave) {
+  update(dt, position) {
     if (this.state !== 'chasing') return this.state
-    if (Math.hypot(position.x - grave.x, position.z - grave.z) < 2.6 &&
-        Math.abs(position.y - grave.y - 1) < 2) {
-      this.state = 'safe'
-      return this.state
-    }
     const last = this.route.at(-1) || this.position
     if (last.distanceToSquared(position) > 0.04) this.route.push(position.clone())
     if (this.grace > 0) {
@@ -49,6 +44,10 @@ export class HousePursuit {
     }
     if (this.position.distanceTo(position) < 0.85) this.state = 'caught'
     return this.state
+  }
+
+  stop() {
+    if (this.state === 'chasing') this.state = 'safe'
   }
 
   retry(position = this.checkpoint) {
