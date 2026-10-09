@@ -163,7 +163,7 @@ export class HouseStory {
 
   createEvidence(data) {
     if (data.kind === 'engraving') {
-      const authored = findStoryAsset(this.model, ['Annex Scratches', 'Annex_Scratches', 'Evelyn Scratches'])
+      const authored = findStoryAsset(this.model, ['Annex message', 'Annex Scratches', 'Annex_Scratches', 'Evelyn Scratches'])
       return authored || this.createEngravingMarker(data)
     }
     const authored = findStoryAsset(this.model, data.assetNames || [])

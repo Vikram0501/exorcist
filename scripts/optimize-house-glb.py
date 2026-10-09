@@ -31,7 +31,7 @@ replacements = {}
 TEMP.mkdir(exist_ok=False)
 try:
     for index, image in enumerate(images):
-        if image.get('name') in {'Newspaper_front', 'Frame1', 'Daniels Letter', 'Aged Vale Estate Service Record', 'Diary Entry'}:
+        if image.get('name') in {'Newspaper_front', 'Frame1', 'Daniels Letter', 'Aged Vale Estate Service Record', 'Diary Entry', 'Bloody Scratched Horror Message'}:
             continue
         view = views[image['bufferView']]
         raw = binary[view.get('byteOffset', 0):view.get('byteOffset', 0) + view['byteLength']]
