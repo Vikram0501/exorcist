@@ -270,15 +270,12 @@ export function createObstacles(
       )
 
     const dir = roadSample.angle
-    const perpX = -Math.cos(dir)
-    const perpZ = Math.sin(dir)
-
     const worldX =
       roadSample.position.x +
-      perpX * lateralOffset
+      roadSample.lateral.x * lateralOffset
     const worldZ =
       roadSample.position.z +
-      perpZ * lateralOffset
+      roadSample.lateral.z * lateralOffset
 
     const { group, mixer } = buildObstacleVisual(
       template,

@@ -371,15 +371,12 @@ test('barriers follow banking', async () => {
     const barriers = []
     level.model.traverse((object) => {
       if (!object.isMesh) return
-      const size = object.geometry.parameters
-      if (size && size.width === 0.4 && size.height === 1) {
+      if (object.name === 'circuitBarrier') {
         barriers.push(object)
       }
     })
-    assert.ok(barriers.length > 100, 'barrier field built')
-    // Banked-corner barriers discovered from the bank profile (no pinned
-    // stations). Pairs are added left (+7.2) then right (-7.2) per
-    // 10 m station.
+    assert.equal(barriers.length, Math.ceil(track.totalLength / 40) * 2, 'batched barrier field built')
+    // Check actual extruded vertices, not merely the box's origin/roll.
     let peakS = 0
     let peak = 0
     for (let s = 0; s <= track.totalLength; s += 2) {
@@ -391,23 +388,25 @@ test('barriers follow banking', async () => {
     }
     assert.ok(peak > 5 / DEG, 'precondition: banked corner exists')
     let checked = 0
-    for (let k = 0; k < barriers.length; k += 2) {
-      const s = Math.floor(k / 2) * 10
+    for (const barrier of barriers) {
+      const s = barrier.userData.startDistance
       if (Math.abs(s - peakS) > 50) continue
-      const side = k % 2 === 0 ? 7.2 : -7.2
-      const expected = track.toWorld(s, side, 0.5)
-      assert.ok(
-        barriers[k].position.distanceTo(expected) < 1e-6,
-        `barrier seated on bank at s=${s}`
-      )
-      const expectedRoll = track.sampleAt(s).bank
-      assert.ok(
-        Math.abs(barriers[k].rotation.z - expectedRoll) < 1e-9,
-        `barrier rolls with road at s=${s}`
-      )
+      const p = barrier.geometry.getAttribute('position')
+      for (let i = 0; i < p.count; i += 7) {
+        const v = new THREE.Vector3().fromBufferAttribute(p, i)
+        const solved = track.toTrack(v)
+        const frame = track.sampleAt(solved.s)
+        const offset = v.clone().sub(frame.position)
+        const d = offset.dot(frame.lateral)
+        assert.ok(Math.abs(d) > 6.98 && Math.abs(d) < 7.82,
+          'barrier never cuts inside the road edge on a banked corner')
+        const height = offset.dot(frame.up)
+        assert.ok(height > -0.02 && height < 1.02,
+          'profiled barrier follows the banked frame')
+      }
       checked++
     }
-    assert.ok(checked >= 8, `checked banked barriers (${checked})`)
+    assert.ok(checked >= 4, `checked banked barrier batches (${checked})`)
   } finally {
     globalThis.window = originalWindow
   }

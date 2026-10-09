@@ -350,12 +350,11 @@ test('barriers follow elevation', async () => {
     const barriers = []
     level.model.traverse((object) => {
       if (!object.isMesh) return
-      const size = object.geometry.parameters
-      if (size && size.width === 0.4 && size.height === 1) {
+      if (object.name === 'circuitBarrier') {
         barriers.push(object)
       }
     })
-    assert.ok(barriers.length > 100, `barrier field built (${barriers.length})`)
+    assert.equal(barriers.length, Math.ceil(track.totalLength / 40) * 2)
     // Regression: no mirrored transforms anywhere in the built level
     // (negative scale flips text and inverts winding).
     level.model.traverse((object) => {
@@ -364,18 +363,17 @@ test('barriers follow elevation', async () => {
         `no negative scale on ${object.name || object.type}`
       )
     })
-    // Barriers are added left (+7.2) / right (-7.2) every 10 m from s = 0.
+    // Check baked bottom/top vertices through climbs and descents.
     for (let k = 0; k < barriers.length; k += 20) {
-      const s = (k / 2) * 10
-      const expectedY = track.toWorld(
-        Math.min(s, track.totalLength),
-        7.2,
-        0.5
-      ).y
-      assert.ok(
-        Math.abs(barriers[k].position.y - expectedY) < 1e-6,
-        `barrier rides banked elevation at s=${s}`
-      )
+      const p = barriers[k].geometry.getAttribute('position')
+      for (let i = 0; i < p.count; i += 11) {
+        const v = new THREE.Vector3().fromBufferAttribute(p, i)
+        const solved = track.toTrack(v)
+        const frame = track.sampleAt(solved.s)
+        const height = v.clone().sub(frame.position).dot(frame.up)
+        assert.ok(height > -0.02 && height < 1.02,
+          `barrier rides elevation at s=${solved.s}`)
+      }
     }
   } finally {
     GLTFLoader.prototype.loadAsync = originalLoad

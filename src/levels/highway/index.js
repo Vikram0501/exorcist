@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { loadHighwayRoad, seatCarVisuals } from './road.js'
+import { createCircuitBarriers, createCircuitScenery } from './circuit-scenery.js'
 import { loadHighwayCars } from './cars.js'
 import { loadCityBuildings } from './city.js'
 import { loadStreetlightTemplate } from './streetlights.js'
@@ -258,15 +259,15 @@ export async function createHighwayLevel(
   // scene. The warm headlights stay the neutral contrast that guides the
   // player down the road.
   const ambientLight =
-    new THREE.AmbientLight(0x33141a, 0.5)
+    new THREE.AmbientLight(0x665057, 0.38)
   highway.add(ambientLight)
 
   // Blood-red key light, still shadow-casting so buildings read as dark
   // silhouettes and the asphalt keeps its shading.
   const moonLight =
     new THREE.DirectionalLight(
-      0x8f2f3d,
-      1.5
+      0xa95560,
+      1.35
     )
   moonLight.position.set(-30, 35, -90)
   moonLight.castShadow = true
@@ -338,57 +339,10 @@ export async function createHighwayLevel(
 
   }
 
-  const barrierMaterial =
-    new THREE.MeshStandardMaterial({
-      color: 0x777777,
-    })
-
-  // ============================================
-  // CONTINUOUS BARRIERS
-  // ============================================
-
-  const barrierSampleStep = 10
-  const barrierOffset =
-    ROAD_WIDTH * 0.5 + 0.2
-
-  for (
-    let d = 0;
-    d < totalRoadLength;
-    d += barrierSampleStep
-  ) {
-    const sample = track.sampleAt(d)
-
-    // Banked placement: toWorld carries the lateral/up frame, so the
-    // barrier base sits on the banked shoulder cross-section. Roll about
-    // the travel axis (Euler XYZ applies Z before Y) matches road bank.
-    const leftBarrier = new THREE.Mesh(
-      new THREE.BoxGeometry(
-        0.4,
-        1,
-        barrierSampleStep
-      ),
-      barrierMaterial
-    )
-    leftBarrier.position.copy(
-      track.toWorld(d, barrierOffset, 0.5)
-    )
-    leftBarrier.rotation.set(0, sample.angle, sample.bank)
-    highway.add(leftBarrier)
-
-    const rightBarrier = new THREE.Mesh(
-      new THREE.BoxGeometry(
-        0.4,
-        1,
-        barrierSampleStep
-      ),
-      barrierMaterial
-    )
-    rightBarrier.position.copy(
-      track.toWorld(d, -barrierOffset, 0.5)
-    )
-    rightBarrier.rotation.set(0, sample.angle, sample.bank)
-    highway.add(rightBarrier)
-  }
+  // Static, visual-only circuit structures. Shared batches live under the
+  // level root so the existing disposer owns their materials and textures.
+  highway.add(...createCircuitBarriers(track))
+  highway.add(createCircuitScenery(track))
 
 
   // ============================================
@@ -434,129 +388,13 @@ export async function createHighwayLevel(
 
 
   // ============================================
-  // STARTING LINE
-  // ============================================
-
-  const startLineSample =
-    track.sampleAt(3)
-
-  const startLine =
-    new THREE.Mesh(
-      new THREE.BoxGeometry(
-        ROAD_WIDTH,
-        0.03,
-        0.6
-      ),
-      new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-      })
-    )
-
-  startLine.position.copy(
-    startLineSample.position
-  )
-  startLine.position.y += 0.13
-  startLine.rotation.y =
-    startLineSample.angle
-
-  highway.add(startLine)
-
-
-  // ============================================
-  // FINISH LINE
+  // FINISH COORDINATE (visual paint is owned by racecraft)
   // ============================================
 
   const finishSample =
     track.sampleAt(finishDistance)
 
   const finishZ = finishSample.position.z
-
-  const finishLine = new THREE.Group()
-
-  const finishStrip =
-    new THREE.Mesh(
-      new THREE.BoxGeometry(
-        ROAD_WIDTH,
-        0.04,
-        1
-      ),
-      new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-      })
-    )
-
-  finishStrip.position.copy(
-    finishSample.position
-  )
-  finishStrip.position.y += 0.14
-  finishStrip.rotation.y =
-    finishSample.angle
-
-  finishLine.add(finishStrip)
-
-  const perpXf =
-    -Math.cos(finishSample.angle)
-  const perpZf =
-    Math.sin(finishSample.angle)
-
-  const leftPost =
-    new THREE.Mesh(
-      new THREE.BoxGeometry(
-        0.4,
-        5,
-        0.4
-      ),
-      new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-      })
-    )
-
-  leftPost.position.set(
-    finishSample.position.x +
-      perpXf * 6.5,
-    finishSample.position.y + 2.5,
-    finishSample.position.z +
-      perpZf * 6.5
-  )
-
-  finishLine.add(leftPost)
-
-  const rightPost =
-    leftPost.clone()
-
-  rightPost.position.set(
-    finishSample.position.x -
-      perpXf * 6.5,
-    finishSample.position.y + 2.5,
-    finishSample.position.z -
-      perpZf * 6.5
-  )
-
-  finishLine.add(rightPost)
-
-  const topBar =
-    new THREE.Mesh(
-      new THREE.BoxGeometry(
-        13.4,
-        0.5,
-        0.5
-      ),
-      new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-      })
-    )
-
-  topBar.position.set(
-    finishSample.position.x,
-    finishSample.position.y + 5,
-    finishSample.position.z
-  )
-  topBar.rotation.y =
-    finishSample.angle
-
-  finishLine.add(topBar)
-
-  highway.add(finishLine)
 
 
   // ============================================
