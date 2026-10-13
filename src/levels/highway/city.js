@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { mergeGeometries }
   from 'three/addons/utils/BufferGeometryUtils.js'
+import { loadingManager } from '../../core/loading.js'
 
 export const CITY_MODEL_URL =
   '/models/street_city_buildings_8.glb'
@@ -17,7 +18,7 @@ const CITY_KEEP_GROUND_SLAB = false
 export async function loadCityBuildings() {
 
   const gltf =
-    await new GLTFLoader().loadAsync(CITY_MODEL_URL)
+    await new GLTFLoader(loadingManager).loadAsync(CITY_MODEL_URL)
 
   try {
 

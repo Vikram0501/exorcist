@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { loadingManager } from '../../core/loading.js'
 
 export const HIGHWAY_MODEL_URL = '/models/highway.glb'
 export const HIGHWAY_SURFACE_Y = 0.05 // Original driving surface elevation.
@@ -82,7 +83,7 @@ export function createTrackBoxGeometry(track, s0, s1, d, height, width, thicknes
 }
 
 export async function loadHighwayRoad(options) {
-  const gltf = await new GLTFLoader().loadAsync(HIGHWAY_MODEL_URL)
+  const gltf = await new GLTFLoader(loadingManager).loadAsync(HIGHWAY_MODEL_URL)
   try {
     return createHighwayRoad(gltf.scene, options)
   } catch (error) {

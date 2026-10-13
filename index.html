@@ -51,6 +51,13 @@
       #crosshair::after { display: none; }
       #hudControls { position: fixed; bottom: 18px; left: 50%; z-index: 10; padding: 5px 9px; color: rgba(213, 205, 189, 0.58); font: 9px Georgia, serif; letter-spacing: 0.1em; background: rgba(4, 5, 6, 0.42); pointer-events: none; user-select: none; transform: translateX(-50%); }
       #hudControls kbd, #respawnBtn kbd, #evidenceBtn kbd { padding: 0; color: #d9d0be; font: inherit; font-weight: 700; background: transparent; border-radius: 0; }
+      #hudControls.hidden { display: none; }
+      #highwayControls { position: fixed; bottom: 18px; left: 50%; z-index: 10; max-width: calc(100vw - 24px); padding: 5px 9px; color: rgba(213, 205, 189, 0.58); font: 9px Georgia, serif; letter-spacing: 0.1em; text-align: center; line-height: 1.8; background: rgba(4, 5, 6, 0.42); pointer-events: none; user-select: none; transform: translateX(-50%); }
+      #highwayControls kbd { padding: 0; color: #d9d0be; font: inherit; font-weight: 700; background: transparent; border-radius: 0; }
+      #highwayControls.hidden { display: none; }
+      @media (max-width: 700px) {
+        #highwayControls { bottom: 12px; padding: 4px 7px; font-size: 8px; }
+      }
       #overlay {
         position: fixed;
         inset: 0;
@@ -414,6 +421,9 @@
     <div id="hudControls"><kbd>WASD</kbd> MOVE &nbsp;&middot;&nbsp; <kbd>E</kbd> INSPECT
       &nbsp;&middot;&nbsp; <kbd>I</kbd> NOTES &nbsp;&middot;&nbsp; <kbd>T</kbd> TORCH
       &nbsp;&middot;&nbsp; <kbd>Ctrl</kbd> CROUCH</div>
+    <div id="highwayControls" class="hidden" aria-hidden="true"><kbd>W</kbd> ACCELERATE &nbsp;&middot;&nbsp; <kbd>A</kbd> / <kbd>D</kbd> STEER
+      &nbsp;&middot;&nbsp; <kbd>S</kbd> BRAKE / REVERSE &nbsp;&middot;&nbsp; <kbd>SPACE</kbd> DRIFT
+      &nbsp;&middot;&nbsp; <kbd>ESC</kbd> EXIT</div>
     <div id="interactionPrompt" class="hidden"></div>
     <div id="levelCaption" class="hidden" role="status"></div>
     <div id="holdProgress" class="hidden" aria-hidden="true"><div id="holdProgressFill"></div></div>

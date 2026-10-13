@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { clone as cloneSkinnedModel }
   from 'three/addons/utils/SkeletonUtils.js'
 import { asTrack } from './track.js'
+import { loadingManager } from '../../core/loading.js'
 
 
 // ============================================
@@ -79,14 +80,16 @@ export const OBSTACLE_MODEL_URLS =
 // GLB LOADING (once per Level 3 load)
 // ============================================
 
-export async function loadObstacleModels() {
-  const loader = new GLTFLoader()
+export async function loadObstacleModels(loadTracker = null) {
+  const loader = new GLTFLoader(loadingManager)
 
   const results = await Promise.allSettled(
     OBSTACLE_MODEL_DEFS.map(
       async (def) => {
         const gltf = await loader.loadAsync(def.url)
-        return prepareObstacleTemplate(def, gltf)
+        const template = prepareObstacleTemplate(def, gltf)
+        loadTracker?.complete(`obstacle-${def.key}`)
+        return template
       }
     )
   )
