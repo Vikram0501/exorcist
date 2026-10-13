@@ -1843,15 +1843,12 @@ if (this.loaded) {
   // ============================================
 
   unloadCurrentLevel() {
-<<<<<<< HEAD
-    this.postFx.enabled = false
-
-=======
     clearTimeout(this.nameFocusTimer)
     clearTimeout(this.exorcismFadeTimer)
     this.nameFocusTimer = null
     this.exorcismFadeTimer = null
->>>>>>> origin/main
+    if (this.postFx) this.postFx.enabled = false
+
     if (this.houseAudioStartFrame !== null) {
       cancelAnimationFrame(this.houseAudioStartFrame)
       this.houseAudioStartFrame = null
