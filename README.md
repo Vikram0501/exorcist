@@ -147,7 +147,6 @@ exorcist/
     levels/house/
       models/house.glb          Original Blender export and authored props
       models/house-runtime.glb  Optimized Level 1 asset loaded by the game
-      models/vale-manor.glb     Previous Level 1 export
       textures/moon.png
       audio/                   Descriptively named house recordings
         screams/               scream-01.ogg through scream-04.ogg
@@ -184,6 +183,7 @@ Level design documents live in `docs/`. Read `docs/BUILDSPEC.md` first if you pl
 - [x] Level 1 (Haunted House) — GLB loading, wall/floor collision, interactive doors, stair ramp
 - [x] Level 2 (Undead Train) — GLB loading, basic lighting
 - [ ] Level 2 collision, enemies, stealth mechanics
+- [x] Level 2 investigation: name marks, residue hints, field notes, and the burnt-carriage exorcism rite
 - [x] Level 3 (Phantom Highway) — procedural road, vehicle controls, competitive ghost
 - [x] Level 3 — randomized ghost identities and collectible name letters
 - [x] Level 3 — dynamic roadside clue signs

@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { REAR_LETTER } from './story-data.js'
 import { trainFloorAt } from './zombie.js'
 
-const KANA_FONT = '"Yu Gothic", "Meiryo", "Hiragino Sans", "Noto Sans CJK JP", "MS Gothic", sans-serif'
+const KANA_FONT = '"hakidame", "Yu Gothic", "Meiryo", "Hiragino Sans", "Noto Sans CJK JP", "MS Gothic", sans-serif'
 const DECK_FALLBACK = 0.4
 const PAPER_LIFT = 0.015
 
@@ -23,7 +23,7 @@ function makeTexture(draw, size = 256) {
 function letterTexture(char) {
   return makeTexture((context, size) => {
     context.textAlign = 'center'
-    context.fillStyle = 'rgba(196, 42, 32, 0.95)'
+    context.fillStyle = 'rgba(138, 8, 12, 0.95)'
     context.font = `${size * 0.72}px ${KANA_FONT}`
     context.fillText(char, size / 2, size * 0.74)
   })

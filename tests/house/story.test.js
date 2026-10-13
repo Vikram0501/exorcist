@@ -119,7 +119,7 @@ test('wrong rite answers scare the player and require a respawn', () => {
   story.jumpScareTime = 0
   for (const question of RITE_QUESTIONS) story.answerRite(question.answer)
   assert.equal(story.released, true)
-  assert.match(story.objective(), /FRONT ROAD/)
+  assert.match(story.objective(), /EVELYN IS FREE/)
   assert.equal(story.answerRite(0), false)
 })
 
@@ -141,12 +141,12 @@ test('finishing the exorcism hides Elias and reveals Evelyn at the grave', () =>
   assert.equal(story.ghost.visible, false)
   story.update(0.1, { position: new THREE.Vector3(1, 1, 0) }, false)
   assert.equal(story.evelyn.visible, true)
-  story.update(0.1, { position: new THREE.Vector3(1, 1, 19) }, false)
+  story.update(18, { position: new THREE.Vector3(1, 1, 0) }, false)
   assert.equal(story.complete, true)
   assert.equal(story.evelyn.visible, false)
 })
 
-test('the chase follows the walked route, preserves its checkpoint, and ends at the grave', () => {
+test('the chase follows the walked route and only stops when the grave is activated', () => {
   const pursuit = new HousePursuit()
   const start = new THREE.Vector3(0, 1, 0)
   const grave = new THREE.Vector3(10, 0, 0)
@@ -155,11 +155,14 @@ test('the chase follows the walked route, preserves its checkpoint, and ends at 
   assert.equal(pursuit.position.x, 0)
   pursuit.update(0.4, new THREE.Vector3(4, 1, 0), grave)
   pursuit.update(0.8, new THREE.Vector3(7, 1, 0), grave)
+  pursuit.update(0.5, new THREE.Vector3(7, 1, 0), grave)
   assert.ok(pursuit.position.x > 0)
   pursuit.state = 'caught'
   assert.deepEqual(pursuit.retry().toArray(), start.toArray())
   assert.equal(pursuit.state, 'chasing')
-  assert.equal(pursuit.update(0.1, new THREE.Vector3(10, 1, 0), grave), 'safe')
+  assert.equal(pursuit.update(0.1, new THREE.Vector3(10, 1, 0), grave), 'chasing')
+  pursuit.stop()
+  assert.equal(pursuit.state, 'safe')
 })
 
 test('a caught player can restart the chase from the front of the house', () => {

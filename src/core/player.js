@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { Capsule } from 'three/addons/math/Capsule.js'
 
 const DEFAULT_MOVEMENT = { radius: 0.2, walk: 3, sprint: 5, acceleration: 20, jump: 5 }
-const HOUSE_MOVEMENT = { radius: 0.35, walk: 4.8, sprint: 8, acceleration: 45, jump: 7.5 }
+const HOUSE_MOVEMENT = { radius: 0.35, walk: 2.5, sprint: 4, acceleration: 25, jump: 7.5 }
 const EYE_HEIGHT = 1
 const CROUCH_EYE_HEIGHT = 0.55
 const CROUCH_SPEED = 0.45
@@ -427,7 +427,8 @@ export class Player {
     const forward = this.getForward()
     const right = this.getRight()
 
-    if (this.input.consumePressed('ControlLeft')) this.setCrouching(!this.crouching)
+    if (this.flying) this.setCrouching(false)
+    else if (this.input.consumePressed?.('KeyC')) this.setCrouching(!this.crouching)
 
     const moveX = (this.input.isDown('KeyD') ? 1 : 0) - (this.input.isDown('KeyA') ? 1 : 0)
     const moveZ = (this.input.isDown('KeyW') ? 1 : 0) - (this.input.isDown('KeyS') ? 1 : 0)

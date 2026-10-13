@@ -7,6 +7,9 @@ import { TrainAudio } from '../levels/train/audio.js'
 import { TrainCameraShake } from '../levels/train/shake.js'
 import { HouseStory } from '../levels/house/story.js'
 import { HouseStoryView, renderJournal } from '../levels/house/story-view.js'
+import { HouseAvatar } from '../levels/house/avatar.js'
+import { installBathroomMirror } from '../levels/house/mirror.js'
+import { TrainRiteView } from '../levels/train/rite-view.js'
 
 import {
   createHighwayLevel,
@@ -161,6 +164,8 @@ export class Game {
     this.trainShake = new TrainCameraShake(this.camera)
     this.houseStory = null
     this.houseStoryView = null
+    this.houseAvatar = null
+    this.houseMirror = null
 
 
     // LEVEL DATA
@@ -216,6 +221,10 @@ export class Game {
     this.trainStory = null
 
     this.trainClues = null
+
+    this.trainRiteView = null
+
+    this.trainExorcism = null
 
     this.journalBuilder = null
 
@@ -407,7 +416,6 @@ export class Game {
       new THREE.Clock()
 
 
-    this.fpsSamples = []
 
 
     window.addEventListener(
@@ -526,6 +534,11 @@ export class Game {
     ) {
 
       this.respawn()
+    }
+
+    if (this.loaded && this.currentLevel === 'house' &&
+        this.input.isLocked && this.input.consumePressed('KeyV')) {
+      this.houseAvatar?.toggleView()
     }
 
     if (
@@ -778,8 +791,9 @@ if (this.loaded) {
   // ======================================
 
   else {
-    const active = this.input.isLocked && !this.newspaperOpen && !this.evidenceBookOpen && !this.houseStoryView?.open
+    const active = this.input.isLocked && !this.newspaperOpen && !this.evidenceBookOpen && !this.houseStoryView?.open && !this.trainRiteView?.open
     this.houseStoryView?.update(dt, active)
+    this.trainRiteView?.update(dt)
     if (this.levelCaptionRemaining > 0) {
       this.levelCaptionRemaining = Math.max(0, this.levelCaptionRemaining - dt)
       this.levelCaptionEl?.classList.toggle('hidden', this.levelCaptionRemaining <= 0)
@@ -787,7 +801,7 @@ if (this.loaded) {
     if (this.currentLevel === 'house') this.houseAudio.setPaused(!active && !this.newspaperOpen && !this.houseStoryView?.open && !this.houseStory?.jumpScareTime)
     if (active) {
     if (this.houseStory && this.input.consumePressed('KeyT')) {
-      this.houseStory.flashlight.visible = !this.houseStory.flashlight.visible
+      this.houseStory.toggleFlashlight()
     }
 
     updateDoors(
@@ -985,9 +999,22 @@ if (this.loaded) {
 
     if (this.currentLevel === 'train' && this.trainStory) {
       const storyItem = investigationItem && investigationItem.story ? investigationItem : null
-      const reading = storyItem && this.input.isDown('KeyE') && !this.trainStory.found.has(storyItem.id)
+      const riteItem = storyItem?.kind === 'rite' ? storyItem : null
+      const reading = storyItem && !riteItem && this.input.isDown('KeyE') && !this.trainStory.found.has(storyItem.id)
+      const beginning = riteItem && this.input.isDown('KeyE') && this.trainStory.canBeginRite()
 
-      if (reading) {
+      if (beginning) {
+        const started = this.trainStory.hold(dt, riteItem)
+        if (this.holdProgressFill) {
+          this.holdProgressFill.style.width = `${(this.trainStory.progress * 100).toFixed(1)}%`
+        }
+        this.holdProgressEl?.classList.remove('hidden')
+        if (started) {
+          this.holdProgressEl?.classList.add('hidden')
+          this.trainStory.releaseHold()
+          this.trainRiteView?.openRite()
+        }
+      } else if (reading) {
         const finished = this.trainStory.hold(dt, storyItem)
         if (finished) this.trainStory.read(storyItem)
         if (this.holdProgressFill) {
@@ -1028,6 +1055,8 @@ if (this.loaded) {
     }
 
     if (this.currentLevel === 'train' && this.trainZombie && !this.trainCaught) {
+      if (this.trainStory?.released && !this.trainZombie.banished) this.trainZombie.banish()
+
       const outcome = this.trainZombie.update(dt, {
         position: this.player.position,
         velocity: this.player.velocity,
@@ -1060,6 +1089,13 @@ if (this.loaded) {
 
 
     if (this.currentLevel === 'house') this.houseStory?.updateJumpScare(dt, this.player)
+    if (this.currentLevel === 'house' && this.houseAvatar) {
+      this.houseAvatar.update(
+        this.loaded && this.input.isLocked ? dt : 0,
+        this.player,
+        this.colliders.find((collider) => collider.type === 'octree')?.world,
+      )
+    }
     const scareTime = this.currentLevel === 'house'
       ? this.houseStory?.jumpScareTime || 0
       : 0
@@ -1081,10 +1117,17 @@ if (this.loaded) {
 
     if (this.loaded && this.currentLevel === 'train') this.trainShake.apply(dt)
 
-    this.renderer.render(
-      this.scene,
-      this.camera
-    )
+    const renderCamera = this.currentLevel === 'house' && this.houseAvatar &&
+      !this.newspaperOpen && !this.houseStoryView?.open &&
+      !this.evidenceBookOpen && !(this.houseStory?.jumpScareTime > 0)
+      ? this.houseAvatar.renderCamera
+      : this.camera
+    const avatarVisible = this.houseAvatar?.root.visible
+    if (renderCamera === this.camera && this.houseAvatar?.thirdPerson) {
+      this.houseAvatar.root.visible = false
+    }
+    this.renderer.render(this.scene, renderCamera)
+    if (this.houseAvatar) this.houseAvatar.root.visible = avatarVisible
 
     this.trainShake.clear()
 
@@ -1232,6 +1275,7 @@ if (this.loaded) {
             investigationItems,
             trainStory,
             trainClues,
+            exorcism,
             moonLight,
             roadPath,
             arcLengths,
@@ -1288,6 +1332,14 @@ if (this.loaded) {
             model
 
           if (levelName === 'house') {
+            const avatar = await HouseAvatar.load(levelRoot, this.camera)
+            if (loadId !== this.levelLoadId) {
+              avatar.dispose()
+              disposeLevel(levelRoot)
+              return false
+            }
+            this.houseAvatar = avatar
+            this.houseMirror = installBathroomMirror(model, avatar)
             this.houseStoryView = new HouseStoryView(this)
             this.houseStory = new HouseStory({
               model, animations, level: levelRoot, items: this.investigationItems, doors: this.doors,
@@ -1320,6 +1372,10 @@ if (this.loaded) {
           this.trainStory = levelName === 'train' ? trainStory || null : null
 
           this.trainClues = levelName === 'train' ? trainClues || null : null
+
+          this.trainExorcism = levelName === 'train' ? exorcism || null : null
+
+          this.trainRiteView = levelName === 'train' ? new TrainRiteView(this) : null
 
           this.journalBuilder = levelName === 'train' && this.trainStory
             ? (game) => game.trainStory.journalEntries()
@@ -1617,6 +1673,10 @@ if (this.loaded) {
 
 
           this.camera.updateProjectionMatrix()
+          this.houseAvatar?.resize(this.camera.aspect, this.camera.far)
+          if (this.houseAvatar) {
+            this.houseAvatar.update(0, this.player, this.colliders.find((collider) => collider.type === 'octree')?.world)
+          }
 
 
           // Warm shaders while the overlay still shows LOADING so their
@@ -1625,8 +1685,26 @@ if (this.loaded) {
           try {
             if (this.renderer.compileAsync) {
               await this.renderer.compileAsync(this.scene, this.camera)
+              if (this.houseAvatar) {
+                this.houseAvatar.toggleView()
+                this.houseAvatar.update(0, this.player, this.colliders.find((collider) => collider.type === 'octree')?.world)
+                try {
+                  await this.renderer.compileAsync(this.scene, this.houseAvatar.camera)
+                } finally {
+                  this.houseAvatar.toggleView()
+                }
+              }
             } else {
               this.renderer.compile(this.scene, this.camera)
+              if (this.houseAvatar) {
+                this.houseAvatar.toggleView()
+                this.houseAvatar.update(0, this.player, this.colliders.find((collider) => collider.type === 'octree')?.world)
+                try {
+                  this.renderer.compile(this.scene, this.houseAvatar.camera)
+                } finally {
+                  this.houseAvatar.toggleView()
+                }
+              }
             }
           } catch (err) {
             console.warn('Shader warmup failed:', err)
@@ -1726,8 +1804,12 @@ if (this.loaded) {
     }
     this.houseStory?.dispose()
     this.houseStoryView?.dispose()
+    this.houseMirror?.dispose()
+    this.houseAvatar?.dispose()
     this.houseStory = null
     this.houseStoryView = null
+    this.houseMirror = null
+    this.houseAvatar = null
 
     this.houseAudio.setHouseActive(false)
     this.highwayAudio?.setHighwayActive(false)
@@ -1870,6 +1952,12 @@ if (this.loaded) {
 
     this.trainClues?.dispose()
     this.trainClues = null
+
+    this.trainRiteView?.dispose()
+    this.trainRiteView = null
+
+    this.trainExorcism?.dispose()
+    this.trainExorcism = null
 
     this.journalBuilder = null
 
@@ -2048,90 +2136,12 @@ if (this.loaded) {
   // ============================================
 
   updateHud(dt) {
-
     if (dt <= 0) return
 
-
-    this.fpsSamples.push(
-      1 / dt
-    )
-
-
-    if (
-      this.fpsSamples.length > 20
-    ) {
-
-      this.fpsSamples.shift()
-    }
-
-
-    const avg =
-      this.fpsSamples.reduce(
-        (a, b) => a + b,
-        0
-      ) /
-      this.fpsSamples.length
-
-
-    const pos =
-      this.player.position
-
-
-    const hudPos =
-      document.getElementById(
-        'hudPos'
-      )
-
-
-    if (hudPos) {
-
-      hudPos.textContent =
-        `${pos.x.toFixed(1)}, ` +
-        `${pos.y.toFixed(1)}, ` +
-        `${pos.z.toFixed(1)}`
-    }
-
-
-    const hudFps =
-      document.getElementById(
-        'hudFps'
-      )
-
-
-    if (hudFps) {
-
-      hudFps.textContent =
-        avg.toFixed(0)
-    }
-
-
-    const hudMode =
-      document.getElementById(
-        'hudMode'
-      )
-
-
-    if (hudMode) {
-
-      hudMode.textContent =
-        this.currentLevel
-          ? this.player.flying
-            ? 'UNNATURAL ELEVATION'
-            : this.trainZombie?.hidden ? 'UNSEEN' : 'ON FOOT'
-          : 'AWAITING ENTRY'
-    }
-
-    const hudLevel = document.getElementById('hudLevel')
-
-    if (hudLevel) {
-
-      const names = {
-        house: 'VALE MANOR',
-        train: 'NIGHT TRAIN',
-        highway: 'OLD HIGHWAY',
-      }
-
-      hudLevel.textContent = names[this.currentLevel] || 'NO LOCATION'
+    const onFootHud = this.currentLevel === 'house' || this.currentLevel === 'train'
+    for (const id of ['hud', 'hudControls']) {
+      const element = document.getElementById(id)
+      if (element) element.style.display = onFootHud ? '' : 'none'
     }
 
     const hudObjective =
@@ -2200,6 +2210,16 @@ if (this.loaded) {
   // DOOR INTERACTION
   // ============================================
 
+  setInteractionRay() {
+    const camera = this.currentLevel === 'house' && this.houseAvatar?.thirdPerson
+      ? this.houseAvatar.camera
+      : this.camera
+    this.raycaster.far = camera === this.camera
+      ? DOOR_INTERACTION_RANGE
+      : camera.position.distanceTo(this.player.position) + DOOR_INTERACTION_RANGE
+    this.raycaster.setFromCamera(new THREE.Vector2(0, 0), camera)
+  }
+
   getLookedAtInvestigationItem() {
 
     if (!this.input.isLocked || !this.model) {
@@ -2207,10 +2227,7 @@ if (this.loaded) {
       return null
     }
 
-    this.raycaster.setFromCamera(
-      new THREE.Vector2(0, 0),
-      this.camera
-    )
+    this.setInteractionRay()
 
     const targets = [this.model, ...(this.houseStory ? [this.houseStory.root] : [])]
     if (this.currentLevel === 'train' && this.trainCarriages) {
@@ -2222,6 +2239,7 @@ if (this.loaded) {
     ).filter(hit => isEffectivelyVisible(hit.object))
 
     for (const hit of hits) {
+      if (hit.point.distanceTo(this.player.position) > DOOR_INTERACTION_RANGE) continue
 
       let object = hit.object
 
@@ -2294,7 +2312,7 @@ if (this.loaded) {
 
     const inspectAsObject = investigationItem.inspectionMode === 'object'
     const inspectionObject = inspectAsObject
-      ? investigationItem.object.clone(true)
+      ? new THREE.Group()
       : new THREE.Mesh(
           sourceMesh.geometry,
           Array.isArray(sourceMesh.material)
@@ -2304,14 +2322,15 @@ if (this.loaded) {
 
     if (inspectAsObject) {
       investigationItem.object.updateWorldMatrix(true, true)
-      investigationItem.object.matrixWorld.decompose(
-        inspectionObject.position, inspectionObject.quaternion, inspectionObject.scale,
-      )
-      inspectionObject.traverse(child => {
-        if (!child.isMesh) return
-        child.material = Array.isArray(child.material)
+      investigationItem.object.traverse(child => {
+        if (!child.isMesh || !child.visible) return
+        const copy = child.clone(false)
+        child.matrixWorld.decompose(copy.position, copy.quaternion, copy.scale)
+        copy.material = Array.isArray(child.material)
           ? child.material.map(material => createInspectionMaterial(material, true))
           : createInspectionMaterial(child.material, true)
+        copy.visible = true
+        inspectionObject.add(copy)
       })
     } else {
       inspectionObject.position.set(0, 0, 0)
@@ -2573,7 +2592,9 @@ if (this.loaded) {
   openEvidenceBook() {
 
     const supportsEvidence = this.currentLevel === 'house' || this.currentLevel === 'train'
-    if (!supportsEvidence || this.evidenceBookOpen || this.newspaperOpen || this.houseStoryView?.outcome) {
+    const riteOpen = this.houseStoryView?.open || this.trainRiteView?.open
+    const riteOutcome = this.houseStoryView?.outcome || this.trainRiteView?.outcome
+    if (!supportsEvidence || this.evidenceBookOpen || this.newspaperOpen || riteOutcome) {
 
       return
     }
@@ -2591,7 +2612,7 @@ if (this.loaded) {
     this.updateJournalEntries()
 
     evidenceBook.classList.remove('hidden')
-    evidenceBook.style.zIndex = this.houseStoryView?.open ? '111' : ''
+    evidenceBook.style.zIndex = riteOpen ? '111' : ''
 
     this.input.release()
     document.getElementById('closeEvidenceNotepadBtn')?.focus()
@@ -2622,11 +2643,17 @@ if (this.loaded) {
     evidenceBook?.classList.add('hidden')
     if (evidenceBook) evidenceBook.style.zIndex = ''
 
-    if (!fromLevelUnload && this.loaded && !this.houseStoryView?.open) {
+    const openRiteView = this.houseStoryView?.open
+      ? this.houseStoryView
+      : this.trainRiteView?.open
+        ? this.trainRiteView
+        : null
+
+    if (!fromLevelUnload && this.loaded && !openRiteView) {
 
       this.input.lock()
-    } else if (!fromLevelUnload && this.houseStoryView?.open) {
-      this.houseStoryView.dialog.querySelector('button')?.focus()
+    } else if (!fromLevelUnload && openRiteView) {
+      openRiteView.dialog.querySelector('button')?.focus()
     }
   }
 
@@ -2655,22 +2682,19 @@ if (this.loaded) {
 
     if (
       !this.input.isLocked ||
-      !this.model
+      this.doors.length === 0
     ) {
 
       return null
     }
 
 
-    this.raycaster.setFromCamera(
-      new THREE.Vector2(0, 0),
-      this.camera
-    )
+    this.setInteractionRay()
 
 
     const hits =
-      this.raycaster.intersectObject(
-        this.model,
+      this.raycaster.intersectObjects(
+        this.doors.map(door => door.object),
         true
       )
 
@@ -2678,6 +2702,7 @@ if (this.loaded) {
     // Check every object hit by the ray,
     // not only the first one.
     for (const hit of hits) {
+      if (hit.point.distanceTo(this.player.position) > DOOR_INTERACTION_RANGE) continue
 
       let object =
         hit.object
@@ -4339,6 +4364,7 @@ if (this.loaded) {
 
 
     this.camera.updateProjectionMatrix()
+    this.houseAvatar?.resize(this.camera.aspect, this.camera.far)
 
 
     this.renderer.setSize(

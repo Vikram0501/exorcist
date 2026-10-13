@@ -25,11 +25,15 @@ async function parseWithoutImages(file) {
   return new GLTFLoader().parseAsync(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.length), '')
 }
 
-export async function loadTrainGeometry(type) {
+export async function loadTrainAsset(type) {
   const gltf = await parseWithoutImages(`Train_Carriage_New_${type}.glb`)
   gltf.scene.scale.setScalar(0.1)
   gltf.scene.updateWorldMatrix(true, true)
-  return gltf.scene
+  return gltf
+}
+
+export async function loadTrainGeometry(type) {
+  return (await loadTrainAsset(type)).scene
 }
 
 export async function loadZombieGeometry() {

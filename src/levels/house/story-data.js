@@ -28,7 +28,7 @@ export const HOUSE_EVIDENCE = [
     response: 'ELIAS · “You know my name now.”',
   },
   {
-    id: 'daniel-confession', title: "Daniel's confession", foundAt: 'Kitchen, inside the envelope',
+    id: 'daniel-confession', title: "Daniel's confession", foundAt: 'Downstairs dining room, on the table',
     assetNames: ['Daniel Envelope'], position: [0, 2, 0], label: 'I COULD NOT TELL THEM', kind: 'confession',
     storyNote: 'Evelyn heard Margaret’s voice in the upstairs annex. I knew Margaret was dead, and I knew something else was walking our house. I locked Evelyn in that room while I went for help. I thought the door would keep her away from it. When I returned, the door was still locked. Evelyn was dead inside.\n\nI buried her in the unmarked grave behind the house. I told everyone she had vanished. I scratched her face from our portrait because I could not bear to meet her eyes. None of that kept her here. It only left her alone with the thing that killed her.\n\nHer name was Evelyn Vale. She did not run away. — Daniel',
     riteNote: 'Daniel locked Evelyn in the annex. Elias entered and killed her. Daniel hid her body in the unmarked backyard grave and scratched out her portrait.',

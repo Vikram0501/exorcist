@@ -119,7 +119,7 @@ export function createGhostNameUI(name) {
     document.createElement('div')
 
   nameRow.style.fontSize = '28px'
-  nameRow.style.letterSpacing = '3px'
+  nameRow.style.letterSpacing = '6px'
   nameRow.style.textShadow =
     '0 0 12px #006666'
 
@@ -137,7 +137,7 @@ export function createGhostNameUI(name) {
     span.textContent = '_'
     span.style.color = '#66ffff'
     span.style.display = 'inline-block'
-    span.style.width = '1ch'
+    span.style.width = '1.5ch'
     span.style.textAlign = 'center'
 
     nameRow.appendChild(span)

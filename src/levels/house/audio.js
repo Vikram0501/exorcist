@@ -126,7 +126,7 @@ export class HauntedHouseAudio {
     const speed = Math.hypot(player.velocity.x, player.velocity.z)
 
     if (player.isGrounded && !player.flying && speed > 0.7) {
-      const sprinting = speed > 6.4
+      const sprinting = speed > 3.2
       if (now >= this.nextFootstepAt) {
         this.playEffect(
           this.isInside(player.position)
