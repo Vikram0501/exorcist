@@ -15,12 +15,14 @@ import {
   createHighwayLevel,
   createGhostNameUI,
   removeGhostNameUI,
+  resetGhostNameUI,
 } from "../levels/highway/index.js"
 
 import {
   createCollectibles,
   updateCollectibles,
   disposeCollectibles,
+  resetCollectibles,
 } from "../levels/highway/collectibles.js"
 
 import {
@@ -37,6 +39,15 @@ import {
 import {
   updateRacecraft,
 } from "../levels/highway/racecraft.js"
+
+import {
+  createHighwayLoadTracker,
+  HIGHWAY_LOAD_EVENT,
+} from "../levels/highway/load-progress.js"
+
+import {
+  setControlsHint,
+} from "../levels/highway/controls-hint.js"
 
 import { HighwayCarController }
   from '../levels/highway/car.js'
@@ -396,6 +407,10 @@ export class Game {
 
     this.animationRunning = false
 
+    this.animationFrameId = null
+    this.nameFocusTimer = null
+    this.exorcismFadeTimer = null
+
 
     this.clock =
       new THREE.Clock()
@@ -416,6 +431,15 @@ export class Game {
   // ============================================
 
   start(levelName = 'house') {
+    if (!this.renderer.domElement.parentNode) {
+      this.container.appendChild(this.renderer.domElement)
+    }
+    for (const [element, display] of this.menuHiddenUI || []) element.style.display = display
+    this.menuHiddenUI = []
+    if (this.detachedHighwayControls) {
+      document.body.appendChild(this.detachedHighwayControls)
+      this.detachedHighwayControls = null
+    }
 
     this.started = true
 
@@ -467,7 +491,7 @@ export class Game {
     if (!this.animationRunning) return
 
 
-    requestAnimationFrame(
+    this.animationFrameId = requestAnimationFrame(
       () => this.animate()
     )
 
@@ -1158,10 +1182,43 @@ if (this.loaded) {
     }
 
 
+    // The animation loop may have been stopped by exitToMenu(): make
+    // sure gameplay (including Digit1/2/3 hotkey loads) always has a
+    // single running loop. Guarded so repeated calls never stack loops.
+    if (!this.animationRunning) {
+
+      this.animationRunning = true
+
+      this.clock.start()
+
+      this.animate()
+    }
+
+
     const loadId =
       ++this.levelLoadId
 
     const loadStarted = performance.now()
+
+
+    // Level 3 load tracker: fixed task weights enumerated up front, so
+    // the menu percentage only moves forward and hits 100% once every
+    // asset, audio and init step is done. Other levels pass null and
+    // keep their shared-LoadingManager display untouched.
+    const highwayTracker =
+      levelName === 'highway'
+        ? createHighwayLoadTracker({
+            isAlive: () => loadId === this.levelLoadId,
+            onProgress: ({ loaded, total }) => {
+              if (typeof window === 'undefined') return
+              window.dispatchEvent(
+                new CustomEvent(HIGHWAY_LOAD_EVENT, {
+                  detail: { loaded, total },
+                })
+              )
+            },
+          })
+        : null
 
 
     // Remove old level.
@@ -1193,7 +1250,7 @@ if (this.loaded) {
 
 
     return level
-      .load(levelRoot)
+      .load(levelRoot, highwayTracker)
 
       .then(
           async ({
@@ -1359,11 +1416,20 @@ if (this.loaded) {
 
 
           // Apocalyptic sky before any controller captures the background.
-          this.highwayAtmosphere =
-            await loadHighwayAtmosphere(
-              this.scene,
-              this.renderer
-            )
+          // Tracked so the menu percentage includes the skybox asset.
+          const skyScene = new THREE.Scene()
+          const atmosphere =
+            await (highwayTracker
+              ? highwayTracker.run('sky', () =>
+                  loadHighwayAtmosphere(
+                    skyScene,
+                    this.renderer
+                  )
+                )
+              : loadHighwayAtmosphere(
+                  skyScene,
+                  this.renderer
+                ))
 
           // A newer level was selected while the sky was loading: never
           // leak the red sky onto it.
@@ -1373,11 +1439,9 @@ if (this.loaded) {
           ) {
 
             disposeHighwayAtmosphere(
-              this.scene,
-              this.highwayAtmosphere
+              skyScene,
+              atmosphere
             )
-
-            this.highwayAtmosphere = null
 
             disposeLevel(
               levelRoot
@@ -1387,6 +1451,29 @@ if (this.loaded) {
 
           }
 
+          this.highwayAtmosphere = atmosphere
+          this.scene.background = skyScene.background
+          this.scene.backgroundIntensity = skyScene.backgroundIntensity
+          this.scene.backgroundRotation.copy(skyScene.backgroundRotation)
+          this.scene.environment = skyScene.environment
+          this.scene.environmentIntensity = skyScene.environmentIntensity
+
+
+          // Audio readiness counts toward 100%: music, car and countdown
+          // elements must be playable (or have failed/timed out, which
+          // never fails the level) before the level is reported ready.
+          if (highwayTracker) {
+            await highwayTracker.run('audio', async () => {
+              await this.highwayAudio.unlock()
+              if (loadId !== this.levelLoadId) return
+              await this.highwayAudio.waitForReady(6000)
+            })
+          }
+
+          if (loadId !== this.levelLoadId) {
+            disposeLevel(levelRoot)
+            return false
+          }
 
           this.ghostNameUI =
               createGhostNameUI(
@@ -1635,7 +1722,21 @@ if (this.loaded) {
           if (levelName === 'train') this.trainAudio.setTrainActive(true)
 
 
+          // Final load step: scene, renderer, cars, obstacles, camera and
+          // gameplay systems are all ready, so reporting 100% is honest.
+          // This runs before `loaded` flips, so gameplay can only start
+          // after the display has reached 100%.
+          highwayTracker?.complete('init')
+
+
           this.loaded = true
+
+          // Bottom-centre controls hint: racing keys on the highway,
+          // on-foot keys everywhere else (also restores the default
+          // after loading screens).
+          if (typeof document !== 'undefined') {
+            setControlsHint(document, levelName)
+          }
 
           window.dispatchEvent(
             new CustomEvent('levelloaded', { detail: { levelName } })
@@ -1665,6 +1766,11 @@ if (this.loaded) {
         }
 
 
+        // A failed load must never display 100%: settle this session so
+        // no late completion can push the percentage there.
+        highwayTracker?.abort()
+
+
         console.error(
           'Level load failed:',
           err
@@ -1688,6 +1794,10 @@ if (this.loaded) {
   // ============================================
 
   unloadCurrentLevel() {
+    clearTimeout(this.nameFocusTimer)
+    clearTimeout(this.exorcismFadeTimer)
+    this.nameFocusTimer = null
+    this.exorcismFadeTimer = null
     if (this.houseAudioStartFrame !== null) {
       cancelAnimationFrame(this.houseAudioStartFrame)
       this.houseAudioStartFrame = null
@@ -1916,6 +2026,107 @@ if (this.loaded) {
         .classList
         .add('hidden')
     }
+
+    // Leaving a level always restores the default controls hint: the
+    // racing panel must never linger on the menu or other levels.
+    if (typeof document !== 'undefined') {
+      setControlsHint(document, null)
+    }
+  }
+
+
+
+  // ============================================
+  // EXIT TO MAIN MENU
+  // ============================================
+  //
+  // Stops the current level completely so nothing keeps running behind
+  // the menu: gameplay updates, physics, ghost AI, audio, timers and
+  // level listeners. Safe to call repeatedly and safe when no level is
+  // loaded or the game already ended (all cleanup paths are guarded).
+  // Re-entering any level via start()/loadLevel() starts a fresh game
+  // with a single animation loop (never duplicates).
+  exitToMenu() {
+    if (this.currentLevel !== 'highway') return
+    this.currentLevel = null
+    this.loaded = false
+    this.animationRunning = false
+    if (this.animationFrameId !== null) cancelAnimationFrame(this.animationFrameId)
+    this.animationFrameId = null
+    this.renderer.domElement.remove()
+
+    // Release the pointer first so the menu cursor is usable even when
+    // exit is triggered while locked. Safe when already unlocked.
+    try {
+
+      this.input?.release?.()
+
+    } catch (err) {
+
+      void err
+
+    }
+
+    // Invalidate any in-flight async level load so a load that finishes
+    // after this exit disposes its own root instead of resurrecting
+    // gameplay behind the menu.
+    this.levelLoadId++
+
+    // Full teardown: stops highway/house/train audio (music, car,
+    // countdown), hides game-over/name/exorcism UI, disposes the race,
+    // controller (its window key listeners), HUD, environment,
+    // atmosphere, collectibles, signs, obstacles and level meshes
+    // (shared assets are skipped), resets the scene background and
+    // clears input. Safe on an empty state.
+    this.unloadCurrentLevel()
+
+    this.currentLevel = null
+
+    this.loaded = false
+
+    // Cancel the shared animation loop: the queued frame callback is
+    // cancelled outright and animate() also checks this flag on entry,
+    // so no further gameplay frames can run. start()/loadLevel()
+    // restart it exactly once.
+    this.animationRunning = false
+
+    try {
+
+      if (this.animationFrameId !== null) {
+        cancelAnimationFrame(this.animationFrameId)
+      }
+
+    } catch (err) {
+
+      void err
+
+    }
+
+    this.animationFrameId = null
+
+    try {
+
+      this.clock?.stop?.()
+
+    } catch (err) {
+
+      void err
+
+    }
+
+    // Retain the shared WebGL context for other levels, but unmount its
+    // canvas and the static highway guide. Dynamic body-mounted UI was
+    // removed by unloadCurrentLevel above.
+    this.detachedHighwayControls = document.getElementById('highwayControls')
+    this.detachedHighwayControls?.remove()
+    this.menuHiddenUI = ['hud', 'hudControls', 'crosshair', 'respawnBtn', 'evidenceBtn']
+      .map(id => document.getElementById(id)).filter(Boolean)
+      .map(element => {
+        const display = element.style.display
+        element.style.display = 'none'
+        return [element, display]
+      })
+
   }
 
 
@@ -2938,7 +3149,7 @@ if (this.loaded) {
 
     // Focus input
 
-    setTimeout(() => {
+    this.nameFocusTimer = setTimeout(() => {
 
       if (this.nameInput) {
 
@@ -3065,6 +3276,12 @@ if (this.loaded) {
         'none'
 
     }
+
+    // Release pointer lock so the cursor is visible and the retry
+    // button is clickable immediately (matches train's onPlayerCaught).
+    // Without this the player must press Esc first, which pops the
+    // main-menu overlay and forces a menu round-trip to play again.
+    this.input.release()
 
     const message = crashed
       ? 'YOU CRASHED ON THE HIGHWAY.'
@@ -3284,12 +3501,64 @@ if (this.loaded) {
       return
     }
 
+    // In-place restart: no reload, no new listeners/loops/audio, so Play
+    // Again works immediately and repeats indefinitely. Level geometry,
+    // obstacle/collectible meshes and the ghost name are reused; only
+    // gameplay state is reset (see reset() on car/race/HUD + helpers).
     this.hideGameOver()
 
-    // Force loadLevel() to actually reload the highway.
-    this.loaded = false
+    this.hideNamePuzzle()
 
-    this.loadLevel('highway')
+    // Dismiss the main-menu overlay if Esc revealed it, then recapture
+    // input from this click gesture so controls work immediately.
+    // The click that triggered this handler counts as a user gesture.
+    if (typeof document !== 'undefined') {
+      document.getElementById('overlay')?.classList.add('hidden')
+    }
+
+    this.levelState = 'RACING'
+
+    this.levelTimer = 0
+
+    this.pendingGhostName = null
+
+    this.roadSignTime = 0
+
+    // Obstacles are static; just clear any consumed flags.
+    if (this.obstacles) {
+      for (const obs of this.obstacles) {
+        if (obs) obs.hit = false
+      }
+    }
+
+    // Letters + name banner back to blank/visible.
+    if (this.collectibles) {
+      resetCollectibles(this.collectibles)
+    }
+
+    if (this.ghostNameUI) {
+      resetGhostNameUI(this.ghostNameUI)
+    }
+
+    // Race reset also resets the player car (positions, speed,
+    // collisions, camera) and restores countdown/brake-cut UI.
+    if (this.highwayRace) {
+      this.highwayRace.reset()
+    } else if (this.highwayController) {
+      this.highwayController.reset()
+    }
+
+    if (this.highwayHUD) {
+      this.highwayHUD.reset()
+    }
+
+    // Music keeps its single looping instance; ensure it is active and
+    // the car sound is stopped until the player actually drives.
+    this.highwayAudio?.setHighwayActive(true)
+    this.highwayAudio?.setPlayerDriving(false)
+
+    this.input.clear()
+    this.input.lock()
 
   }
 
@@ -3464,7 +3733,7 @@ if (this.loaded) {
 
     // Fade in after short delay
 
-    setTimeout(() => {
+    this.exorcismFadeTimer = setTimeout(() => {
 
       if (this.exorcismEl) {
 

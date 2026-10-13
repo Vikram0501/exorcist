@@ -366,3 +366,21 @@ export function disposeCollectibles(
 
   collectibles.length = 0
 }
+
+
+// In-place restart: makes every letter pickup collectible again without
+// rebuilding meshes or re-rolling positions. The ghost name stays the
+// same across restarts, so slot indexes remain valid.
+export function resetCollectibles(collectibles) {
+  for (
+    let i = 0;
+    i < collectibles.length;
+    i++
+  ) {
+    const pickup = collectibles[i]
+    pickup.collected = false
+    if (pickup.mesh) {
+      pickup.mesh.visible = true
+    }
+  }
+}

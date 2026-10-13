@@ -90,11 +90,72 @@ export class HighwayAudio {
     await this.context?.resume().catch(() => {})
   }
 
+  // Resolves once the music, car and countdown elements can actually
+  // play (or have failed / timed out). Used as one weighted step of the
+  // Level 3 load tracker so 100% also means audio is ready. Never
+  // rejects: an unplayable element must not fail the level, and every
+  // play() call site already tolerates rejection.
+  waitForReady(timeoutMs = 6000) {
+    this.cancelReady?.()
+    const elements = [this.music, this.carSound, this.countdown].filter(
+      (el) => el && typeof el.addEventListener === 'function'
+    )
+
+    if (elements.length === 0) {
+      return Promise.resolve(false)
+    }
+
+    return new Promise((resolve) => {
+      let settled = false
+      let pending = elements.length
+      const cleanups = []
+
+      const finish = (ready) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        for (const cleanup of cleanups) cleanup()
+        this.cancelReady = null
+        resolve(ready)
+      }
+
+      const onOneDone = () => {
+        pending -= 1
+        if (pending <= 0) finish(true)
+      }
+
+      const timer = setTimeout(() => finish(false), timeoutMs)
+      this.cancelReady = () => finish(false)
+
+      for (const el of elements) {
+        // HAVE_ENOUGH_DATA: already buffered, no wait needed.
+        if (el.readyState >= 4) {
+          onOneDone()
+          continue
+        }
+
+        let done = false
+        const complete = () => {
+          if (done) return
+          done = true
+          onOneDone()
+        }
+        cleanups.push(() => {
+          el.removeEventListener?.('canplaythrough', complete)
+          el.removeEventListener?.('error', complete)
+        })
+        el.addEventListener('canplaythrough', complete, { once: true })
+        el.addEventListener('error', complete, { once: true })
+      }
+    })
+  }
+
   // Start music for Level 3. Safe to call repeatedly: if music is
   // already playing this is a no-op, so re-initializing the level
   // can never stack overlapping copies.
   setHighwayActive(active) {
     if (!active) {
+      this.cancelReady?.()
       this.enabled = false
       this.carDriving = false
 

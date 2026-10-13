@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { mergeGeometries }
   from 'three/addons/utils/BufferGeometryUtils.js'
+import { loadingManager } from '../../core/loading.js'
 
 export const STREETLIGHT_MODEL_URL =
   '/models/street_lamp.glb'
@@ -10,7 +11,7 @@ export const STREETLIGHT_MODEL_URL =
 export async function loadStreetlightTemplate() {
 
   const gltf =
-    await new GLTFLoader().loadAsync(STREETLIGHT_MODEL_URL)
+    await new GLTFLoader(loadingManager).loadAsync(STREETLIGHT_MODEL_URL)
 
   try {
 
