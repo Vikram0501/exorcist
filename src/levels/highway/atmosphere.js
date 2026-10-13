@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { loadingManager } from '../../core/loading.js'
 
 // Level 3 apocalyptic sky. The source is a 2:1 panorama, so it maps
 // directly as an equirectangular scene background: no geometry, no extra
@@ -31,7 +32,7 @@ export async function loadHighwayAtmosphere(scene, renderer = null) {
   try {
 
     const texture =
-      await new THREE.TextureLoader().loadAsync(RED_SKY_URL)
+      await new THREE.TextureLoader(loadingManager).loadAsync(RED_SKY_URL)
 
     texture.mapping =
       THREE.EquirectangularReflectionMapping

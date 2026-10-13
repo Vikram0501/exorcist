@@ -1856,6 +1856,101 @@ export class HighwayRaceController {
 
 
   // ============================================
+  // IN-PLACE RESTART
+  // ============================================
+  //
+  // Restores every race-lifecycle field to its constructor state without
+  // touching window listeners, the animation loop or audio elements
+  // (all owned elsewhere and reused). Called by Game.restartHighway()
+  // so Play Again restarts immediately and can repeat indefinitely.
+  // The player car itself is reset via carController.reset().
+  reset() {
+    // Win/loss + lifecycle.
+    this.raceFinished = false
+    this.winner = null
+    this.frozen = false
+    this.time = 0
+    this.raceStarted = false
+    this.finishedCountdown = false
+    this.countdownAudioStarted = false
+
+    // Ghost driving state (constructor defaults).
+    this.ghostSpeed = 5
+    this.ghostPathProgress = 0
+    this.ghostObstacleCooldowns.clear()
+    this.ghostAvoiding = false
+    this.ghostAvoidanceTargetD = GHOST_PREFERRED_LANE
+    this.ghostAvoidanceSide = 0
+    this.ghostAvoidanceObstacle = null
+    this.ghostAvoidBlocked = false
+    this.ghostLateralOffset = GHOST_PREFERRED_LANE
+    this.ghostLateralVelocity = 0
+
+    // Car-to-car contact state.
+    this.carCollisionCooldown = 0
+    this.lastPlayerCollisionPos = null
+    this.lastGhostCollisionPos = null
+    this.carContactActive = false
+
+    // Scripted bump state.
+    this.ghostBumpPhase = 'idle'
+    this.ghostBumpCooldown = GHOST_BUMP_INITIAL_DELAY
+    this.ghostBumpTimer = 0
+    this.ghostBumpSide = 0
+    this.ghostBumpStartD = GHOST_PREFERRED_LANE
+    this.ghostBumpPlayerD = 0
+    this.ghostBumpTargetD = GHOST_PREFERRED_LANE
+    this.ghostPlayerHitCooldown = 0
+    this.ghostHitRecoveryTimer = 0
+
+    // Brake-cut script.
+    this.brakeCutTriggered = false
+    this.brakeCutPhase = 'none'
+    this.brakeCutTimer = 0
+
+    // A crash during the cut flicker may have left a flat background;
+    // restore the captured Level 3 sky.
+    if (this.scene) {
+      this.scene.background = this.skyBackground
+    }
+
+    // Player controller back to pre-countdown (driving re-enabled at GO).
+    if (this.carController) {
+      this.carController.reset()
+    }
+
+    // Ghost back to its start slot (s = 0, lateral -2).
+    this.seatGhostFromTrack()
+
+    // Countdown banner back to "3" (onFinish repurposes it for results).
+    if (this.countdownElement) {
+      this.countdownElement.textContent = '3'
+      this.countdownElement.style.display = 'block'
+      this.countdownElement.style.fontSize = '100px'
+    }
+    if (this.brakeCutWarningEl) {
+      this.brakeCutWarningEl.style.display = 'none'
+      this.brakeCutWarningEl.style.opacity = '1'
+    }
+    if (this.brakeCutAftermathEl) {
+      this.brakeCutAftermathEl.style.display = 'none'
+    }
+
+    // Ghost name banner visible again (showGameOver hides it).
+    if (this.ghostNameUI) {
+      this.ghostNameUI.style.display = 'block'
+    }
+
+    // Audio: stop any stale countdown voice and restore music volume so
+    // the next update's playCountdown() ducks fresh. Music itself keeps
+    // its single looping instance (never recreated here).
+    this.highwayAudio?.stopCountdown()
+    this.highwayAudio?.restoreMusicAfterCountdown()
+    this.highwayAudio?.setPlayerDriving(false)
+  }
+
+
+  // ============================================
   // CLEANUP
   // ============================================
 

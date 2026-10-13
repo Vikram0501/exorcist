@@ -299,4 +299,24 @@ export class HighwayHUD {
     this.race = null
     this.track = null
   }
+
+  // In-place restart: zeroes timers, checkpoints and toasts without
+  // removing/recreating DOM nodes or listeners. Called by
+  // Game.restartHighway() so the HUD is correct on every Play Again.
+  reset() {
+    if (this.disposed) return
+    this.elapsed = 0
+    this.displayedSpeed = 0
+    this.accumulator = HUD_UPDATE_INTERVAL
+    this.toastRemaining = 0
+    this.cache = { timer: '', speed: '', position: '', progress: '' }
+    this.playerCheckpointTimes = this.checkpoints.map(() => null)
+    this.ghostCheckpointTimes = this.checkpoints.map(() => null)
+    if (this.toast) this.toast.style.opacity = '0'
+    if (this.progressFill) this.progressFill.style.transform = 'scaleX(0)'
+    if (this.progressPct) this.progressPct.textContent = '0%'
+    // Repaint zero state immediately so the first post-restart frame
+    // never flashes stale time/speed/position.
+    this.refresh()
+  }
 }

@@ -1,4 +1,5 @@
 import { Game } from './core/game.js'
+import { HIGHWAY_LOAD_EVENT } from './levels/highway/load-progress.js'
 
 
 const container =
@@ -32,10 +33,36 @@ const buttonMarkup = new Map([
 
 let loadingButton = null
 
+// Which level the current loading session is for. While a highway load
+// is active, the shared `assetprogress` display is bypassed: the Level 3
+// session tracker owns the percentage, so cumulative manager totals can
+// never drag it backwards. Levels 1 and 2 keep the original path.
+let loadingLevel = null
+let menuRequest = 0
+
+function exitHighway() {
+  if (game.currentLevel !== 'highway') return false
+  menuRequest++
+  loadingButton = null
+  loadingLevel = null
+  game.exitToMenu()
+  resetLevelButtons()
+  overlay.classList.remove('hidden')
+  return true
+}
+
 window.addEventListener('assetprogress', (event) => {
   if (!loadingButton) return
+  if (loadingLevel === 'highway') return
   const { itemsLoaded, itemsTotal } = event.detail
   const pct = itemsTotal > 0 ? Math.round((itemsLoaded / itemsTotal) * 100) : 0
+  loadingButton.textContent = `LOADING ${pct}%`
+})
+
+window.addEventListener(HIGHWAY_LOAD_EVENT, (event) => {
+  if (!loadingButton || loadingLevel !== 'highway') return
+  const { loaded, total } = event.detail
+  const pct = total > 0 ? Math.round((loaded / total) * 100) : 0
   loadingButton.textContent = `LOADING ${pct}%`
 })
 const controlsBtn = document.getElementById('controlsBtn')
@@ -108,14 +135,21 @@ async function startLevel(
   levelName,
   button
 ) {
+  const request = ++menuRequest
 
   disableLevelButtons()
 
 
   loadingButton = button
 
+  loadingLevel = levelName
+
+  // Level 3 starts at an explicit 0% (its session tracker owns every
+  // update from here); other levels keep the original label.
   button.textContent =
-    'LOADING...'
+    levelName === 'highway'
+      ? 'LOADING 0%'
+      : 'LOADING...'
 
 
   try {
@@ -130,6 +164,8 @@ async function startLevel(
 
     const loaded =
       await game.start(levelName)
+
+    if (request !== menuRequest) return
 
 
     if (!loaded) {
@@ -153,6 +189,7 @@ async function startLevel(
   }
 
   catch (err) {
+    if (request !== menuRequest) return
 
     console.error(
       'Could not start level:',
@@ -165,8 +202,10 @@ async function startLevel(
   }
 
   finally {
-
-    loadingButton = null
+    if (request === menuRequest) {
+      loadingButton = null
+      loadingLevel = null
+    }
 
   }
 
@@ -233,6 +272,7 @@ level3Btn.addEventListener(
 window.addEventListener(
   'keydown',
   (e) => {
+    if (e.key === 'Escape' && exitHighway()) return
 
     if (
       e.key === 'Escape' &&
@@ -240,6 +280,14 @@ window.addEventListener(
     ) {
 
       game.input.release()
+
+      // Stop Level 3 completely: without this the highway keeps
+      // updating, playing audio and running AI behind the menu.
+      // exitToMenu() is idempotent and safe mid-load. Other levels keep
+      // their existing overlay-resume behaviour.
+      if (game.currentLevel === 'highway') {
+        game.exitToMenu()
+      }
 
 
       resetLevelButtons()
@@ -282,6 +330,14 @@ document.addEventListener('pointerlockchange', () => {
     if (game.loaded) overlay.classList.add('hidden')
     return
   }
+  // Browsers may consume ESC to unlock the pointer without delivering
+  // keydown. Deliberate unlock for the retry UI must still allow retry.
+  if (game.currentLevel === 'highway') {
+    if (game.levelState !== 'GAME_OVER' && game.levelState !== 'NAME_PUZZLE') {
+      exitHighway()
+    }
+    return
+  }
   if (game.loaded && !game.newspaperOpen && !game.evidenceBookOpen && !game.houseStoryView?.open && !game.trainRiteView?.open) {
     resetLevelButtons()
     const action = playBtn.querySelector('.level-card-action')
@@ -297,6 +353,13 @@ window.addEventListener('keydown', event => {
   if (game.newspaperOpen) game.hideNewspaperReader()
   if (game.evidenceBookOpen) game.closeEvidenceBook(true)
   if (!document.pointerLockElement && game.loaded) {
+    // Covers Escape after death (pointer already released for the
+    // clickable retry button): exit Level 3 cleanly instead of leaving
+    // the highway running behind the menu. Other levels keep their
+    // existing overlay behaviour.
+    if (game.currentLevel === 'highway') {
+      game.exitToMenu()
+    }
     resetLevelButtons()
     overlay.classList.remove('hidden')
   }

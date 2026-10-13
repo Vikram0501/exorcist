@@ -1042,4 +1042,58 @@ export class HighwayCarController {
 
   }
 
+
+  // In-place restart: restores the car to its spawn state without
+  // re-creating listeners, the camera or the mesh. Called by
+  // Game.restartHighway() after death so Play Again works immediately.
+  // Keeps the existing architecture: placeAt() already owns spawn
+  // placement + camera smoothing seeds.
+  reset() {
+    // Drop any held keys so a key held through death cannot stick on.
+    this.keys = {}
+    this.steerInput = 0
+    this.throttleInput = false
+    this.brakeInput = false
+    this.driftInput = false
+
+    this.brakesWorking = true
+    this.hasCrashed = false
+    this.canDrive = false
+
+    this.velocity.set(0, 0, 0)
+    this.yawRate = 0
+    this.speed = 0
+    this.driftFactor = 0
+    this.slipAngle = 0
+    this.isDrifting = false
+
+    // Spawn: s = 0, lateral +2 (matches createHighwayLevel).
+    this.placeAt(0, 2)
+
+    // Snap the chase camera behind the car immediately so the first
+    // post-restart frame already frames the start line (otherwise the
+    // smoothed camera would sweep in from the death location).
+    if (this.camera && this.car) {
+      this.camera.position.set(
+        this.car.position.x -
+          Math.sin(this.heading) * CAMERA_DISTANCE,
+        this.car.position.y + CAMERA_HEIGHT,
+        this.car.position.z -
+          Math.cos(this.heading) * CAMERA_DISTANCE
+      )
+      this.currentCameraDistance = CAMERA_DISTANCE
+      this.currentCameraHeight = CAMERA_HEIGHT
+      if (Number.isFinite(this.camera.fov) && this.baseCameraFov !== null) {
+        this.currentCameraFov = this.baseCameraFov
+        if (Math.abs(this.camera.fov - this.baseCameraFov) > 0.01) {
+          this.camera.fov = this.baseCameraFov
+          this.camera.updateProjectionMatrix?.()
+        }
+      }
+    }
+
+    this.applyPose()
+    this.refreshTelemetry()
+  }
+
 }

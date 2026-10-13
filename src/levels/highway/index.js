@@ -230,6 +230,34 @@ export function removeGhostNameUI(el) {
 }
 
 
+// In-place restart helper: clears revealed letters and counters without
+// recreating the banner node. Called by Game.restartHighway() together
+// with resetCollectibles() so every Play Again starts with blank slots.
+export function resetGhostNameUI(el) {
+  if (!el || !el._slots || !el._slotElements) {
+    return
+  }
+
+  for (const slot of el._slots) {
+    slot.revealed = false
+  }
+
+  el._collected = 0
+
+  renderSlotDisplay(
+    el._slotElements,
+    el._slots
+  )
+
+  if (el._counterRow) {
+    el._counterRow.textContent =
+      'LETTERS: 0/' + el._total
+  }
+
+  el.style.display = 'block'
+}
+
+
 // ============================================
 // ROAD PATH SYSTEM (single source of truth: track.js)
 // ============================================
@@ -244,7 +272,8 @@ export { ROAD_PATH_POINTS, ROAD_WIDTH } from './track.js'
 // ============================================
 
 export async function createHighwayLevel(
-  levelRoot
+  levelRoot,
+  loadTracker = null
 ) {
   const highway = new THREE.Group()
   highway.name = 'highwayLevel'
@@ -299,6 +328,8 @@ export async function createHighwayLevel(
     sampleAtDistance: distance => track.sampleAt(distance),
   }))
 
+  loadTracker?.complete('road')
+
 
   // ============================================
   // CITY ENVIRONMENT
@@ -321,6 +352,10 @@ export async function createHighwayLevel(
 
   }
 
+  // Scenery fallback still finishes the task: the level proceeds without
+  // the city, so progress reflects completed work, never a stall.
+  loadTracker?.complete('city')
+
   // Streetlight poles: scenery only, same policy as the city. One template
   // load serves the whole corridor; a missing model leaves the highway
   // complete without lamps.
@@ -338,6 +373,8 @@ export async function createHighwayLevel(
     )
 
   }
+
+  loadTracker?.complete('streetlights')
 
   // Static, visual-only circuit structures. Shared batches live under the
   // level root so the existing disposer owns their materials and textures.
@@ -357,7 +394,7 @@ export async function createHighwayLevel(
   // PLAYER CAR
   // ============================================
 
-  const [playerCar, ghostCar] = await loadHighwayCars(highway)
+  const [playerCar, ghostCar] = await loadHighwayCars(highway, loadTracker)
 
   const startSample = track.sampleAt(0)
 
@@ -411,7 +448,7 @@ export async function createHighwayLevel(
 
   // Gameplay visuals: a failed asset load uses the existing level-load error
   // path rather than starting a race with missing colliders.
-  const obstacleTemplates = await loadObstacleModels()
+  const obstacleTemplates = await loadObstacleModels(loadTracker)
 
   const obstacles =
     createObstacles(

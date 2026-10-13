@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { loadingManager } from '../../core/loading.js'
 
 export const PLAYER_MODEL_URL = '/models/player_car.glb'
 export const GHOST_MODEL_URL = '/models/ghost_car.glb'
@@ -15,8 +16,8 @@ const GHOST_OPACITY = 0.62
 
 // Fresh resources per level instance: the existing level teardown owns them.
 // Attach fulfilled loads immediately so teardown also covers a partial failure.
-export async function loadHighwayCars(highway) {
-  const loader = new GLTFLoader()
+export async function loadHighwayCars(highway, loadTracker = null) {
+  const loader = new GLTFLoader(loadingManager)
   const results = await Promise.allSettled([
     [PLAYER_MODEL_URL, false],
     [GHOST_MODEL_URL, true],
@@ -27,6 +28,7 @@ export async function loadHighwayCars(highway) {
     car.add(scene)
     highway.add(car)
     prepareCarVisual(car, scene, ghost)
+    loadTracker?.complete(ghost ? 'ghost-car' : 'player-car')
     return car
   }))
   const failed = results.find(result => result.status === 'rejected')
