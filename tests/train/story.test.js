@@ -7,6 +7,7 @@ import {
   LETTER_ANCHORS,
   RESIDUE_ANCHORS,
   REAR_LETTER,
+  UPPER_LETTERS,
   createCluePlan,
   kanaLetters,
   residueSlot,
@@ -15,7 +16,11 @@ import {
 import { TrainStory, HOLD_SECONDS } from '../../src/levels/train/story.js'
 import { createTrainClues } from '../../src/levels/train/clues.js'
 import { createTrainCollision } from '../../src/levels/train/collision.js'
+import { trainUpperFloorAt } from '../../src/levels/train/zombie.js'
 import { loadTrainGeometry } from './model-fixture.js'
+
+// Mirrors the paper lift clues.js uses so the note floats a hair over the deck.
+const PAPER_LIFT = 0.015
 
 function seededRng(seed) {
   let state = seed >>> 0
@@ -26,6 +31,28 @@ function seededRng(seed) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
+}
+
+// Clue spots sit under seats and in the stair bays, so the aisle line behind a
+// paper is often blocked. Any clear standing spot close enough that the paper
+// is the first thing the ray hits counts as a reader position.
+function findReader(prop, model, standingRoom) {
+  const paper = prop.getWorldPosition(new THREE.Vector3())
+  const eye = new THREE.Vector3()
+  const direction = new THREE.Vector3()
+  for (let radius = 0.5; radius <= 2.001; radius += 0.15) {
+    for (let step = 0; step < 24; step++) {
+      const angle = (step / 24) * Math.PI * 2
+      const x = paper.x + Math.cos(angle) * radius
+      const z = paper.z + Math.sin(angle) * radius
+      if (!standingRoom(x, z)) continue
+      eye.set(x, paper.y + 0.9, z)
+      direction.copy(paper).sub(eye).normalize()
+      const hits = new THREE.Raycaster(eye, direction).intersectObjects([model, prop], true)
+      if (hits.length > 0 && hits[0].object === prop) return { x, z, radius }
+    }
+  }
+  return null
 }
 
 function planItems(plan) {
@@ -106,9 +133,28 @@ test('the plan assigns one kana per slot and spreads letters across carriages', 
   assert.deepEqual(plan.letters.map((letter) => letter.char), letters)
   const ids = new Set(plan.letters.map((letter) => letter.anchor.id))
   assert.equal(ids.size, plan.letters.length, 'each anchor used once')
-  const cars = new Set(plan.letters.map((letter) => letter.anchor.car))
-  assert.deepEqual([...cars].sort((a, b) => a - b), [1, 2, 3, 4])
+  for (const letter of plan.letters) assert.ok(LETTER_ANCHORS.includes(letter.anchor))
   assert.equal(plan.residue.length, RESIDUE_ANCHORS.length)
+})
+
+test('every carriage gets 1-3 clues, drawn without repeats from the shared spots', () => {
+  for (let seed = 1; seed <= 25; seed++) {
+    const plan = createCluePlan(seededRng(seed))
+    const clues = [...plan.letters, ...plan.residue]
+    const perCar = new Map()
+    const seen = new Set()
+    for (const clue of clues) {
+      assert.ok(LETTER_ANCHORS.includes(clue.anchor), `seed ${seed} ${clue.id} uses a pool anchor`)
+      assert.equal(seen.has(clue.anchor.id), false, `seed ${seed} reuses ${clue.anchor.id}`)
+      seen.add(clue.anchor.id)
+      assert.equal(clue.anchor.floor, true, `seed ${seed} ${clue.id} lies on the deck`)
+      perCar.set(clue.anchor.car, (perCar.get(clue.anchor.car) || 0) + 1)
+    }
+    for (const car of [1, 2, 3, 4]) {
+      const count = perCar.get(car) || 0
+      assert.ok(count >= 1 && count <= 3, `seed ${seed} carriage ${car} holds ${count} clues`)
+    }
+  }
 })
 
 test('the run is reproducible from its seed and varies otherwise', () => {
@@ -119,11 +165,19 @@ test('the run is reproducible from its seed and varies otherwise', () => {
   assert.notEqual(JSON.stringify(a), JSON.stringify(c))
 })
 
-test('selecting letters never repeats an anchor and respects car depth', () => {
-  const anchors = selectLetterAnchors(6, seededRng(5))
-  assert.equal(anchors.length, 6)
-  assert.equal(new Set(anchors.map((anchor) => anchor.id)).size, 6)
+test('selecting anchors never repeats one and spreads them evenly over the cars', () => {
+  const anchors = selectLetterAnchors(8, seededRng(5))
+  assert.equal(anchors.length, 8)
+  assert.equal(new Set(anchors.map((anchor) => anchor.id)).size, 8)
   for (const anchor of anchors) assert.ok(LETTER_ANCHORS.includes(anchor))
+  const share = (picked) => {
+    const perCar = new Map()
+    for (const anchor of picked) perCar.set(anchor.car, (perCar.get(anchor.car) || 0) + 1)
+    return [...perCar.values()].sort((a, b) => a - b)
+  }
+  assert.deepEqual(share(anchors), [2, 2, 2, 2])
+  assert.deepEqual(share(selectLetterAnchors(9, seededRng(6))), [2, 2, 2, 3])
+  assert.deepEqual(share(selectLetterAnchors(7, seededRng(7))), [1, 2, 2, 2])
 })
 
 test('holding E fills the mark, releasing resets, and it cannot read twice', () => {
@@ -209,7 +263,7 @@ test('clue props parent to their carriages and expose one item per plan entry', 
   const plan = createCluePlan(seededRng(21))
   const clues = createTrainClues({ carriages, plan })
 
-  assert.equal(clues.items.length, plan.letters.length + plan.residue.length + 1)
+  assert.equal(clues.items.length, plan.letters.length + plan.residue.length + 1 + UPPER_LETTERS.length)
   const note = clues.items.find((item) => item.kind === 'note')
   assert.ok(note, 'the rear letter is always created')
   assert.ok(Math.abs(note.object.rotation.x - Math.PI / 2) < 1e-9, 'the letter lies flat on the floor')
@@ -218,11 +272,13 @@ test('clue props parent to their carriages and expose one item per plan entry', 
     assert.equal(item.object.visible, true)
     assert.ok(item.object.material.isMeshStandardMaterial, `${item.id} responds to scene light`)
   }
+  clues.debug.show()
+  clues.debug.hide()
   clues.dispose()
   assert.equal(group.children.filter((child) => child.name.startsWith('train-clue-')).length, 0)
 })
 
-test('every clue sits in clear space and is seen before the seat behind it', async () => {
+test('every clue sits in clear space and can be read from a standing player', async () => {
   const model = await loadTrainGeometry('02')
   const group = new THREE.Group()
   group.add(model)
@@ -241,39 +297,16 @@ test('every clue sits in clear space and is seen before the seat behind it', asy
   ))
 
   for (const item of clues.items) {
+    if (item.upper) continue
     const prop = item.object
-    const position = prop.getWorldPosition(new THREE.Vector3())
-
-    if (item.kind === 'note' || prop.rotation.x > 0) {
-      assert.ok(standingRoom(position.x, position.z), `${item.id} blocks the aisle`)
-      const origin = new THREE.Vector3(position.x, position.y + 0.9, position.z - 1.2)
-      assert.ok(standingRoom(origin.x, origin.z), `${item.id} has no standing room before it`)
-      const direction = position.clone().sub(origin).normalize()
-      const hits = new THREE.Raycaster(origin, direction).intersectObjects([model, prop], true)
-      assert.ok(hits.length > 0, `${item.id} is hidden from the aisle`)
-      assert.ok(hits[0].object === prop, `${item.id} is buried under the carriage`)
-      continue
-    }
-
-    const toAisle = prop.rotation.y > 0 ? 1 : -1
-    let origin = null
-    for (let offset = 0.6; offset <= 2.0; offset += 0.1) {
-      const x = position.x + toAisle * offset
-      if (standingRoom(x, position.z)) {
-        origin = new THREE.Vector3(x, position.y, position.z)
-        break
-      }
-    }
-    assert.ok(origin, `${item.id} has no standing room in front of it`)
-    const direction = position.clone().sub(origin).normalize()
-    const hits = new THREE.Raycaster(origin, direction).intersectObjects([model, prop], true)
-    assert.ok(hits.length > 0, `${item.id} is hidden from the lane`)
-    assert.ok(hits[0].object === prop, `${item.id} is buried behind the carriage`)
+    assert.ok(prop.rotation.x > 0, `${item.id} lies flat on the deck`)
+    const reader = findReader(prop, model, standingRoom)
+    assert.ok(reader, `${item.id} has no standing spot that sees it`)
   }
   clues.dispose()
 })
 
-test('every floor anchor can be reached and read from the aisle', async () => {
+test('every spot in the pool can be reached and read from the aisle', async () => {
   const model = await loadTrainGeometry('02')
   const group = new THREE.Group()
   group.add(model)
@@ -307,14 +340,68 @@ test('every floor anchor can be reached and read from the aisle', async () => {
     if (item.kind !== 'letter') continue
     const prop = item.object
     assert.ok(prop.rotation.x > 0, `${item.id} should lie flat on the floor`)
+    const reader = findReader(prop, model, standingRoom)
+    assert.ok(reader, `${item.id} has no standing spot that sees it`)
+  }
+  clues.dispose()
+})
+
+test('CLUE_PLACEMENTS pins name marks to chosen anchors and leaves the rest free', () => {
+  const pinned = createCluePlan(seededRng(13), { letterPlacements: ['c4s1', null, 'c2s3'] })
+  assert.equal(pinned.letters[0].anchor.id, 'c4s1')
+  assert.equal(pinned.letters[2].anchor.id, 'c2s3')
+  assert.ok(LETTER_ANCHORS.includes(pinned.letters[1].anchor))
+  const ids = pinned.letters.map((letter) => letter.anchor.id)
+  assert.equal(new Set(ids).size, ids.length, 'each anchor used once')
+
+  const unpinned = createCluePlan(seededRng(13))
+  assert.notEqual(unpinned.letters[0].anchor.id, 'c4s1')
+
+  assert.throws(
+    () => createCluePlan(seededRng(1), { letterPlacements: ['no-such-anchor'] }),
+    /unknown LETTER_ANCHORS/,
+  )
+  assert.throws(
+    () => createCluePlan(seededRng(1), { letterPlacements: ['c4s1', null, 'c4s1'] }),
+    /pinned twice/,
+  )
+})
+
+test('every upper-deck letter lies on the upper deck and is read from upstairs', async () => {
+  const model = await loadTrainGeometry('02')
+  const group = new THREE.Group()
+  group.add(model)
+  group.updateWorldMatrix(true, true)
+  const carriage = { group, model, bounds: new THREE.Box3().setFromObject(model) }
+  const carriages = [carriage, carriage, carriage, carriage, carriage]
+  const plan = createCluePlan(seededRng(21))
+  const colliders = await createTrainCollision([{ model }])
+  const clues = createTrainClues({ carriages, plan, colliders })
+  const world = colliders[0].world
+
+  const upstairsRoom = (x, feetY, z) => !world.capsuleIntersect(new Capsule(
+    new THREE.Vector3(x, feetY + 0.2, z),
+    new THREE.Vector3(x, feetY + 0.8, z),
+    0.2,
+  ))
+
+  const upperItems = clues.items.filter((item) => UPPER_LETTERS.some((entry) => entry.id === item.id))
+  assert.equal(upperItems.length, UPPER_LETTERS.length)
+  for (const item of upperItems) {
+    const prop = item.object
     const position = prop.getWorldPosition(new THREE.Vector3())
-    assert.ok(standingRoom(position.x, position.z), `${item.id} blocks the aisle`)
+    assert.ok(position.y > 2.5, `${item.id} should sit on the upper deck, got y=${position.y}`)
+    assert.ok(prop.rotation.x > 0, `${item.id} lies flat like a note`)
+    const deck = trainUpperFloorAt(colliders, position.x, position.z)
+    assert.ok(Math.abs(position.y - deck - PAPER_LIFT) < 0.05, `${item.id} rests on the local upper deck`)
+    const feet = deck + 0.05
+    assert.ok(upstairsRoom(position.x, feet, position.z), `${item.id} has no upstairs standing room`)
     const origin = new THREE.Vector3(position.x, position.y + 0.9, position.z - 1.2)
-    assert.ok(standingRoom(origin.x, origin.z), `${item.id} has no standing room before it`)
+    assert.ok(upstairsRoom(origin.x, feet, origin.z), `${item.id} has no upstairs standing room before it`)
     const direction = position.clone().sub(origin).normalize()
     const hits = new THREE.Raycaster(origin, direction).intersectObjects([model, prop], true)
-    assert.ok(hits.length > 0, `${item.id} is hidden from the aisle`)
-    assert.ok(hits[0].object === prop, `${item.id} is buried under the carriage`)
+    assert.ok(hits.length > 0, `${item.id} is hidden upstairs`)
+    assert.ok(hits[0].object === prop, `${item.id} is buried under the upper deck`)
   }
   clues.dispose()
 })

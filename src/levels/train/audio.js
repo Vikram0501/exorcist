@@ -9,6 +9,20 @@ export const ZOMBIE_MOAN_URL = '/levels/train/audio/zombie-moans.mp3'
 
 export const ZOMBIE_MOAN_VOLUME = 0.7
 
+// One-shots: the banshee cry while it is running you down, and the raw scream
+// when its name is spoken over the ash ring.
+export const CHASE_SCREAM_URL =
+  '/levels/train/audio/dragon-studio-banshee-screaming-sound-effect-312864.mp3'
+
+export const NAME_SCREAM_URL =
+  '/levels/train/audio/dragon-studio-zombie-scream-324752.mp3'
+
+export const SCREAM_VOLUME = 0.85
+
+export const SCREAM_HEAR_RANGE = 16
+
+export const SCREAM_COOLDOWN = 7
+
 export const MOAN_FULL_RANGE = 5
 
 export const MOAN_SILENT_RANGE = 30
@@ -26,6 +40,9 @@ export class TrainAudio {
     this.ambient = null
     this.moans = null
     this.moanPlaying = false
+    this.screams = { chase: null, name: null }
+    this.hunting = false
+    this.screamCooldown = 0
     this.context = null
   }
 
@@ -54,6 +71,9 @@ export class TrainAudio {
     await this.context?.resume().catch(() => {})
     this.ensureAmbient()
     this.ensureMoans()
+    this.ensureScream('chase')
+    this.ensureScream('name')
+    this.enabled = true
   }
 
   setTrainActive(active) {
@@ -61,7 +81,10 @@ export class TrainAudio {
       this.enabled = false
       this.stopAudio(this.ambient)
       this.stopAudio(this.moans)
+      for (const scream of Object.values(this.screams)) this.stopAudio(scream)
       this.moanPlaying = false
+      this.hunting = false
+      this.screamCooldown = 0
       return
     }
 
@@ -78,7 +101,7 @@ export class TrainAudio {
     }
   }
 
-  update(player, zombie) {
+  update(player, zombie, dt = 0) {
     if (!this.enabled) return
 
     const zombiePosition = zombie?.position
@@ -89,7 +112,38 @@ export class TrainAudio {
 
     const dx = player.position.x - zombiePosition.x
     const dz = player.position.z - zombiePosition.z
-    this.setMoanVolume(moanVolume(Math.hypot(dx, dz)))
+    const distance = Math.hypot(dx, dz)
+    this.setMoanVolume(moanVolume(distance))
+    this.updateChaseScream(zombie, distance, dt)
+  }
+
+  // Rising edge of the hunt, inside earshot and off cooldown: one cry, no
+  // repeats while it keeps chasing.
+  updateChaseScream(zombie, distance, dt) {
+    this.screamCooldown = Math.max(0, this.screamCooldown - (dt || 0))
+    const hunting = zombie?.state === 'hunt'
+    if (hunting && !this.hunting && distance <= SCREAM_HEAR_RANGE && this.screamCooldown <= 0) {
+      this.playScream('chase')
+      this.screamCooldown = SCREAM_COOLDOWN
+    }
+    this.hunting = hunting
+  }
+
+  ensureScream(kind) {
+    if (this.screams[kind]) return this.screams[kind]
+    this.screams[kind] = this.createAudio(kind === 'chase' ? CHASE_SCREAM_URL : NAME_SCREAM_URL)
+    this.screams[kind].volume = SCREAM_VOLUME
+    return this.screams[kind]
+  }
+
+  playScream(kind) {
+    if (!this.enabled) return false
+    const scream = this.ensureScream(kind)
+    scream.pause()
+    scream.currentTime = 0
+    scream.volume = SCREAM_VOLUME
+    scream.play().catch(() => {})
+    return true
   }
 
   setMoanVolume(volume) {

@@ -125,6 +125,16 @@ export class TrainStory {
     return true
   }
 
+  // The closing beat closes the case for the player: no walk back out of the
+  // burnt carriage required.
+  closeCase() {
+    if (!this.released || this.complete) return false
+    this.complete = true
+    this.endingTime = this.time
+    this.onMessage('CASE CLOSED · THE TRAIN RUNS ON QUIET', 8)
+    return true
+  }
+
   update(dt, player) {
     this.time += dt
     if (!player) return

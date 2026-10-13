@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { Input } from './input.js'
 import { Player } from './player.js'
+import { PostFx } from './postfx.js'
 import { HauntedHouseAudio } from '../levels/house/audio.js'
 import { HighwayAudio } from '../levels/highway/audio.js'
 import { TrainAudio } from '../levels/train/audio.js'
@@ -64,6 +65,7 @@ import {
 
 import { loadTrain, updateTrainCarriageVisibility, updateTrainCarriageLights } from '../levels/train/index.js'
 import { TrainZombie } from '../levels/train/zombie.js'
+import { TrainEnding } from '../levels/train/ending.js'
 import { toggleCarriageLightDebug } from '../levels/train/lighting.js'
 import { createFlashlight } from '../levels/shared/lighting.js'
 
@@ -134,6 +136,14 @@ export class Game {
 
     this.container.appendChild(
       this.renderer.domElement
+    )
+
+
+    // POST FX (enabled per level)
+    this.postFx = new PostFx(
+      this.renderer,
+      this.scene,
+      this.camera
     )
 
 
@@ -214,6 +224,8 @@ export class Game {
     this.trainRiteView = null
 
     this.trainExorcism = null
+
+    this.trainEnding = null
 
     this.journalBuilder = null
 
@@ -770,6 +782,21 @@ if (this.loaded) {
     const active = this.input.isLocked && !this.newspaperOpen && !this.evidenceBookOpen && !this.houseStoryView?.open && !this.trainRiteView?.open
     this.houseStoryView?.update(dt, active)
     this.trainRiteView?.update(dt)
+    // The closing beat runs whether or not the pointer is locked: speaking the
+    // name releases it, and the whiteout must still play out to the exit prompt.
+    if (this.currentLevel === 'train' && this.trainEnding) {
+      if (this.trainStory?.released && !this.trainEnding.active && !this.trainEnding.finished) {
+        this.trainEnding.start()
+      }
+      this.trainEnding.update(dt)
+      if (this.trainEnding.finished && !this.trainEnding.promptShown) {
+        this.trainStory?.closeCase()
+        this.trainEnding.promptShown = true
+      }
+      if (this.trainZombie?.state === 'apparition') {
+        this.trainZombie.update(dt, { position: this.player.position })
+      }
+    }
     if (this.levelCaptionRemaining > 0) {
       this.levelCaptionRemaining = Math.max(0, this.levelCaptionRemaining - dt)
       this.levelCaptionEl?.classList.toggle('hidden', this.levelCaptionRemaining <= 0)
@@ -941,6 +968,11 @@ if (this.loaded) {
         )
       }
 
+      if (this.trainClues?.debug) {
+        if (this.carriageLightDebug) this.trainClues.debug.show()
+        else this.trainClues.debug.hide()
+      }
+
       if (this.carriageLightDebug) {
         if (!this.debugPositionEl) {
           this.debugPositionEl = document.createElement('div')
@@ -1031,8 +1063,7 @@ if (this.loaded) {
     }
 
     if (this.currentLevel === 'train' && this.trainZombie && !this.trainCaught) {
-      if (this.trainStory?.released && !this.trainZombie.banished) this.trainZombie.banish()
-
+      // A standing apparition returns null and can never catch the player.
       const outcome = this.trainZombie.update(dt, {
         position: this.player.position,
         velocity: this.player.velocity,
@@ -1044,7 +1075,7 @@ if (this.loaded) {
     }
 
     if (this.currentLevel === 'train') {
-      this.trainAudio.update(this.player, this.trainZombie)
+      this.trainAudio.update(this.player, this.trainZombie, dt)
     }
 
     if (this.currentLevel === 'house') {
@@ -1102,7 +1133,7 @@ if (this.loaded) {
     if (renderCamera === this.camera && this.houseAvatar?.thirdPerson) {
       this.houseAvatar.root.visible = false
     }
-    this.renderer.render(this.scene, renderCamera)
+    this.postFx.render(renderCamera)
     if (this.houseAvatar) this.houseAvatar.root.visible = avatarVisible
 
     this.trainShake.clear()
@@ -1170,6 +1201,8 @@ if (this.loaded) {
 
     this.currentLevel =
       levelName
+
+    this.postFx.enabled = levelName === 'train'
 
     this.player.configureForLevel(levelName)
 
@@ -1319,6 +1352,15 @@ if (this.loaded) {
           this.trainExorcism = levelName === 'train' ? exorcism || null : null
 
           this.trainRiteView = levelName === 'train' ? new TrainRiteView(this) : null
+
+          this.trainEnding = levelName === 'train' && this.trainZombie
+            ? new TrainEnding({
+                zombie: this.trainZombie,
+                exorcism: this.trainExorcism,
+                audio: this.trainAudio,
+                onExit: () => document.getElementById('overlay')?.classList.remove('hidden'),
+              })
+            : null
 
           this.journalBuilder = levelName === 'train' && this.trainStory
             ? (game) => game.trainStory.journalEntries()
@@ -1594,7 +1636,12 @@ if (this.loaded) {
 
           // Warm shaders while the overlay still shows LOADING so their
           // first compilation does not interrupt the first playable frame.
+          // When post-fx is on, compile against its offscreen target: the
+          // render target changes the program cache key, so warming up
+          // against the canvas would compile every material twice.
           const warmupStarted = performance.now()
+          const previousTarget = this.renderer.getRenderTarget()
+          if (this.postFx.enabled) this.renderer.setRenderTarget(this.postFx.target)
           try {
             if (this.renderer.compileAsync) {
               await this.renderer.compileAsync(this.scene, this.camera)
@@ -1621,6 +1668,8 @@ if (this.loaded) {
             }
           } catch (err) {
             console.warn('Shader warmup failed:', err)
+          } finally {
+            this.renderer.setRenderTarget(previousTarget)
           }
           console.debug(
             `[load:${levelName}] shader warmup: ${(performance.now() - warmupStarted).toFixed(0)}ms`,
@@ -1688,6 +1737,8 @@ if (this.loaded) {
   // ============================================
 
   unloadCurrentLevel() {
+    this.postFx.enabled = false
+
     if (this.houseAudioStartFrame !== null) {
       cancelAnimationFrame(this.houseAudioStartFrame)
       this.houseAudioStartFrame = null
@@ -1845,6 +1896,9 @@ if (this.loaded) {
 
     this.trainRiteView?.dispose()
     this.trainRiteView = null
+
+    this.trainEnding?.dispose()
+    this.trainEnding = null
 
     this.trainExorcism?.dispose()
     this.trainExorcism = null
@@ -4099,6 +4153,11 @@ if (this.loaded) {
 
 
     this.renderer.setSize(
+      window.innerWidth,
+      window.innerHeight
+    )
+
+    this.postFx.setSize(
       window.innerWidth,
       window.innerHeight
     )

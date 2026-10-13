@@ -117,7 +117,9 @@ export class TrainRiteView {
 
   speak() {
     if (!this.game.trainStory?.speakName()) return
-    this.closeRite()
+    // The closing beat owns the screen from here — leave the pointer free for
+    // the exit prompt it hands over to.
+    this.closeRite(false)
   }
 
   showOutcome(type) {
@@ -165,9 +167,11 @@ export class TrainRiteView {
 
   update(dt) {
     const story = this.game.trainStory
-    if (story?.complete && story.time - story.endingTime > 5 && this.outcome !== 'complete') {
-      this.showOutcome('complete')
-    }
+    if (!story?.complete || this.outcome === 'complete') return
+    // The closing beat — apparition, whiteout, exit prompt — belongs to the
+    // ending sequence whenever the level wires one up.
+    if (this.game.trainEnding) return
+    if (story.time - story.endingTime > 5) this.showOutcome('complete')
   }
 
   closeRite(resume = true) {

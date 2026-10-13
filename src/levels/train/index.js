@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { clone as cloneSkinnedModel } from 'three/addons/utils/SkeletonUtils.js'
 import { loadingManager } from '../../core/loading.js'
 import { createCarriageLights, setupTrainLighting } from './lighting.js'
-import { createTrainTerrain, preloadTrainTerrain } from './terrain.js'
+import { createTrainTerrain } from './terrain.js'
 import { createTrainCollision } from './collision.js'
 import { createCluePlan } from './story-data.js'
 import { createTrainClues } from './clues.js'
@@ -179,7 +179,6 @@ async function placeBurntZombie(level) {
 
 
 export function loadTrain(level) {
-  preloadTrainTerrain()
   loadModel(ZOMBIE_PATH).catch(() => null)
   return Promise.all([loadModel(CARRIAGE_01_PATH), loadModel(CARRIAGE_02_PATH)]).then(async () => {
     if (typeof document !== 'undefined' && document.fonts?.load) {
@@ -209,7 +208,7 @@ export function loadTrain(level) {
     const colliders = await createTrainCollision(carriages)
 
     setupTrainLighting(level, carriages[carriages.length - 1].model, carriage02Size)
-    const trainTerrain = await createTrainTerrain(level)
+    const trainTerrain = createTrainTerrain(level, carriages)
     const zombie = await placeBurntZombie(level)
 
     const plan = createCluePlan()

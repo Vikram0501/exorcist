@@ -5,11 +5,16 @@ import {
   moanVolume,
   TRAIN_AMBIENT_VOLUME,
   ZOMBIE_MOAN_VOLUME,
+  SCREAM_VOLUME,
+  SCREAM_COOLDOWN,
+  CHASE_SCREAM_URL,
+  NAME_SCREAM_URL,
 } from '../../src/levels/train/audio.js'
 
 function mockAudio(t) {
   const originalAudio = globalThis.Audio
   const created = []
+  const plays = []
   globalThis.Audio = class {
     constructor(url) {
       this.url = url
@@ -19,14 +24,14 @@ function mockAudio(t) {
       this.volume = 1
       created.push(this)
     }
-    play() { this.paused = false; return Promise.resolve() }
+    play() { this.paused = false; plays.push(this.url); return Promise.resolve() }
     pause() { this.paused = true }
   }
   t.after(() => {
     if (originalAudio === undefined) delete globalThis.Audio
     else globalThis.Audio = originalAudio
   })
-  return created
+  return { created, plays }
 }
 
 test('moans fade out across the 5 to 30 distance band', () => {
@@ -41,7 +46,7 @@ test('moans fade out across the 5 to 30 distance band', () => {
 })
 
 test('ambience loops quietly and moans only sound while the stalker is close', t => {
-  const created = mockAudio(t)
+  const { created } = mockAudio(t)
   const audio = new TrainAudio()
   const player = { position: { x: 0, y: 1, z: 0 } }
   const zombieAt = distance => ({ position: { x: distance, y: 0, z: 0 } })
@@ -73,4 +78,66 @@ test('ambience loops quietly and moans only sound while the stalker is close', t
   assert.equal(ambient.paused, true)
   assert.equal(ambient.currentTime, 0)
   assert.equal(moans.paused, true)
+})
+
+test('the banshee cry fires once when a chase starts, and never twice', t => {
+  const { created, plays } = mockAudio(t)
+  const audio = new TrainAudio()
+  const player = { position: { x: 0, y: 1, z: 0 } }
+  const zombie = { position: { x: 8, y: 0, z: 0 }, state: 'patrol' }
+  const cries = () => plays.filter(url => url === CHASE_SCREAM_URL)
+
+  audio.setTrainActive(true)
+  audio.update(player, zombie, 0.1)
+  assert.equal(cries().length, 0, 'no cry while it is only patrolling')
+
+  zombie.state = 'hunt'
+  audio.update(player, zombie, 0.1)
+  assert.equal(cries().length, 1, 'the cry fires on the rising edge of the hunt')
+  const chase = created.find(sound => sound.url === CHASE_SCREAM_URL)
+  assert.equal(chase.paused, false)
+  assert.equal(chase.volume, SCREAM_VOLUME)
+
+  audio.update(player, zombie, 0.1)
+  audio.update(player, zombie, 0.1)
+  assert.equal(cries().length, 1, 'one cry per chase, not one per frame')
+
+  zombie.state = 'patrol'
+  audio.update(player, zombie, 0.1)
+  zombie.state = 'hunt'
+  zombie.position = { x: 40, y: 0, z: 0 }
+  audio.update(player, zombie, 0.1)
+  assert.equal(cries().length, 1, 'silent when the chase is out of earshot')
+
+  audio.update(player, { ...zombie, position: { x: 8, y: 0, z: 0 } }, SCREAM_COOLDOWN + 1)
+  zombie.state = 'patrol'
+  zombie.position = { x: 8, y: 0, z: 0 }
+  audio.update(player, zombie, 0.1)
+  zombie.state = 'hunt'
+  audio.update(player, zombie, 0.1)
+  assert.equal(cries().length, 2, 'a later chase gets its own cry once the cooldown lapses')
+
+  audio.setTrainActive(false)
+  assert.equal(chase.paused, true)
+  assert.equal(audio.playScream('name'), false, 'no screams once the ambience is off')
+})
+
+test('the name scream plays on demand for the rite', t => {
+  const { created, plays } = mockAudio(t)
+  const audio = new TrainAudio()
+  audio.setTrainActive(true)
+
+  assert.equal(audio.playScream('name'), true)
+  const scream = created.find(sound => sound.url === NAME_SCREAM_URL)
+  assert.ok(scream, 'the zombie scream element exists')
+  assert.equal(scream.loop, false)
+  assert.equal(scream.paused, false)
+  assert.equal(scream.volume, SCREAM_VOLUME)
+  assert.equal(plays.filter(url => url === NAME_SCREAM_URL).length, 1)
+
+  audio.playScream('name')
+  assert.equal(created.filter(sound => sound.url === NAME_SCREAM_URL).length, 1,
+    'it reuses the element rather than stacking new ones')
+  assert.equal(plays.filter(url => url === NAME_SCREAM_URL).length, 2,
+    'but it still replays from the top')
 })

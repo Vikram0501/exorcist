@@ -105,15 +105,18 @@ new name and a new layout.
   other clue, opens the shared inspection panel, and becomes the first field
   note entry — replacing the old opening summary. Its height is probed from the
   collision deck so the paper sits on the floor in every run.
-- The name is split into individual kana marks. `createCluePlan` shuffles the
-  marks across a pool of floor anchors — each glyph lies flat on the deck
-  between the seat banks, in the walking lane — one per carriage across
-  the rear four cars, so the reading order never matches the name order.
-  Selection is driven by an injectable RNG, which keeps the tests
+- The name is split into individual kana marks. Eight floor spots were walked
+  out by hand in the spawn carriage — under the seats, in the stair bays, one
+  in the walking lane — and `createCluePlan` mirrors them onto all four
+  passenger cars, then deals 1-3 of the resulting 32 anchors to each carriage.
+  Each glyph lies flat on whatever the collision reports under it, so a run
+  scatters the marks through the train and the reading order never matches the
+  name order. Selection is driven by an injectable RNG, which keeps the tests
   deterministic.
-- Two fixed residue clues — a torn ticket and a half-burned name tag — sit low
-  in the dark carriages. Reading one hands over a single mark, so a cautious
-  player can infer the name without reading every mark in the open.
+- Two residue clues — a torn ticket and a half-burned name tag — take their
+  spots from the same eight as the marks, so they travel with the deal instead
+  of sitting in fixed corners. Reading one hands over a single mark, so a
+  cautious player can infer the name without reading every mark in the open.
 - A mark is read by holding **E** for `1.2` seconds in the world. Pointer lock
   stays held, so the stalker keeps ticking while the player reads: the read is
   the exposure window. `#holdProgress` fills at the bottom of the screen, and
@@ -133,11 +136,10 @@ new name and a new layout.
   the torch is how you search, and the torch is what the stalker notices.
   Textures are skipped when there is no DOM, so the modules load under
   `node --test`.
-- Placement is verified against the shipped collision: every clue must lie on
-  walkable floor and must be seen first from a standing player's eye height
-  (the descending ray has to hit the prop before the carriage surface). The
-  seeded plan is checked in one test, and every anchor in the pool is checked
-  in its own.
+- Placement is verified against the shipped collision: every clue must be
+  readable from some clear standing spot within two metres — the ray from eye
+  height has to hit the prop before the carriage around it. The seeded plan is
+  checked in one test, and every anchor in the pool is checked in its own.
 
 The exorcism finale lives in the burnt front carriage — the type `01` car the
 level opens with — as an ash seal ringed by candles.
@@ -173,22 +175,39 @@ level opens with — as an ash seal ringed by candles.
   stays in the field notes, so a break costs the walk back to the seal, not the
   investigation.
 - **SPEAK THE NAME** runs `speakName()`, which sets `released`, announces the
-  name, and makes the next frame of `game.js` call `zombie.banish()` — the
-  stalker leaves the aisle for good (`state: 'banished'`, hidden, `update`
-  returns `null`). The objective becomes
+  name, and closes the panel *without* re-locking the pointer — the closing beat
+  owns the screen from here. The objective becomes
   `THE NAME IS SPOKEN · LEAVE THE BURNT CARRIAGE` and the journal gains
   `the-name-spoken`.
-- `exitZ` is the front carriage's `bounds.min.z`. Stepping back across it after
-  the name is spoken sets `complete`, switches the objective to
-  `CASE CLOSED · THE TRAIN RUNS ON QUIET`, and records `the-run-ends`; five
-  seconds later the outcome screen offers **Return to the case menu**, which
-  un-hides `#overlay` exactly as Level 1 does.
-- Nothing new is drawn per frame: `TrainRiteView.update` only watches
-  `story.complete`, and `game.js` disposes the view and the chamber in
-  `unloadCurrentLevel`, so a restart or a level change tears both down.
+- The closing beat is `TrainEnding` (`ending.js`), started the frame after the
+  name is spoken and updated outside the pointer-lock gate so it keeps playing
+  with the mouse free. It calls `zombie.appearAt()` a few metres past the ash
+  ring: the stalker stands up in the aisle of the burnt carriage
+  (`state: 'apparition'`, never `banished`), turns to face the player, and
+  `update` returns `null` so it can never catch anyone. The zombie-scream
+  one-shot (`NAME_SCREAM_URL`) fires on the call; after
+  `APPARITION_SECONDS` (`1.6`) a full-screen white div fades in over
+  `FADE_SECONDS` (`2.2`). When the screen is white the story calls
+  `closeCase()` — no walk back out of the carriage is needed — and the fade
+  becomes the exit prompt: `THE TRAIN RUNS ON QUIET` with **RETURN TO THE CASE
+  FILES**, which disposes the fade and un-hides `#overlay` exactly as Level 1
+  does. `unloadCurrentLevel` disposes the sequence, so a restart tears the white
+  screen down.
+- `exitZ` is still the front carriage's `bounds.min.z`: walking back across it
+  after the name is spoken closes the case the long way, if the player somehow
+  slips past the sequence.
+- `TrainAudio` also fires the banshee one-shot (`CHASE_SCREAM_URL`) on the
+  rising edge of `state: 'hunt'`, within `SCREAM_HEAR_RANGE` (`16`) and off a
+  `SCREAM_COOLDOWN` (`7`s) timer, so a chase announces itself once instead of
+  looping.
+- Nothing is drawn per frame: `TrainRiteView.update` only defers to the ending
+  sequence, and the closing beat builds its white screen once on `start()`.
+  `game.js` disposes the view, the sequence, and the chamber in
+  `unloadCurrentLevel`, so a restart or a level change tears all of them down.
 - `tests/train/exorcism.test.js` covers the placement against real geometry,
   the gating, the assembly, the failure, and the run's end; `zombie.test.js`
-  covers `stalk` and `banish`.
+  covers `stalk`, `banish`, and the standing apparition; `ending.test.js` walks
+  the closing beat's timing; `audio.test.js` covers both one-shots.
 
 
 

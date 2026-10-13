@@ -81,41 +81,111 @@ export const GHOST_PROFILES = [
   },
 ]
 
-export const LETTER_ANCHORS = [
-  { id: 'a41', car: 4, t: 0.1, x: 2.8, floor: true, risk: 'safe' },
-  { id: 'a42', car: 4, t: 0.44, x: 2.6, floor: true, risk: 'safe' },
-  { id: 'a31', car: 3, t: 0.2, x: 2.7, floor: true, risk: 'safe' },
-  { id: 'a32', car: 3, t: 0.4, x: 2.8, floor: true, risk: 'medium' },
-  { id: 'a33', car: 3, t: 0.58, x: 2.7, floor: true, risk: 'medium' },
-  { id: 'a21', car: 2, t: 0.24, x: 2.9, floor: true, risk: 'medium' },
-  { id: 'a22', car: 2, t: 0.48, x: 3.0, floor: true, risk: 'medium' },
-  { id: 'a23', car: 2, t: 0.7, x: 2.8, floor: true, risk: 'high' },
-  { id: 'a11', car: 1, t: 0.2, x: 2.6, floor: true, risk: 'medium' },
-  { id: 'a12', car: 1, t: 0.44, x: 2.7, floor: true, risk: 'medium' },
-  { id: 'a13', car: 1, t: 0.66, x: 2.6, floor: true, risk: 'high' },
-  { id: 'a14', car: 1, t: 0.82, x: 2.7, floor: true, risk: 'high' },
+// Eight floor spots measured by walking the spawn carriage (car 4, world z
+// -131.37 .. -96.35) — under seats, in the stair bays, one in the walking
+// lane. Every copy of the carriage is the same mesh, so the same eight are
+// mirrored onto all four passenger cars and the plan deals 1-3 of them to
+// each. `y` is deliberately absent: clues.js drops each spot onto the deck
+// that the collision reports under it.
+const SPAWN_MIN_Z = -131.37
+const SPAWN_LENGTH = 35.02
+const CARRIAGE_CLUE_SPOTS = [
+  { x: 4.02, z: -120.87 },
+  { x: 1.56, z: -124.18 },
+  { x: 4.31, z: -114.86 },
+  { x: 4.32, z: -125.92 },
+  { x: 4.01, z: -99.25 },
+  { x: 4.14, z: -101.97 },
+  { x: 2.89, z: -101.11 },
+  { x: 1.37, z: -111.08 },
 ]
 
+export const LETTER_ANCHORS = CARRIAGE_CLUE_SPOTS.flatMap((spot, index) =>
+  [1, 2, 3, 4].map((car) => {
+    const t = (spot.z - SPAWN_MIN_Z) / SPAWN_LENGTH
+    return {
+      id: `c${car}s${index + 1}`,
+      car,
+      t,
+      x: spot.x,
+      floor: true,
+      risk: t >= 0.7 ? 'high' : t >= 0.4 ? 'medium' : 'safe',
+    }
+  }),
+)
+
+// Pin each name-mark letter (by slot index) to a specific LETTER_ANCHORS id
+// so a run always places that mark at that spot. Leave a slot null/absent to
+// let the plan pick a free anchor at random, as before.
+// Example: letters: ['c4s1', null, 'c2s3', 'c1s8'] pins marks 1, 3 and 4.
+export const CLUE_PLACEMENTS = {
+  letters: [],
+}
+
+// Papers left in the upper-deck compartments. One per passenger carriage,
+// read with hold-E like any note; they open the inspection panel and are
+// copied into the field notes. The double-decker's upper level only exists
+// over the rear half of the carriage, so `t` sits inside a roofed upper
+// compartment bay — well behind the step where the upper deck runs out.
+export const UPPER_LETTER_ANCHORS = [
+  { id: 'u41', car: 4, t: 0.1, x: 4, upper: true },
+  { id: 'u31', car: 3, t: 0.14, x: 4, upper: true },
+  { id: 'u21', car: 2, t: 0.21, x: 4, upper: true },
+  { id: 'u11', car: 1, t: 0.24, x: 4, upper: true },
+]
+
+export const UPPER_LETTERS = [
+  {
+    id: 'night-run-sheet',
+    anchorId: 'u41',
+    title: "The conductor's night run sheet",
+    foundAt: 'Upper compartment, rear carriage',
+    storyNote:
+      'A duty roster clipped to the upper rack. Four carriages out of the yard, full crew — and no arrival time printed; the line stops mid-page as if the printer knew. In the margin, in pencil: "Do not announce the name over the speaker. It answers."',
+    riteNote: 'The name was never to be spoken aloud. Someone answered anyway.',
+  },
+  {
+    id: 'unsent-letter',
+    anchorId: 'u31',
+    title: 'The unsent letter',
+    foundAt: 'Upper compartment, third carriage',
+    storyNote:
+      'A letter folded into a bottle, never posted. Whoever wrote it watched the aisle below through the gap in the floorboards: "The conductors keep telling it to move along. It does not move along. It learned my name from my ticket, and now it says it softly when the lamps go out."',
+    riteNote: 'It learned names from tickets. The torn stubs remember the rest.',
+  },
+  {
+    id: 'guards-note',
+    anchorId: 'u21',
+    title: "The guard's compartment note",
+    foundAt: 'Upper compartment, second carriage',
+    storyNote:
+      'Scorched paper wedged behind the upper latch. "Fire took the front car at the river bridge. We sealed the doors behind it and cut the name apart — one mark per carriage — so it could not call itself whole. Whoever speaks it last carries it."',
+    riteNote: 'The name was cut apart on purpose. Rebuild it only inside the seal.',
+  },
+  {
+    id: 'last-diary-page',
+    anchorId: 'u11',
+    title: 'The last diary page',
+    foundAt: 'Upper compartment, front carriage',
+    storyNote:
+      'A half-burned diary page, stiff with heat. "It is walking the aisle again, looking for the rest of itself. If you are reading this upstairs, you are already above it. Finish the name below, in the ash where the line ended, and let us all stop happening."',
+    riteNote: 'You are above it now. Go down and finish what the fire started.',
+  },
+]
+
+// The two residue clues. Placement is not fixed: createCluePlan deals them
+// spots from the same eight as the name marks, so a run spreads them across
+// the carriages like any other clue.
 export const RESIDUE_ANCHORS = [
   {
     id: 'torn-ticket',
-    car: 3,
-    t: 0.3,
-    x: 2.34,
-    y: 0.58,
-    face: '+x',
     title: 'Torn ticket stub',
-    foundAt: 'Passenger carriage, beneath the seats',
+    foundAt: 'Passenger carriage, left on the deck',
   },
   {
     id: 'burnt-tag',
-    car: 2,
-    t: 0.4,
-    x: 3.46,
-    y: 0.58,
-    face: '-x',
     title: 'Half-burned name tag',
-    foundAt: 'Passenger carriage, on the luggage rack',
+    foundAt: 'Passenger carriage, left on the deck',
   },
 ]
 
@@ -198,36 +268,75 @@ export function shuffle(list, rng) {
   return copy
 }
 
-export function selectLetterAnchors(count, rng = Math.random) {
+export function selectLetterAnchors(count, rng = Math.random, exclude = []) {
+  const skip = new Set(exclude.map((anchor) => anchor.id))
   const byCar = new Map()
   for (const anchor of LETTER_ANCHORS) {
+    if (skip.has(anchor.id)) continue
     if (!byCar.has(anchor.car)) byCar.set(anchor.car, [])
     byCar.get(anchor.car).push(anchor)
   }
-  const cars = [...byCar.keys()].sort((a, b) => b - a)
-  for (const car of cars) byCar.set(car, shuffle(byCar.get(car), rng))
+  const cars = shuffle([...byCar.keys()], rng)
+  const pools = new Map(cars.map((car) => [car, shuffle(byCar.get(car), rng)]))
+
+  // Spread the run evenly — eight clues over four cars is 2/2/2/2, nine is
+  // 3/2/2/2 — and let a random car take each leftover slot.
+  const quotas = new Map(cars.map((car) => [car, Math.floor(count / cars.length)]))
+  let leftover = count - quotas.get(cars[0]) * cars.length
+  for (const car of cars) {
+    if (leftover <= 0) break
+    quotas.set(car, quotas.get(car) + 1)
+    leftover--
+  }
 
   const picked = []
-  let depth = 0
-  while (picked.length < count && depth < 8) {
-    for (const car of cars) {
-      if (picked.length >= count) break
-      const pool = byCar.get(car)
-      if (pool.length > depth) picked.push(pool[depth])
-    }
-    depth++
+  for (const car of cars) {
+    const pool = pools.get(car)
+    for (let slot = 0; slot < quotas.get(car) && pool.length; slot++) picked.push(pool.shift())
+  }
+  // A car that ran dry (its spots were all pinned) is topped up from the rest.
+  while (picked.length < count) {
+    const car = cars.find((candidate) => pools.get(candidate).length)
+    if (!car) break
+    picked.push(pools.get(car).shift())
   }
   return picked
 }
 
-export function createCluePlan(rng = Math.random) {
+function resolvePlacements(placements, letterCount) {
+  const pinnedBySlot = new Map()
+  const pinnedIds = new Set()
+  const limit = Math.min(placements.length, letterCount)
+  for (let slot = 0; slot < limit; slot++) {
+    const id = placements[slot]
+    if (!id) continue
+    const anchor = LETTER_ANCHORS.find((candidate) => candidate.id === id)
+    if (!anchor) throw new Error(`CLUE_PLACEMENTS: unknown LETTER_ANCHORS id "${id}"`)
+    if (pinnedIds.has(id)) throw new Error(`CLUE_PLACEMENTS: anchor "${id}" is pinned twice`)
+    pinnedBySlot.set(slot, anchor)
+    pinnedIds.add(id)
+  }
+  return pinnedBySlot
+}
+
+export function createCluePlan(rng = Math.random, options = {}) {
   const profile = chooseProfile(rng)
   const letters = kanaLetters(profile)
-  const anchors = selectLetterAnchors(letters.length, rng)
-  const order = shuffle(anchors.map((anchor, index) => index), rng)
+  const placements = options.letterPlacements ?? CLUE_PLACEMENTS.letters ?? []
+  const pinnedBySlot = resolvePlacements(placements, letters.length)
+
+  // One deal covers the whole run: name marks and residues together, so the
+  // eight spots split evenly across the carriages — 2/2/2/2 or 3/2/2/2 — and
+  // no clue shares a spot with another.
+  const autoCount = letters.length - pinnedBySlot.size
+  const deal = selectLetterAnchors(autoCount + RESIDUE_ANCHORS.length, rng, [...pinnedBySlot.values()])
+  const residuePool = deal.slice(autoCount)
+  const autoQueue = shuffle(deal.slice(0, autoCount), rng)
+  const freeSlots = letters.map((_, index) => index).filter((index) => !pinnedBySlot.has(index))
+  freeSlots.forEach((slot, index) => pinnedBySlot.set(slot, autoQueue[index]))
 
   const letterPlan = letters.map((char, slot) => {
-    const anchor = anchors[order[slot]]
+    const anchor = pinnedBySlot.get(slot)
     return {
       id: `letter-${anchor.id}`,
       slot,
@@ -238,14 +347,15 @@ export function createCluePlan(rng = Math.random) {
     }
   })
 
-  const residuePlan = RESIDUE_ANCHORS.map((anchor) => {
-    const data = profile.residue[anchor.id]
+
+  const residuePlan = RESIDUE_ANCHORS.map((entry, index) => {
+    const data = profile.residue[entry.id]
     return {
-      id: anchor.id,
+      id: entry.id,
       slot: residueSlot(profile, data),
-      anchor,
-      title: anchor.title,
-      foundAt: anchor.foundAt,
+      anchor: residuePool[index],
+      title: entry.title,
+      foundAt: entry.foundAt,
       storyNote: data.storyNote,
       hintNote: data.hintNote,
     }

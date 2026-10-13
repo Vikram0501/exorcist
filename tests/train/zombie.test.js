@@ -291,6 +291,32 @@ test('a broken rite sends the stalker at the player and the finished name sends 
   assert.equal(group.position.z, reached, 'the aisle stays exactly where it was left')
 })
 
+test('the name calls the spirit up in the aisle to face the player, and it never moves again', () => {
+  const { zombie, group } = harness()
+  step(zombie, playerAt(AISLE_X, 6), 1)
+
+  assert.equal(zombie.appearAt(-20), true)
+  assert.equal(zombie.state, 'apparition')
+  assert.equal(zombie.banished, false, 'apparition is its own ending, not a banishment')
+  assert.equal(group.visible, true, 'it stands up in the aisle')
+  assert.ok(Math.abs(group.position.x - AISLE_X) < 0.4, `it stands in the aisle lane at x ${group.position.x}`)
+  assert.ok(group.position.z > -20.5 && group.position.z < -19.5, `it stands where it was called (${group.position.z})`)
+  assert.ok(
+    Math.abs(group.position.y - (zombie.floorY + zombie.footOffset)) < 1e-6,
+    `its feet stay on the deck (${group.position.y})`
+  )
+
+  const still = group.position.clone()
+  assert.equal(zombie.update(0.05, playerAt(AISLE_X, -6)), null, 'an apparition can never catch the player')
+  assert.ok(group.position.distanceTo(still) < 1e-6, 'it does not walk')
+  assert.equal(zombie.stalk(2.9, 0), false, 'it cannot be called off the spot')
+  assert.equal(zombie.banish(), true, 'it can still be sent away')
+
+  const clamped = harness()
+  clamped.zombie.appearAt(-9999)
+  assert.equal(clamped.group.position.z, clamped.zombie.minZ, 'a call past the carriage end is clamped in')
+})
+
 test('the floor probe falls back to ground level without collision data', () => {
   assert.equal(trainFloorAt(undefined, AISLE_X, 0), 0)
   assert.equal(trainFloorAt([], AISLE_X, 0), 0)

@@ -1,9 +1,10 @@
 import * as THREE from 'three'
-import { REAR_LETTER } from './story-data.js'
-import { trainFloorAt } from './zombie.js'
+import { REAR_LETTER, UPPER_LETTERS, UPPER_LETTER_ANCHORS } from './story-data.js'
+import { trainFloorAt, trainUpperFloorAt } from './zombie.js'
 
 const KANA_FONT = '"hakidame", "Yu Gothic", "Meiryo", "Hiragino Sans", "Noto Sans CJK JP", "MS Gothic", sans-serif'
 const DECK_FALLBACK = 0.4
+const UPPER_DECK_FALLBACK = 3.13
 const PAPER_LIFT = 0.015
 
 function makeTexture(draw, size = 256) {
@@ -97,10 +98,66 @@ function rearLetterTexture() {
   }, 512)
 }
 
+function upperLetterTexture(title) {
+  return makeTexture((context, size) => {
+    context.fillStyle = '#d4c8ab'
+    context.fillRect(0, 0, size, size)
+    let seed = 0
+    for (const ch of title) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0
+      return seed / 4294967296
+    }
+    context.fillStyle = 'rgba(110, 88, 52, 0.12)'
+    for (let stain = 0; stain < 3; stain++) {
+      context.beginPath()
+      context.ellipse(size * rand(), size * rand(), size * (0.14 + rand() * 0.18), size * (0.08 + rand() * 0.1), rand() * 2, 0, Math.PI * 2)
+      context.fill()
+    }
+    context.strokeStyle = 'rgba(52, 40, 24, 0.5)'
+    context.lineWidth = Math.max(1, size * 0.005)
+    context.strokeRect(size * 0.05, size * 0.05, size * 0.9, size * 0.9)
+    context.textAlign = 'center'
+    context.fillStyle = 'rgba(44, 32, 20, 0.92)'
+    const words = title.split(' ')
+    const half = Math.ceil(words.length / 2)
+    context.font = `${size * 0.055}px Georgia, "Times New Roman", serif`
+    context.fillText(words.slice(0, half).join(' '), size / 2, size * 0.15)
+    if (words.length > half) context.fillText(words.slice(half).join(' '), size / 2, size * 0.22)
+    context.strokeStyle = 'rgba(48, 36, 24, 0.65)'
+    context.lineWidth = size * 0.011
+    context.lineCap = 'round'
+    for (let row = 0; row < 8; row++) {
+      const y = size * (0.33 + row * 0.068)
+      let x = size * 0.12
+      const end = size * (0.66 + rand() * 0.2)
+      context.beginPath()
+      context.moveTo(x, y)
+      while (x < end) {
+        const word = size * (0.05 + rand() * 0.07)
+        context.quadraticCurveTo(x + word * 0.5, y + size * 0.02 * (rand() - 0.5) * 2, x + word, y)
+        x += word + size * 0.02
+      }
+      context.stroke()
+    }
+  }, 512)
+}
+
 function anchorPosition(carriage, anchor) {
   const { min, max } = carriage.bounds
   const z = min.z + anchor.t * (max.z - min.z)
   return new THREE.Vector3(anchor.x, anchor.y, z)
+}
+
+// Floor anchors carry no height of their own: probe the deck the collision
+// reports under the spot so the paper lands on whatever it is actually lying
+// on — floor, stair tread or shelf — instead of sinking into it.
+function floorAnchor(carriage, anchor, colliders) {
+  if (!anchor.floor || anchor.y != null) return anchor
+  const { min, max } = carriage.bounds
+  const z = min.z + anchor.t * (max.z - min.z)
+  const deck = colliders ? trainFloorAt(colliders, anchor.x, z) : 0
+  return { ...anchor, y: (deck > 0.05 ? deck : DECK_FALLBACK) + PAPER_LIFT }
 }
 
 function buildProp({ carriage, anchor, texture, width, height }) {
@@ -117,11 +174,7 @@ function buildProp({ carriage, anchor, texture, width, height }) {
   const world = anchorPosition(carriage, anchor)
   const local = carriage.group.worldToLocal(world.clone())
   mesh.position.copy(local)
-  if (anchor.floor) {
-    mesh.rotation.set(Math.PI / 2, Math.PI, 0)
-  } else {
-    mesh.rotation.y = anchor.face === '+x' ? Math.PI / 2 : -Math.PI / 2
-  }
+  mesh.rotation.set(Math.PI / 2, Math.PI, 0)
   mesh.name = `train-clue-${anchor.id}`
   mesh.userData.sharedAsset = false
   mesh.userData.dispose = () => {
@@ -133,18 +186,49 @@ function buildProp({ carriage, anchor, texture, width, height }) {
   return mesh
 }
 
+// Sprite tags marking every clue, shown by the carriage-light debug toggle
+// (K). They draw through the carriage so a clue tucked under a seat or left
+// on a stair tread can still be found while playtesting.
+function createClueDebugTag(item) {
+  if (typeof document === 'undefined') return null
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 64
+  const context = canvas.getContext('2d')
+  context.fillStyle = 'rgba(24, 4, 4, 0.85)'
+  context.fillRect(0, 0, 256, 64)
+  context.fillStyle = '#ff6a52'
+  context.font = '18px monospace'
+  context.fillText(item.id, 8, 26)
+  context.fillStyle = '#f0d7b4'
+  context.font = '14px monospace'
+  context.fillText(`${item.kind} · y ${item.object.position.y.toFixed(2)}`, 8, 50)
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  const material = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true })
+  const sprite = new THREE.Sprite(material)
+  sprite.scale.set(1.7, 0.42, 1)
+  sprite.renderOrder = 1000
+  sprite.name = `train-clue-tag-${item.id}`
+  sprite.visible = false
+  sprite.position.copy(item.object.position)
+  sprite.position.y += 0.45
+  sprite.userData.sharedAsset = false
+  sprite.userData.dispose = () => {
+    material.map?.dispose()
+    material.dispose()
+  }
+  item.object.parent.add(sprite)
+  return sprite
+}
+
 export function createTrainClues({ carriages, plan, colliders }) {
   const items = []
   const meshes = []
 
   const rearCarriage = carriages[REAR_LETTER.anchor.car]
   if (rearCarriage) {
-    const anchor = { ...REAR_LETTER.anchor }
-    const { min, max } = rearCarriage.bounds
-    const deck = colliders
-      ? trainFloorAt(colliders, anchor.x, min.z + anchor.t * (max.z - min.z))
-      : 0
-    anchor.y = (deck > 0.05 ? deck : DECK_FALLBACK) + PAPER_LIFT
+    const anchor = floorAnchor(rearCarriage, REAR_LETTER.anchor, colliders)
     const mesh = buildProp({
       carriage: rearCarriage,
       anchor,
@@ -165,17 +249,40 @@ export function createTrainClues({ carriages, plan, colliders }) {
     })
   }
 
+  for (const entry of UPPER_LETTERS) {
+    const anchorDef = UPPER_LETTER_ANCHORS.find((anchor) => anchor.id === entry.anchorId)
+    const carriage = anchorDef ? carriages[anchorDef.car] : null
+    if (!carriage) continue
+    const anchor = { ...anchorDef, floor: true }
+    const { min, max } = carriage.bounds
+    const z = min.z + anchor.t * (max.z - min.z)
+    const deck = colliders ? trainUpperFloorAt(colliders, anchor.x, z) : UPPER_DECK_FALLBACK
+    anchor.y = deck + PAPER_LIFT
+    const mesh = buildProp({
+      carriage,
+      anchor,
+      texture: upperLetterTexture(entry.title),
+      width: 0.46,
+      height: 0.58,
+    })
+    meshes.push(mesh)
+    items.push({
+      id: entry.id,
+      title: entry.title,
+      foundAt: entry.foundAt,
+      storyNote: entry.storyNote,
+      riteNote: entry.riteNote,
+      object: mesh,
+      story: true,
+      kind: 'note',
+      upper: true,
+    })
+  }
+
   for (const letter of plan.letters) {
     const carriage = carriages[letter.anchor.car]
     if (!carriage) continue
-    const anchor = { ...letter.anchor }
-    if (anchor.floor) {
-      const { min, max } = carriage.bounds
-      const deck = colliders
-        ? trainFloorAt(colliders, anchor.x, min.z + anchor.t * (max.z - min.z))
-        : 0
-      anchor.y = (deck > 0.05 ? deck : DECK_FALLBACK) + PAPER_LIFT
-    }
+    const anchor = floorAnchor(carriage, letter.anchor, colliders)
     const texture = letterTexture(letter.char)
     const mesh = buildProp({ carriage, anchor, texture, width: 0.5, height: 0.5 })
     meshes.push(mesh)
@@ -197,8 +304,9 @@ export function createTrainClues({ carriages, plan, colliders }) {
   for (const residue of plan.residue) {
     const carriage = carriages[residue.anchor.car]
     if (!carriage) continue
+    const anchor = floorAnchor(carriage, residue.anchor, colliders)
     const texture = residueTexture(residue.title)
-    const mesh = buildProp({ carriage, anchor: residue.anchor, texture, width: 0.44, height: 0.34 })
+    const mesh = buildProp({ carriage, anchor, texture, width: 0.44, height: 0.34 })
     meshes.push(mesh)
     items.push({
       id: residue.id,
@@ -213,10 +321,37 @@ export function createTrainClues({ carriages, plan, colliders }) {
     })
   }
 
+  const tags = []
+  const debug = {
+    // Built on first show so nothing touches the DOM until debug is on.
+    show() {
+      if (tags.length === 0) {
+        for (const item of items) {
+          if (!item.object?.parent) continue
+          const tag = createClueDebugTag(item)
+          if (tag) tags.push(tag)
+        }
+      }
+      for (const tag of tags) tag.visible = true
+    },
+    hide() {
+      for (const tag of tags) tag.visible = false
+    },
+    dispose() {
+      for (const tag of tags) {
+        tag.userData.dispose?.()
+        tag.removeFromParent()
+      }
+      tags.length = 0
+    },
+  }
+
   return {
     items,
     meshes,
+    debug,
     dispose() {
+      debug.dispose()
       for (const mesh of meshes) {
         mesh.userData.dispose?.()
         mesh.removeFromParent()

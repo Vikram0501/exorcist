@@ -32,9 +32,17 @@ const PROBE_RADIUS = 0.1
 const FLOOR_PROBE_OFFSETS = [-0.5, -0.3, -0.1, 0.1, 0.3, 0.5]
 const FLOOR_SAMPLES = 7
 const FLOOR_MIN_Y = 0.2
+// Upper-deck deck heights observed in the shipped double-decker carriage:
+// the walking lane sits at ~3.15 and the compartment rows at ~2.95.
+const UPPER_DECK_HEIGHTS = [3.13, 2.93]
+const UPPER_PROBE_TOP = 5.2
+const UPPER_FALLBACK = 3.13
+const UPPER_MIN_Y = 2.5
 const AISLE_RETURN = 6
 const TURN_SMOOTHING = 8
 const MAX_PLAYBACK_RATE = 1.6
+// Slow enough that the walk cycle reads as a last, deliberate advance.
+const APPARITION_PLAYBACK = 0.45
 const ORIENT_INTERVAL = 20
 
 function probe(world, x, y, z) {
@@ -46,8 +54,8 @@ function probe(world, x, y, z) {
   return world.capsuleIntersect(capsule)
 }
 
-function surfaceAt(world, x, z) {
-  let y = 3
+function surfaceAt(world, x, z, fromY = 3) {
+  let y = fromY
   while (y > -1 && probe(world, x, y, z)) y -= 0.1
   if (y <= -1) return null
 
@@ -86,6 +94,26 @@ export function trainFloorAt(colliders, x, z) {
   const world = floorWorld(colliders)
   if (!world) return 0
   return sampleFloor(world, x, z) ?? 0
+}
+
+// Deck height of the double-decker's upper level at (x, z). The upper floor
+// sits well above the lower deck, so the standing capsule is probed directly
+// at the known deck heights and backed by a surface probe from the roof void.
+export function trainUpperFloorAt(colliders, x, z) {
+  const world = floorWorld(colliders)
+  if (!world) return UPPER_FALLBACK
+  for (const feet of UPPER_DECK_HEIGHTS) {
+    const standing = new Capsule(
+      new THREE.Vector3(x, feet + 0.2, z),
+      new THREE.Vector3(x, feet + 0.8, z),
+      0.2
+    )
+    if (world.capsuleIntersect(standing)) continue
+    // Require deck under the feet so a mid-air void never reads as a floor.
+    if (probe(world, x, feet - 0.06, z)) return feet
+  }
+  const surface = surfaceAt(world, x, z, UPPER_PROBE_TOP)
+  return surface !== null && surface >= UPPER_MIN_Y ? surface : UPPER_FALLBACK
 }
 
 export function trainFloorAlong(colliders, x, minZ, maxZ) {
@@ -349,8 +377,27 @@ export class TrainZombie {
     return true
   }
 
+  // The exorcism apparition: the spirit stands up in the aisle of the burnt
+  // carriage, faces whoever called its name, and never moves again.
+  appearAt(z) {
+    if (!this.group) return false
+    this.banished = false
+    this.state = 'apparition'
+    this.prowling = false
+    this.pause = 0
+    this.memory = 0
+    this.hidden = false
+    const depth = THREE.MathUtils.clamp(z, this.minZ, this.maxZ)
+    const lane = this.laneAt(depth)
+    const x = laneCentre(lane)
+    this.group.position.set(x, this.floorY + this.footOffset, depth)
+    this.group.visible = true
+    this.target.set(x, depth)
+    return true
+  }
+
   stalk(x, z) {
-    if (!this.group || this.banished) return false
+    if (!this.group || this.banished || this.state === 'apparition') return false
     this.state = 'hunt'
     this.memory = MEMORY_TIME
     this.pause = 0
@@ -371,6 +418,19 @@ export class TrainZombie {
 
   update(dt, player) {
     if (!this.group || this.banished) return null
+
+    if (this.state === 'apparition') {
+      this.hidden = false
+      this.group.visible = true
+      this.orientToward(player)
+      this.group.rotation.y = rotateToward(
+        this.group.rotation.y,
+        this.facing,
+        1 - Math.exp(-TURN_SMOOTHING * dt)
+      )
+      if (this.mixer) this.mixer.update(dt * APPARITION_PLAYBACK)
+      return null
+    }
 
     this.hidden = this.isHidden(player)
     this.group.visible = Math.abs(player.position.z - this.group.position.z) < VISIBLE_RANGE
