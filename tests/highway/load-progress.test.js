@@ -212,10 +212,10 @@ test('audio readiness times out instead of blocking forever', async (t) => {
   assert.equal(await audio.waitForReady(20), false)
 })
 
-test('load event name is shared between game and menu', () => {
+test('highway progress stays off the campaign briefing', () => {
   assert.ok(
-    mainJs.includes('HIGHWAY_LOAD_EVENT'),
-    'menu listens to the tracker event, not a duplicate string'
+    !mainJs.includes('HIGHWAY_LOAD_EVENT') && !mainJs.includes('LOADING ${pct}%'),
+    'the briefing does not show raw asset progress'
   )
   assert.equal(typeof HIGHWAY_LOAD_EVENT, 'string')
 })
