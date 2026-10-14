@@ -278,10 +278,10 @@ test('brakesWorking=false preserves brake-cut behaviour', () => withWindow(() =>
   c.brakesWorking = false
   const rolling = c.speed
   step(c, 0.5, { KeyS: true })
-  // Failed brakes: S neither brakes nor drags the car down.
+  // Failed brakes: S adds no braking force; only passive drag applies.
   assert.ok(
-    Math.abs(c.speed - rolling) < 1e-9,
-    `brakes dead, ${rolling} -> ${c.speed}`
+    c.speed < rolling && c.speed > rolling - c.friction * 0.5 - 0.01,
+    `only coasting drag, ${rolling} -> ${c.speed}`
   )
   // Steering still works with failed brakes.
   step(c, 0.5, { KeyA: true })

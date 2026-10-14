@@ -7,12 +7,17 @@ import {
   HighwayRaceController,
 } from '../../src/levels/highway/race.js'
 import { HighwayHUD } from '../../src/levels/highway/hud.js'
+import { Game, isGhostNameCorrect } from '../../src/core/game.js'
 import {
+  createCollectibles,
   resetCollectibles,
 } from '../../src/levels/highway/collectibles.js'
 import {
+  createGhostNameUI,
+  pickRandomGhostName,
   resetGhostNameUI,
 } from '../../src/levels/highway/index.js'
+import { createRoadSigns } from '../../src/levels/highway/signs.js'
 import { createDefaultTrack } from '../../src/levels/highway/track.js'
 
 // Headless DOM stubs: plain objects, no layout engine.
@@ -53,7 +58,12 @@ function withStubs(fn) {
   const body = makeElement('body')
   const head = makeElement('head')
   globalThis.document = {
-    createElement: (tag) => makeElement(tag),
+    createElement: (tag) => {
+      const el = makeElement(tag)
+      if (tag === 'canvas') el.getContext = () => ({ fillRect() {}, strokeRect() {}, fillText() {} })
+      return el
+    },
+    getElementById: () => ({ classList: { add() {} } }),
     body,
     head,
   }
@@ -211,6 +221,67 @@ test('reset can repeat after multiple deaths without breaking', () => withStubs(
   player.dispose()
   race.dispose()
 }))
+
+test('Play Again changes the ghost name, clues and answer on consecutive rounds without new listeners', () => withStubs(({ listeners, body }) => {
+  const { track, player, race } = makeLiveRace()
+  const game = Object.create(Game.prototype)
+  const model = new THREE.Group()
+  const firstName = race.ghostName
+  game.currentLevel = 'highway'
+  game.levelState = 'GAME_OVER'
+  game.levelData = { track, arcLengths: track.arcLengths, totalRoadLength: track.totalLength }
+  game.model = model
+  game.obstacles = []
+  game.ghostNameUI = createGhostNameUI(firstName)
+  game.collectibles = createCollectibles(firstName, model, game.ghostNameUI, track, track.arcLengths, track.totalLength)
+  game.roadSigns = createRoadSigns(firstName, model, track)
+  game.highwayController = player
+  game.highwayRace = race
+  race.ghostNameUI = game.ghostNameUI
+  game.highwayAudio = { setHighwayActive() {}, setPlayerDriving() {} }
+  game.highwayHUD = { reset() {} }
+  game.input = { clear() {}, lock() {} }
+
+  const originalKeyDown = player.onKeyDown
+  for (let round = 0; round < 3; round++) {
+    const previousName = race.ghostName
+    const previousUI = game.ghostNameUI
+    const previousPickups = game.collectibles.slice()
+    const previousSigns = game.roadSigns.slice()
+    game.pendingGhostName = previousName
+    game.nameInput = { value: previousName }
+    game.ghostNameUI.revealLetter(0)
+    game.restartHighway()
+
+    assert.notEqual(race.ghostName, previousName, `round ${round}: new name`)
+    assert.equal(game.pendingGhostName, null, 'old answer cleared')
+    assert.equal(game.nameInput, null, 'old question input removed')
+    assert.equal(race.ghostNameUI, game.ghostNameUI, 'race and game use the same banner')
+    assert.equal(isGhostNameCorrect(race.ghostName, race.ghostName), true)
+    assert.equal(isGhostNameCorrect(previousName, race.ghostName), false, 'old name is not the answer')
+    assert.equal(game.ghostNameUI._slots.map(slot => slot.letter).join(''), race.ghostName.replace(' ', ''))
+    assert.ok(game.ghostNameUI._slots.every(slot => !slot.revealed), 'new clues start hidden')
+    assert.equal(game.collectibles.length, game.ghostNameUI._total, 'one pickup per new letter')
+    assert.equal(game.collectibles.map(pickup => pickup.letter).join(''), race.ghostName.replace(' ', ''))
+    assert.equal(previousUI.parentNode, null, 'old banner removed')
+    assert.ok(previousPickups.every(pickup => !pickup.mesh.parent), 'old pickups removed')
+    assert.ok(previousSigns.every(sign => !sign.parent), 'old hint signs removed')
+    assert.equal(body.children.filter(child => child._slots).length, 1, 'one live name banner')
+    assert.equal(player.onKeyDown, originalKeyDown)
+    assert.equal(listeners.added, 2, 'no extra car key listeners')
+    assert.equal(race.brakeCutPhase, 'none', 'brake event re-armed')
+    assert.equal(race.time, 0, 'countdown reset')
+  }
+  player.dispose()
+  race.dispose()
+  assert.equal(listeners.removed, 2, 'car listeners cleaned up on dispose')
+}))
+
+test('name picker excludes the previous name even when random repeats', () => {
+  const first = pickRandomGhostName(null, () => 0)
+  const next = pickRandomGhostName(first, () => 0)
+  assert.notEqual(next, first)
+})
 
 test('HUD.reset zeroes timer, checkpoints and toasts without new nodes', () => withStubs(({ body }) => {
   const controller = { pathProgress: 500, speed: 20 }

@@ -79,29 +79,37 @@ test('brake failure triggers at the scripted progress with warning then cut', ()
   race.dispose()
 }))
 
-// 2. While disabled, S / coasting / Space cannot slow the car.
-test('disabled brakes block S, coasting drag and Space substitute braking', () => withStubs(() => {
+// 2. Failed brakes ignore S while passive rolling drag remains available.
+test('disabled brakes ignore S and reverse, but preserve natural coasting drag', () => withStubs(() => {
   const { player, race } = makeLiveRace()
   cruise(player)
-  race.brakeCutPhase = 'cut'
-  race.brakeCutTimer = 0
-  player.brakesWorking = false
-  race.brakeCutAftermathEl.style.display = 'block'
-  const rolling = player.speed
+  driveTo(race, player, race.brakeCutWarningProgress + 1)
+  race.updateBrakeCut(BRAKE_CUT_WARNING_DURATION)
+  assert.equal(race.brakeCutPhase, 'cut')
+  assert.equal(player.brakesWorking, false)
+  const rolling = player.velocity.dot(player.forwardVector(new THREE.Vector3()))
   assert.ok(rolling > 15)
-  // Holding S at speed: no braking, no reverse.
+  // Compare the same start speed with S held and without input.
+  player.placeAt(200, 0)
+  player.velocity.copy(player.forwardVector(new THREE.Vector3()).multiplyScalar(rolling))
   player.keys = { KeyS: true }
   for (let i = 0; i < 30; i++) player.update(1 / 60)
-  assert.ok(Math.abs(player.speed - rolling) < 1e-9, `S dead ${rolling} -> ${player.speed}`)
+  const failedBrakeSpeed = player.speed
+  assert.equal(player.brakeInput, false, 'S is ignored in the physics input')
   assert.ok(player.speed > 0, 'no reverse bypass')
-  // Releasing everything: no natural drag while cut holds.
+  player.placeAt(200, 0)
+  player.velocity.copy(player.forwardVector(new THREE.Vector3()).multiplyScalar(rolling))
   player.keys = {}
   for (let i = 0; i < 30; i++) player.update(1 / 60)
-  assert.ok(Math.abs(player.speed - rolling) < 1e-9, `no coasting drag ${rolling} -> ${player.speed}`)
+  assert.ok(Math.abs(player.speed - failedBrakeSpeed) < 1e-6, 'holding S is identical to coasting')
+  assert.ok(player.speed < rolling, 'natural drag remains active')
   // Space: no substitute-brake drag.
+  const coastingSpeed = player.speed
+  player.placeAt(200, 0)
+  player.velocity.copy(player.forwardVector(new THREE.Vector3()).multiplyScalar(rolling))
   player.keys = { Space: true }
   for (let i = 0; i < 30; i++) player.update(1 / 60)
-  assert.ok(player.speed > rolling - 2, `Space no loophole ${rolling} -> ${player.speed}`)
+  assert.ok(Math.abs(player.speed - coastingSpeed) < 1e-6, 'Space does not add braking force')
   player.dispose()
   race.dispose()
 }))
@@ -128,7 +136,7 @@ test('steering, acceleration and collisions survive brake failure', () => withSt
   player.keys = {}
   const rolling = player.speed
   player.update(1 / 60)
-  assert.ok(Math.abs(player.speed - rolling) < 1e-9, 'no phantom drag or drive')
+  assert.ok(player.speed < rolling, 'passive drag still applies')
   // Obstacle collision still crashes through the normal path.
   player.placeAt(40, 0)
   player.velocity.copy(player.forwardVector(new THREE.Vector3()).multiplyScalar(30))

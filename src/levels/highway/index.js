@@ -30,11 +30,9 @@ const GHOST_NAMES = [
 ]
 
 
-function pickRandomGhostName() {
-  const index = Math.floor(
-    Math.random() * GHOST_NAMES.length
-  )
-  return GHOST_NAMES[index]
+export function pickRandomGhostName(previousName = null, random = Math.random) {
+  const choices = GHOST_NAMES.filter(name => name !== previousName)
+  return choices[Math.floor(random() * choices.length)]
 }
 
 

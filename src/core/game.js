@@ -18,15 +18,14 @@ import { TrainRiteView } from '../levels/train/rite-view.js'
 import {
   createHighwayLevel,
   createGhostNameUI,
+  pickRandomGhostName,
   removeGhostNameUI,
-  resetGhostNameUI,
 } from "../levels/highway/index.js"
 
 import {
   createCollectibles,
   updateCollectibles,
   disposeCollectibles,
-  resetCollectibles,
 } from "../levels/highway/collectibles.js"
 
 import {
@@ -1561,7 +1560,7 @@ if (this.loaded) {
               this.highwayController.onCrash = 
               () => {
                 this.showGameOver(
-                  ghostName,
+                  this.highwayRace.ghostName,
                   false,
                   true
                 )
@@ -3305,6 +3304,8 @@ if (this.loaded) {
 
 
   hideNamePuzzle() {
+    clearTimeout(this.nameFocusTimer)
+    this.nameFocusTimer = null
 
     if (this.onNameEntryKey) {
 
@@ -3643,10 +3644,8 @@ if (this.loaded) {
       return
     }
 
-    // In-place restart: no reload, no new listeners/loops/audio, so Play
-    // Again works immediately and repeats indefinitely. Level geometry,
-    // obstacle/collectible meshes and the ghost name are reused; only
-    // gameplay state is reset (see reset() on car/race/HUD + helpers).
+    // Keep the loaded level, car, race controller and their listeners.
+    // Only name-dependent clues are rebuilt for the new round.
     this.hideGameOver()
 
     this.hideNamePuzzle()
@@ -3673,14 +3672,20 @@ if (this.loaded) {
       }
     }
 
-    // Letters + name banner back to blank/visible.
-    if (this.collectibles) {
-      resetCollectibles(this.collectibles)
-    }
-
-    if (this.ghostNameUI) {
-      resetGhostNameUI(this.ghostNameUI)
-    }
+    const ghostName = pickRandomGhostName(this.highwayRace.ghostName)
+    disposeCollectibles(this.collectibles)
+    disposeRoadSigns(this.roadSigns)
+    removeGhostNameUI(this.ghostNameUI)
+    this.ghostNameUI = createGhostNameUI(ghostName)
+    this.collectibles = createCollectibles(
+      ghostName, this.model, this.ghostNameUI,
+      this.levelData.track || this.levelData.roadPath,
+      this.levelData.arcLengths, this.levelData.totalRoadLength,
+      this.obstacles
+    )
+    this.roadSigns = createRoadSigns(ghostName, this.model, this.levelData.track)
+    this.highwayRace.ghostName = ghostName
+    this.highwayRace.ghostNameUI = this.ghostNameUI
 
     // Race reset also resets the player car (positions, speed,
     // collisions, camera) and restores countdown/brake-cut UI.

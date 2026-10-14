@@ -465,10 +465,9 @@ export class HighwayCarController {
       }
     }
 
-    // Rolling drag only while the brakes work: preserves the scripted
-    // brake-cut contract (a cut car keeps rolling instead of coasting
-    // down, exactly like the previous scalar model).
-    if (!this.throttleInput && this.brakesWorking) {
+    // Rolling friction is passive, not a brake control. It still slows a
+    // coasting car during a brake failure, whether or not S is held.
+    if (!this.throttleInput) {
       const drag = this.friction * dt
       if (Math.abs(forwardSpeed) <= drag) {
         forwardSpeed = 0
@@ -622,7 +621,7 @@ export class HighwayCarController {
     const right = this.keys['KeyD'] ? 1 : 0
     this.steerInput = left - right
     this.throttleInput = Boolean(this.keys['KeyW'])
-    this.brakeInput = Boolean(this.keys['KeyS'])
+    this.brakeInput = this.brakesWorking && Boolean(this.keys['KeyS'])
     this.driftInput = Boolean(this.keys['Space'])
   }
 

@@ -391,8 +391,8 @@ test('handbrake cannot bypass failed brakes', () => withWindow(() => {
   // Space must not brake like S would with working brakes.
   step(c, 0.5, { Space: true })
   assert.ok(
-    c.speed > rolling - 2,
-    `no substitute brake, ${rolling.toFixed(1)} -> ${c.speed.toFixed(1)}`
+    Math.abs(c.speed - (rolling - c.friction * 0.5)) < 0.1,
+    `only passive drag, ${rolling.toFixed(1)} -> ${c.speed.toFixed(1)}`
   )
   // But sliding gameplay remains: Space + steering still builds angle.
   step(c, 0.6, { KeyW: true, KeyA: true, Space: true })
