@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { Capsule } from 'three/addons/math/Capsule.js'
+import { EYE_HEIGHT, CROUCH_EYE_HEIGHT } from '../../core/player.js'
 
 const AISLE_X = 2.9
 const FALLBACK_LANE_MIN = 2.55
@@ -21,6 +22,9 @@ const PATH_MARGIN = 0.2
 const CATCH_RADIUS = 0.75
 const CONTACT_RADIUS = 0.45
 const GRAB_REACH = 0.6
+// The stalker only reaches its own deck: the upstairs cabin sits ~2.5
+// units above the ground deck, so a player up there can't be grabbed.
+const CATCH_HEIGHT = 2
 const HOLD_DISTANCE = 0.4
 const PROWL_SPAN = 1.5
 const MEMORY_TIME = 4.5
@@ -486,7 +490,11 @@ export class TrainZombie {
     const reachX = Math.max(0, Math.abs(dx) - (this.hidden ? 0 : GRAB_REACH))
     const reach = Math.hypot(reachX, dz)
     const catchRadius = this.hidden ? CONTACT_RADIUS : CATCH_RADIUS
-    return reach < catchRadius ? 'caught' : null
+    if (reach >= catchRadius) return null
+    // It stalks the deck it walks on: a player a floor above is out of reach.
+    const eyeHeight = player.crouching ? CROUCH_EYE_HEIGHT : EYE_HEIGHT
+    const deckGap = Math.abs(player.position.y - eyeHeight - this.group.position.y)
+    return deckGap < CATCH_HEIGHT ? 'caught' : null
   }
 
   orientToward(player) {

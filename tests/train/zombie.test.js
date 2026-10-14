@@ -147,6 +147,28 @@ test('a stationary player is found by touch, not by sight', () => {
   assert.equal(zombie.update(0.05, still), 'caught')
 })
 
+test('a player in the upstairs cabin is out of reach even overhead', () => {
+  const { zombie, group } = harness()
+  step(zombie, playerAt(AISLE_X, 6), 1)
+  assert.equal(zombie.state, 'patrol')
+
+  // The upper deck sits ~2.55 above the ground deck: the player's feet
+  // are at ~2.95, their eyes near 3.95.
+  const upstairs = playerAt(AISLE_X, 2)
+  upstairs.position.y = 3.95
+  group.position.z = upstairs.position.z
+  group.position.x = AISLE_X
+  assert.equal(zombie.update(0.05, upstairs), null, 'walking beneath the cabin cannot kill')
+  assert.equal(zombie.update(0.05, upstairs), null)
+
+  const crouchedUpstairs = playerAt(AISLE_X, 2, { crouching: true })
+  crouchedUpstairs.position.y = 3.5
+  assert.equal(zombie.update(0.05, crouchedUpstairs), null, 'nor while crouched upstairs')
+
+  const downstairs = playerAt(AISLE_X, 2)
+  assert.equal(zombie.update(0.05, downstairs), 'caught', 'same spot on the ground deck still kills')
+})
+
 function seatedHarness() {
   const group = new THREE.Group()
   const carriages = [carriage(0, 35), carriage(-35, 0), carriage(-70, -35)]
