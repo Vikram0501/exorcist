@@ -133,6 +133,7 @@ cards.forEach((card, index) => card.addEventListener('click', () => prepareCase(
 nextCaseBtn.addEventListener('click', () => prepareCase(levels[Math.min(levels.indexOf(selectedLevel) + 1, 2)]))
 
 const controlsDialog = document.getElementById('controlsDialog')
+const creditsDialog = document.getElementById('creditsDialog')
 const controlSections = [...controlsDialog.querySelectorAll('[data-controls-case]')]
 document.querySelectorAll('[data-controls]').forEach(button => button.addEventListener('click', () => {
   const currentCase = screen === 'pause' ? selectedLevel : null
@@ -142,6 +143,8 @@ document.querySelectorAll('[data-controls]').forEach(button => button.addEventLi
   controlsDialog.showModal()
 }))
 document.getElementById('closeControlsBtn').addEventListener('click', () => controlsDialog.close())
+document.getElementById('creditsBtn').addEventListener('click', () => creditsDialog.showModal())
+document.getElementById('closeCreditsBtn').addEventListener('click', () => creditsDialog.close())
 document.getElementById('respawnBtn').addEventListener('click', () => {
   if (game.respawn()) game.input.lock()
 })
@@ -168,7 +171,7 @@ window.addEventListener('levelcomplete', event => {
 })
 
 window.addEventListener('keydown', event => {
-  if (event.key !== 'Escape' || controlsDialog.open) return
+  if (event.key !== 'Escape' || controlsDialog.open || creditsDialog.open) return
   if (screen === 'pause') {
     event.preventDefault()
     resume()

@@ -29,7 +29,9 @@ function campaign() {
   node('controlsDialog').querySelectorAll = () => controlSections
   node('controlsDialog').showModal = function () { this.open = true }
   node('controlsDialog').close = function () { this.open = false }
-  const controlsButtons = [node('titleControls'), node('pauseControls')]
+  node('creditsDialog').showModal = function () { this.open = true }
+  node('creditsDialog').close = function () { this.open = false }
+  const controlsButtons = [node('pauseControls')]
   const cards = ['house', 'train', 'highway'].map(name => node(`card-${name}`))
   let exits = 0
   const pauses = []
@@ -120,17 +122,18 @@ test('browser-consumed Escape pauses active play, but not death retry or briefin
   assert.equal(ui.exits, 1)
 })
 
-test('title controls show every case; pause controls show only the active case', async () => {
+test('title credits open separately while pause controls show only the active case', async () => {
   const ui = campaign()
-  ui.controlsButtons[0].onclick()
-  assert.ok(ui.controlSections.every(section => !section.hidden))
-  ui.node('controlsDialog').close()
+  ui.node('creditsBtn').onclick()
+  assert.equal(ui.node('creditsDialog').open, true)
+  assert.equal(ui.node('controlsDialog').open, undefined)
+  ui.node('creditsDialog').close()
   ui.node('caseFilesBtn').onclick()
   ui.cards[2].onclick()
   ui.advanceIntro()
   await new Promise(resolve => setImmediate(resolve))
   ui.node('beginCaseBtn').onclick()
   ui.node('pauseBtn').onclick()
-  ui.controlsButtons[1].onclick()
+  ui.controlsButtons[0].onclick()
   assert.deepEqual(ui.controlSections.map(section => section.hidden), [true, true, false])
 })
