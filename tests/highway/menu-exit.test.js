@@ -3,42 +3,134 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 
-test('actual menu handlers exit on browser-consumed ESC, but preserve death retry', () => {
-  const handlers = { window: {}, document: {} }
+function campaign() {
+  const listeners = { window: {}, document: {} }
   const nodes = new Map()
   const node = id => {
     if (!nodes.has(id)) nodes.set(id, {
-      innerHTML: '', classList: { add() {}, remove() {}, toggle() {} },
-      addEventListener() {}, querySelector() { return null },
+      textContent: '', disabled: false, hidden: false, dataset: {},
+      classList: { add() {}, remove() {}, toggle() {} },
+      addEventListener(type, fn) { this[`on${type}`] = fn },
+      querySelector() { return node(`${id}-action`) },
     })
     return nodes.get(id)
   }
+  const screens = ['title', 'cases', 'briefing', 'pause', 'complete'].map(name => {
+    const item = node(name)
+    item.dataset.screen = name
+    return item
+  })
+  node('overlay').querySelectorAll = () => screens
+  const controlSections = ['house', 'train', 'highway'].map(name => {
+    const section = node(`controls-${name}`)
+    section.dataset.controlsCase = name
+    return section
+  })
+  node('controlsDialog').querySelectorAll = () => controlSections
+  node('controlsDialog').showModal = function () { this.open = true }
+  node('controlsDialog').close = function () { this.open = false }
+  const controlsButtons = [node('titleControls'), node('pauseControls')]
+  const cards = ['house', 'train', 'highway'].map(name => node(`card-${name}`))
   let exits = 0
+  const pauses = []
+  const starts = []
+  const timers = []
   const game = {
-    currentLevel: 'highway', loaded: true, levelState: 'RACING',
-    input: { isLocked: false },
+    currentLevel: null, loaded: false, gameOverEl: null, namePuzzleEl: null,
+    input: { isLocked: false, lock() {}, release() {} },
+    setPaused(value) { pauses.push(value) },
+    start(level) {
+      starts.push({ level, briefingVisible: !node('briefing').hidden })
+      this.currentLevel = level
+      this.loaded = true
+      return Promise.resolve(true)
+    },
     exitToMenu() { exits++; this.currentLevel = null; this.loaded = false },
   }
+  const storage = new Map()
   const context = {
-    Game: function () { return game }, HIGHWAY_LOAD_EVENT: 'highwayloadprogress',
-    LEVEL_LOAD_EVENT: 'levelloadprogress',
-    window: { addEventListener(type, fn) { (handlers.window[type] ??= []).push(fn) } },
+    Game: function () { return game }, console, queueMicrotask,
+    setTimeout(fn) { timers.push(fn) },
+    localStorage: {
+      getItem(key) { return storage.get(key) }, setItem(key, value) { storage.set(key, value) },
+    },
+    window: { addEventListener(type, fn) { (listeners.window[type] ??= []).push(fn) } },
     document: {
       getElementById: node, pointerLockElement: null,
-      addEventListener(type, fn) { (handlers.document[type] ??= []).push(fn) },
+      querySelector(selector) { return cards[['house', 'train', 'highway'].findIndex(name => selector.includes(name))] },
+      querySelectorAll() { return controlsButtons },
+      addEventListener(type, fn) { (listeners.document[type] ??= []).push(fn) },
     },
   }
-  const source = readFileSync(new URL('../../src/main.js', import.meta.url), 'utf8')
-    .replace(/^import .*$/gm, '')
+  const source = readFileSync(new URL('../../src/main.js', import.meta.url), 'utf8').replace(/^import .*$/gm, '')
   vm.runInNewContext(source, context)
-  for (const fn of handlers.document.pointerlockchange) fn()
-  assert.equal(exits, 1, 'pointer unlock alone exits when browser consumes Escape')
-  Object.assign(game, { currentLevel: 'highway', loaded: true, levelState: 'GAME_OVER' })
-  for (const fn of handlers.document.pointerlockchange) fn()
-  assert.equal(exits, 1, 'intentional death unlock preserves Play Again')
-  for (const fn of handlers.window.keydown) fn({ key: 'Escape' })
-  assert.equal(exits, 2, 'explicit Escape exits game-over screen')
-  Object.assign(game, { currentLevel: 'highway', loaded: false, levelState: 'RACING' })
-  for (const fn of handlers.window.keydown) fn({ key: 'Escape' })
-  assert.equal(exits, 3, 'Escape works during loading without pointer lock')
+  return {
+    node, cards, game, listeners, storage, starts, controlSections, controlsButtons,
+    advanceIntro() { timers.splice(0).forEach(fn => fn()) },
+    get exits() { return exits }, get pauses() { return pauses },
+  }
+}
+
+test('all cases are available; the selected case preloads behind its own briefing', async () => {
+  const ui = campaign()
+  assert.ok(ui.cards.every(card => !card.disabled))
+  ui.cards[1].onclick()
+  assert.deepEqual(ui.starts, [{ level: 'train', briefingVisible: true }])
+  assert.equal(ui.node('briefingTitle').textContent, 'CASE 02 / NIGHT TRAIN')
+  assert.equal(ui.node('briefing').hidden, false)
+  assert.equal(ui.node('beginCaseBtn').disabled, true)
+  assert.equal(ui.node('briefingStatus').hidden, true)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(ui.node('beginCaseBtn').disabled, true, 'the intro remains visible even if assets load quickly')
+  ui.advanceIntro()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(ui.node('beginCaseBtn').disabled, false)
+  assert.equal(ui.node('briefingStatus').hidden, true)
+  ui.node('beginCaseBtn').onclick()
+  assert.equal(ui.node('pause').hidden, true)
+  ui.node('pauseBtn').onclick()
+  assert.equal(ui.node('pause').hidden, false)
+  assert.equal(ui.pauses.at(-1), true)
+  ui.node('resumeBtn').onclick()
+  assert.equal(ui.pauses.at(-1), false)
+  for (const fn of ui.listeners.window.levelcomplete) fn({ detail: { levelName: 'train' } })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(ui.storage.get('exorcist-unlocked'), '2')
+  ui.node('completionCasesBtn').onclick()
+  assert.ok(ui.cards.every(card => !card.disabled))
+})
+
+test('browser-consumed Escape pauses active play, but not death retry or briefings', async () => {
+  const ui = campaign()
+  ui.node('startBtn').onclick()
+  for (const fn of ui.listeners.document.pointerlockchange) fn()
+  assert.equal(ui.node('briefing').hidden, false)
+  await new Promise(resolve => setImmediate(resolve))
+  ui.advanceIntro()
+  await new Promise(resolve => setImmediate(resolve))
+  ui.node('beginCaseBtn').onclick()
+  ui.game.gameOverEl = {}
+  for (const fn of ui.listeners.document.pointerlockchange) fn()
+  assert.equal(ui.node('pause').hidden, true)
+  ui.game.gameOverEl = null
+  for (const fn of ui.listeners.document.pointerlockchange) fn()
+  assert.equal(ui.node('pause').hidden, false)
+  assert.equal(ui.exits, 0)
+  ui.node('pauseCasesBtn').onclick()
+  assert.equal(ui.exits, 1)
+})
+
+test('title controls show every case; pause controls show only the active case', async () => {
+  const ui = campaign()
+  ui.controlsButtons[0].onclick()
+  assert.ok(ui.controlSections.every(section => !section.hidden))
+  ui.node('controlsDialog').close()
+  ui.node('caseFilesBtn').onclick()
+  ui.cards[2].onclick()
+  ui.advanceIntro()
+  await new Promise(resolve => setImmediate(resolve))
+  ui.node('beginCaseBtn').onclick()
+  ui.node('pauseBtn').onclick()
+  ui.controlsButtons[1].onclick()
+  assert.deepEqual(ui.controlSections.map(section => section.hidden), [true, true, false])
 })

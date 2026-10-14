@@ -423,6 +423,9 @@ export class Game {
 
     // GAME STATE
     this.loaded = false
+    this.paused = false
+    this.completedLevel = null
+    this.pausedAudio = []
     this.houseAudioStartFrame = null
 
     this.started = false
@@ -452,7 +455,7 @@ export class Game {
   // START GAME
   // ============================================
 
-  start(levelName = 'house') {
+  start(levelName = 'house', { lockPointer = true } = {}) {
     if (!this.renderer.domElement.parentNode) {
       this.container.appendChild(this.renderer.domElement)
     }
@@ -472,7 +475,7 @@ export class Game {
 
 
     // Lock mouse immediately from the button click.
-    this.input.lock()
+    if (lockPointer) this.input.lock()
 
 
     // Only start animation loop once.
@@ -522,32 +525,12 @@ export class Game {
     const dt = Math.min(frameTime, 0.05)
     this.updateRenderQuality(frameTime)
 
+    if (this.paused) return
+
 
     // ----------------------------------------
     // LEVEL HOTKEYS
     // ----------------------------------------
-
-    if (
-      this.input.consumePressed('Digit1')
-    ) {
-
-      this.loadLevel('house')
-    }
-
-
-    if (
-      this.input.consumePressed('Digit2')
-    ) {
-
-      this.loadLevel('train')
-    }
-
-    if (
-      this.input.consumePressed('Digit3')
-    ) {
-
-      this.loadLevel('highway')
-    }
 
     if (
       this.currentLevel === 'house' &&
@@ -1456,7 +1439,7 @@ if (this.loaded) {
                 zombie: this.trainZombie,
                 exorcism: this.trainExorcism,
                 audio: this.trainAudio,
-                onExit: () => document.getElementById('overlay')?.classList.remove('hidden'),
+                onExit: () => this.completeLevel('train'),
               })
             : null
 
@@ -1712,6 +1695,7 @@ if (this.loaded) {
             // Level 3 background music: single looping instance,
             // started once per activation (never per frame).
             this.highwayAudio.setHighwayActive(true)
+            if (this.paused) this.pauseAudio()
 
           }
 
@@ -1811,6 +1795,7 @@ if (this.loaded) {
           }
 
           if (levelName === 'train') this.trainAudio.setTrainActive(true)
+          if (this.paused) this.pauseAudio()
 
 
           // Final load step: scene, renderer, cars, obstacles, camera and
@@ -1890,6 +1875,7 @@ if (this.loaded) {
     this.cachedInvestigationItem = null
     this.renderSampleTime = 0
     this.renderSampleFrames = 0
+    this.pausedAudio = []
     clearTimeout(this.nameFocusTimer)
     clearTimeout(this.exorcismFadeTimer)
     this.nameFocusTimer = null
@@ -2150,7 +2136,9 @@ if (this.loaded) {
   // Re-entering any level via start()/loadLevel() starts a fresh game
   // with a single animation loop (never duplicates).
   exitToMenu() {
-    if (this.currentLevel !== 'highway') return
+    if (!this.currentLevel && !this.loaded) return
+    this.paused = false
+    this.completedLevel = null
     this.currentLevel = null
     this.loaded = false
     this.animationRunning = false
@@ -2230,6 +2218,46 @@ if (this.loaded) {
         return [element, display]
       })
 
+  }
+
+  pauseAudio() {
+    const sources = [
+      this.trainAudio.ambient, this.trainAudio.moans,
+      ...Object.values(this.trainAudio.screams),
+      this.highwayAudio.music, this.highwayAudio.carSound, this.highwayAudio.countdown,
+    ]
+    for (const audio of sources) {
+      if (audio && !audio.paused) {
+        this.pausedAudio.push(audio)
+        audio.pause()
+      }
+    }
+    if (this.currentLevel === 'house') this.houseAudio.setPaused(true)
+  }
+
+  setPaused(paused) {
+    if (this.paused === paused) return
+    this.paused = paused
+    if (paused) {
+      this.pauseStartedAt = performance.now()
+      this.pausedAudio = []
+      this.input.clear()
+      this.pauseAudio()
+    } else {
+      if (this.houseStory?.jumpScareTime > 0) {
+        this.houseStory.jumpScareEndsAt += performance.now() - this.pauseStartedAt
+      }
+      for (const audio of this.pausedAudio) audio.play().catch(() => {})
+      this.pausedAudio = []
+      if (this.currentLevel === 'house') this.houseAudio.setPaused(false)
+      this.clock.getDelta()
+    }
+  }
+
+  completeLevel(levelName) {
+    if (this.currentLevel !== levelName || this.completedLevel === levelName) return
+    this.completedLevel = levelName
+    window.dispatchEvent(new CustomEvent('levelcomplete', { detail: { levelName } }))
   }
 
 
@@ -4070,6 +4098,7 @@ if (this.loaded) {
     if (t >= 9) {
 
       this.levelState = 'COMPLETE'
+      queueMicrotask(() => this.completeLevel('highway'))
 
     }
 

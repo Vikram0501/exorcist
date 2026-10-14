@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '..', '..')
 const src = (p) =>
-  fs.readFileSync(path.join(repoRoot, 'src', p), 'utf8').replace(/\r\n/g, '\n')
+  fs.readFileSync(path.join(repoRoot, 'src', p), 'utf8')
 
 // ---------------------------------------------------------------------------
 // Every Level 3 network asset must load through the shared LoadingManager,
@@ -60,7 +60,7 @@ test('no Level 3 asset loader bypasses progress tracking', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Progress events drive the menu percentage UI.
+// Progress events drive the existing menu percentage UI (same as L1/L2).
 // ---------------------------------------------------------------------------
 
 test('loadingManager progress events carry itemsLoaded/itemsTotal', async (t) => {
@@ -110,38 +110,22 @@ test('loadingManager progress events carry itemsLoaded/itemsTotal', async (t) =>
   assert.ok(pct >= 0 && pct <= 100, `percentage in range, got ${pct}`)
 })
 
-test('menu shows LOADING pct%, resets per entry, hides overlay only on success', () => {
+test('briefing hides numeric loading progress and waits for readiness before entry', () => {
   const mainJs = src('main.js')
   assert.ok(
-    mainJs.includes('`LOADING ${pct}%`'),
-    'button shows the live percentage'
+    !mainJs.includes('assetprogress') && !mainJs.includes('HIGHWAY_LOAD_EVENT'),
+    'asset progress is kept off the cinematic screen'
   )
   assert.ok(
-    mainJs.includes("button.textContent = 'LOADING 0%'"),
-    'every level resets to zero on entry'
+    mainJs.includes('briefingStatus.hidden = true') &&
+      mainJs.includes('beginCaseBtn.disabled = true'),
+    'the briefing hides status copy and keeps entry unavailable during preparation'
   )
   assert.ok(
-    mainJs.includes('if (!loaded)') &&
-      mainJs.includes("overlay.classList.add(\n      'hidden'\n    )"),
-    'menu hides only after a successful load, never on failure'
-  )
-})
-
-test('Level 3 starts at 0% and owns its display session', () => {
-  const mainJs = src('main.js')
-  assert.ok(
-    mainJs.includes("button.textContent = 'LOADING 0%'"),
-    'highway entries start at an explicit 0%'
-  )
-  assert.ok(
-    mainJs.includes('HIGHWAY_LOAD_EVENT'),
-    'menu listens to the session tracker event'
-  )
-  assert.ok(mainJs.includes('LEVEL_LOAD_EVENT'), 'house and train use session progress')
-  assert.ok(
-    mainJs.includes('loadingLevel = levelName') &&
-      mainJs.includes('loadingLevel = null'),
-    'display session is set on entry and cleared when loading ends'
+    mainJs.includes('if (!loaded) throw new Error') &&
+      mainJs.includes('beginCaseBtn.disabled = false') &&
+      mainJs.includes("if (!ready || screen !== 'briefing') return"),
+    'begin action becomes available only after a successful load'
   )
 })
 
@@ -163,7 +147,7 @@ test('game threads one session tracker through the highway load', () => {
   )
   assert.ok(
     gameJs.includes("highwayTracker?.complete('init')"),
-    'init completes after the level is marked loaded'
+    'init completes last, just before the level is marked loaded'
   )
   assert.ok(
     gameJs.includes('highwayTracker?.abort()'),

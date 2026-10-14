@@ -85,7 +85,7 @@ export class TrainEnding {
 
     const button = document.createElement('button')
     button.type = 'button'
-    button.textContent = 'RETURN TO THE CASE FILES'
+    button.textContent = 'CONTINUE'
     button.style.cssText =
       'padding:14px 26px;border:1px solid #241d1a;background:transparent;color:#241d1a;' +
       'font:700 12px/1 system-ui,sans-serif;letter-spacing:.22em;cursor:pointer;'

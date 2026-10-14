@@ -156,7 +156,7 @@ export class TrainRiteView {
       action.textContent = 'Return to the case menu'
       action.addEventListener('click', () => {
         this.closeRite(false)
-        document.getElementById('overlay')?.classList.remove('hidden')
+        this.game.completeLevel('train')
       })
     }
 

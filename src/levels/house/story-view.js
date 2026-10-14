@@ -99,6 +99,11 @@ export class HouseStoryView {
   }
 
   showOutcome(type) {
+    if (type === 'complete') {
+      this.outcome = type
+      this.game.completeLevel('house')
+      return
+    }
     this.outcome = type
     this.open = true
     this.game.input.release()
