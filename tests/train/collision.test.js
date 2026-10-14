@@ -29,11 +29,11 @@ function capsule(x, eyeY, z) {
   return new Capsule(new THREE.Vector3(x, eyeY - 0.8, z), new THREE.Vector3(x, eyeY - 0.2, z), 0.2)
 }
 
-function playerWithKeys(keys, start, colliders, frames = 120) {
-  return playerWithRoute([{ keys, frames }], start, colliders)
+function playerWithKeys(keys, start, colliders, frames = 120, dt = 0.05) {
+  return playerWithRoute([{ keys, frames }], start, colliders, dt)
 }
 
-function playerWithRoute(route, start, colliders) {
+function playerWithRoute(route, start, colliders, dt = 0.05) {
   const previousWindow = globalThis.window
   globalThis.window = { addEventListener() {} }
   try {
@@ -43,7 +43,7 @@ function playerWithRoute(route, start, colliders) {
     player.reset(start)
     for (const segment of route) {
       keys = segment.keys
-      for (let frame = 0; frame < segment.frames; frame++) player.update(0.05, colliders)
+      for (let frame = 0; frame < segment.frames; frame++) player.update(dt, colliders)
     }
     return player
   } finally {
@@ -120,6 +120,16 @@ test('shipped stair treads are walkable in both directions without jumping', asy
     Math.abs(trainFloorAt(colliders, 1.202486, -23.641542) - 1.641775) < 0.001,
     'floor queries follow the middle stair surface',
   )
+  const finalFlight = playerWithKeys(
+    ['KeyD'],
+    new THREE.Vector3(1.57, 2.892393, -23.791295),
+    colliders,
+    180,
+    1 / 60,
+  )
+  assert.ok(finalFlight.position.x > 3, 'walking clears the final stair treads')
+  assert.ok(finalFlight.position.y > 4.1, 'walking reaches the upper deck at 60 FPS')
+  assert.ok(finalFlight.isGrounded, 'the player stays grounded across the final stair handoff')
 })
 
 test('an opened lower door lets the player walk through an adjacent carriage join', async () => {
@@ -137,13 +147,22 @@ test('an opened lower door lets the player walk through an adjacent carriage joi
 
   const firstDoor = createTrainCarriageDoor(first, gltf.animations)
   assert.ok(firstDoor, 'the first carriage has its lower connecting door')
-  toggleDoor(firstDoor)
-  updateDoors([firstDoor], firstDoor.openAction.getClip().duration)
 
   const colliders = await createTrainCollision([
     { group: firstGroup, model: first, collisionSource: gltf.scene },
     { group: secondGroup, model: second, collisionSource: gltf.scene },
   ])
+  updateDoors([firstDoor], 1 / 60)
+  const blocked = playerWithKeys(
+    ['KeyW'],
+    new THREE.Vector3(2.75, 1.43, -24.5),
+    [...colliders, ...getDoorColliders([firstDoor])],
+    80,
+  )
+  assert.ok(blocked.position.z > -26, 'the closed door blocks the carriage join')
+
+  toggleDoor(firstDoor)
+  updateDoors([firstDoor], firstDoor.openAction.getClip().duration)
   const player = playerWithKeys(
     ['KeyW'],
     new THREE.Vector3(2.75, 1.43, -24.5),
@@ -155,4 +174,13 @@ test('an opened lower door lets the player walk through an adjacent carriage joi
   assert.equal(getDoorColliders([firstDoor]).length, 0, 'the open panel no longer blocks the join')
   assert.ok(player.position.z < -28, 'the player crosses into the next carriage without jumping')
   assert.ok(player.isGrounded, 'the player stays grounded through the threshold')
+  const reverse = playerWithKeys(
+    ['KeyS'],
+    new THREE.Vector3(2.75, 1.43, -27.5),
+    [...colliders, ...getDoorColliders([firstDoor])],
+    240,
+    1 / 60,
+  )
+  assert.ok(reverse.position.z > -24, 'the player crosses back through the threshold at 60 FPS')
+  assert.ok(reverse.isGrounded, 'the player stays grounded through the reverse threshold crossing')
 })

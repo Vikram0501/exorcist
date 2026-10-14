@@ -14,6 +14,10 @@ test('the type 02 lower door plays its authored open and close animations', asyn
   assert.equal(getDoorColliders([door]).length, 1, 'the closed door blocks the opening')
   assert.ok(door.object.children.every(child => child.userData.dynamicDoor))
 
+  updateDoors([door], 1 / 60)
+  assert.equal(door.openProgress, 0, 'an idle closed animation stays closed')
+  assert.equal(getDoorColliders([door]).length, 1, 'an idle closed door keeps its collider')
+
   const closedRotation = door.object.quaternion.clone()
   const duration = door.openAction.getClip().duration
 
