@@ -14,35 +14,34 @@ Stripped of your title after a failed exorcism gone wrong, you must prove yourse
 
 **Mission 2 — The Undead Train**
 - An undead creature stalks the carriages of a moving train, attacking anything it finds
-- Evade the monster and search the train for tools and holy relics
-- Eventually confront the creature before it's too late
-- Focus: stealth, resource gathering, tension
+- Evade it, collect name marks and residue hints, and record clues in your field notes
+- Speak its name in the burnt carriage to finish the rite
+- Focus: stealth, investigation, tension
 
 **Mission 3 — The Phantom Highway**
 - A phantom forces you into a deadly high-speed race on an open highway
 - Race against a competitive ghost driver with randomized identity
 - Collect glowing letters scattered across the road to spell out the ghost's full name
 - Read roadside clue signs that progressively reveal the ghost's identity
-- Survive a supernatural brake-cut sequence that disables your ability to slow down
-- Outpace the ghost across the finish line to complete the exorcism
+- Survive a temporary brake failure while the car still slows naturally through rolling drag
+- Beat the ghost to the finish, then enter its full name to perform the exorcism
 - Focus: vehicle control, reflexes, risk/reward, final confrontation
 
 ## Controls
 
 | Key | Action |
 |-----|--------|
-| `W` `A` `S` `D` | Move (on foot) / Drive & steer (Level 3 vehicle) |
+| `W` `A` `S` `D` | Move (on foot) / Accelerate, steer, brake or reverse (Level 3) |
 | Mouse | Look around |
-| `Space` | Jump / fly up |
-| `C` | Fly down |
+| `Space` | Jump on foot / drift in Level 3 |
+| `C` | Crouch on foot |
 | `Shift` | Sprint |
 | `E` | Interact with doors, inspect evidence, begin the grave-side rite |
 | `I` | Open / close field notes |
-| `T` | Toggle the torch in Level 1 |
-| `F` | Toggle fly mode |
-| `H` | Toggle collider debug view |
-| `J` | Log nearby wall colliders |
-| `Esc` | Release mouse / pause |
+| `T` | Toggle the torch in Levels 1 and 2 |
+| `V` | Change camera in Level 1 |
+| `R` | Respawn in Level 1 |
+| `Esc` | Pause / resume |
 
 ## Getting Started
 
@@ -57,7 +56,7 @@ npm install
 npm run dev
 ```
 
-The game opens at `http://localhost:5173`. Click **Start Game** to begin.
+The game opens at `http://127.0.0.1:5173`. Choose **Begin** to start at Vale Manor or **Case Files** to replay any case during development. Each case loads behind its introduction; completed cases are marked for replay.
 
 ### Tests
 
@@ -79,56 +78,54 @@ npm run preview
 - Vanilla JavaScript (ES modules, no framework)
 - Custom AABB + circle collision (no physics engine)
 - Level geometry loaded from GLB models via `GLTFLoader` (Levels 1 & 2)
-- Procedural Three.js geometry for Level 3 (road, cars, barriers, signs, collectibles)
+- A GLB road and car models plus procedural circuit scenery, signs, and collectibles for Level 3
 
 ## Level 3 — Phantom Highway
 
-Level 3 is a procedurally generated highway race with no GLB model. All geometry (road, cars, barriers, finish line) is built from Three.js primitives.
+Level 3 is an elevated, banked racing circuit. The road and both cars use GLB assets; scenery, obstacles, signs, and collectible letters are placed along the track.
 
 ### Race
 
 - A 3-2-1-GO countdown starts the race; the player cannot move until "GO!"
-- The player and a ghost car race down a straight highway toward a finish line at z = -320
-- The ghost driver is competitive: it targets staying ~8 units ahead of the player, accelerating up to 38 units/s or braking down to 18 units/s as needed
-- The race ends when either the player or ghost crosses the finish line; a result message is displayed ("YOU RACED [NAME]" or "[NAME] WON")
-- Crossing the finish line stops both cars and displays the outcome
+- The player and a competitive ghost car race through corners, elevation changes, and obstacles to the finish line
+- The race ends when either car crosses the finish; the result determines whether the player gets a chance to name the spirit
 
 ### Ghost Identity
 
 - 10 possible ghost identities, randomly selected each race: MARA VOSS, ELIAS DREAD, ROSE HOLLOW, JACK FINN, LILY ASH, OWEN GRAVE, NORA SHADE, FELIX MOURN, IVY COBALT, OTIS WREN
 - The selected identity drives both the collectible letters and the road sign clues for that race
-- Each run presents a different ghost, encouraging replayability
+- Clicking **Play Again** after losing selects a name different from the previous round and rebuilds the corresponding clues, letters, and name display
 
 ### Collectible Letters
 
 - Each letter of the ghost's full name (first + last) is placed as a glowing pickup on the road
-- Letters spawn at 10 predefined positions along the highway, shuffled randomly
-- Positions are categorised by risk level:
-  - **Safe** (z = -15, -48, -81): early in the race, easy to grab
-  - **Medium** (z = -114, -147, -180): mid-race, requires steering away from the centre
-  - **High** (z = -213, -246, -279, -312): late-race, near the finish, harder to reach
-- The HUD displays blank slots for each letter (e.g. `_ _ _ _ _ _ _ _ _ _`) and a counter ("LETTERS: 3/10")
+- Letters are placed at safe positions along the curved track, clear of road obstacles and other pickups
+- The HUD displays blank slots and a counter based on the selected name's length
 - Collecting a letter reveals it in green on the HUD; repeated letters are separate collectibles where applicable
+- Collected letters appear as hints in the final name puzzle
 
 ### Road Signs
 
-- 8 physical roadside signs are placed along the highway (alternating left and right)
+- Roadside signs are placed at stations along both sides of the circuit
 - Signs are generated from the same ghost identity as the collectibles
-- Clues are tiered by position along the road:
-  - **Early** (z = -40, -70): name lengths ("FIRST NAME 4 LETTERS", "SURNAME 5 LETTERS")
-  - **Middle** (z = -130, -160, -190): starting letters and specific letter reveals ("FIRST NAME STARTS WITH M", "LETTER 3: R IN SURNAME")
-  - **Late** (z = -240, -270, -300): partial name patterns with blanks (e.g. "M _ _ A", "V _ _ _ _")
+- Clues progress from name lengths through starting letters to partial name patterns
 - Signs are 3D objects (pole + board + glow) with flickering emissive animation
 - Signs are regenerated correctly on restart with a new ghost identity
 
 ### Brake Cut
 
-- A brake-cut sequence triggers at z = -172 during the race
+- The brake-cut sequence begins around one-quarter of the way around the circuit
 - **Warning phase** (1.5 s): "BRAKE FAILURE IMMINENT" flickers at the bottom of the screen
-- **Cut phase** (1.0 s): brakes are disabled, the ghost teleports near the player and drives through, the screen background flickers red
-- **Aftermath phase** (4.0 s): "BRAKES FAILED - DON'T STOP NOW" is displayed; the ghost is restored 25 units ahead
-- During the cut phase, `W` continues to accelerate, `S` no longer brakes or reverses, `A`/`D` steering remains available
-- After the aftermath phase the message hides and normal racing resumes
+- **Failure phase** (5 s): "BRAKES FAILED - DON'T STOP NOW" appears; `S` cannot brake or reverse, but rolling drag still slows a coasting car. Acceleration, steering, and drifting remain available.
+- The brakes restore automatically and the message disappears when the failure ends
+
+### Name Puzzle and Finale
+
+- Winning the race leads to a one-attempt name puzzle showing the letters collected during the race
+- The player types the ghost's full name and submits by button or Enter; case and extra whitespace are forgiven
+- A wrong name or losing the race shows **Play Again**; a correct name triggers the exorcism sequence
+- The exorcism freezes both cars, dissolves the ghost, and transitions to the campaign's final case-complete screen
+- Retrying resets the countdown, race, name puzzle, pickups, signs, and failure event while reusing the loaded level and its existing car listeners
 
 ## Project Structure
 
@@ -184,11 +181,11 @@ Level design documents live in `docs/`. Read `docs/BUILDSPEC.md` first if you pl
 - [x] Level 2 (Undead Train) — GLB loading, basic lighting
 - [ ] Level 2 collision, enemies, stealth mechanics
 - [x] Level 2 investigation: name marks, residue hints, field notes, and the burnt-carriage exorcism rite
-- [x] Level 3 (Phantom Highway) — procedural road, vehicle controls, competitive ghost
+- [x] Level 3 (Phantom Highway) — GLB road and cars, circuit scenery, vehicle controls, competitive ghost
 - [x] Level 3 — randomized ghost identities and collectible name letters
 - [x] Level 3 — dynamic roadside clue signs
 - [x] Level 3 — brake-cut sequence
-- [ ] Level 3 — final exorcism / name-entry finale
+- [x] Level 3 — final exorcism / name-entry finale
 - [x] Level 1 investigation: newspaper, scratched family portrait, upstairs telephone, diary, music box, annex scratches, caretaker record, Daniel's envelope and letter, grave
 - [x] Level 1 evidence journal, five-question exorcism, separate Evelyn farewell, and departure ending
 - [x] Level 1 ambient recordings, telephone ring, music-box melody, candlelight, torch, and story apparitions
