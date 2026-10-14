@@ -112,6 +112,18 @@
       .controls-list dd { color: #f1e9d8; font-weight: 700; text-align: right; }
       #closeControlsBtn { display: block; width: 100%; margin-top: 28px; padding: 12px; color: #eee5d1; font: 700 12px system-ui, sans-serif; letter-spacing: 0.12em; background: #4a1c20; border: 1px solid #a44a43; cursor: pointer; }
       #closeControlsBtn:hover, #closeControlsBtn:focus-visible { background: #70302f; }
+      #creditsDialog { position: fixed; inset: 0; width: min(720px, calc(100vw - 32px)); max-height: min(740px, calc(100vh - 32px)); margin: auto; padding: 28px; overflow-y: auto; color: #e7dfd0; background: #15191a; border: 1px solid #796e58; box-shadow: 0 25px 100px #000; }
+      #creditsDialog::backdrop { background: rgba(2, 4, 6, 0.82); backdrop-filter: blur(5px); }
+      #creditsDialog h2 { margin-bottom: 8px; font: 700 32px Georgia, serif; }
+      #creditsDialog h3 { margin: 28px 0 10px; color: #b8ab8e; font: 700 11px system-ui, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; }
+      #creditsDialog h4 { margin: 18px 0 5px; color: #ddd5c5; font: 700 15px Georgia, serif; }
+      #creditsDialog p { color: #aaa193; font: 13px/1.5 Georgia, serif; }
+      #creditsDialog a { color: #d9a498; overflow-wrap: anywhere; }
+      .credit-entry { margin: 16px 0; padding-left: 14px; border-left: 1px solid rgba(183, 164, 134, 0.35); }
+      .credit-entry p { margin: 3px 0; }
+      .credit-label { color: #d8ccba; font: 700 10px system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
+      #closeCreditsBtn { display: block; width: 100%; margin-top: 28px; padding: 12px; color: #eee5d1; font: 700 12px system-ui, sans-serif; letter-spacing: 0.12em; background: #4a1c20; border: 1px solid #a44a43; cursor: pointer; }
+      #closeCreditsBtn:hover, #closeCreditsBtn:focus-visible { background: #70302f; }
       #overlay button:focus-visible { outline: 1px solid #c85c50; outline-offset: 3px; }
       @media (max-width: 560px) { .level-card { grid-template-columns: 54px 1fr; } .level-card-action { grid-column: 2; } }
       #overlay.hidden {
@@ -523,7 +535,7 @@
         <div class="title-kicker">THREE CASES · ONE LAST CHANCE</div>
         <h1>EXORCIST<span class="title-subtitle">THE LAST RITES</span></h1>
         <p>Cast out by the Order. Called back by the dead.</p>
-        <div class="campaign-actions"><button id="startBtn" type="button">BEGIN</button><button id="caseFilesBtn" type="button">CASE FILES</button><button data-controls type="button">CONTROLS</button></div>
+        <div class="campaign-actions"><button id="startBtn" type="button">BEGIN</button><button id="caseFilesBtn" type="button">CASE FILES</button><button id="creditsBtn" type="button">CREDITS</button></div>
       </section>
       <section class="campaign-screen" data-screen="cases" hidden>
         <div class="title-kicker">THE ORDER'S ARCHIVE</div>
@@ -587,6 +599,115 @@
         </dl>
       </section>
       <button id="closeControlsBtn" type="button">CLOSE</button>
+    </dialog>
+    <dialog id="creditsDialog" aria-labelledby="creditsTitle">
+      <h2 id="creditsTitle">Credits</h2>
+      <p>EXORCIST: THE LAST RITES uses the following third-party libraries, models, music, and sound effects.</p>
+
+      <section>
+        <h3>Shared Game Credits</h3>
+        <article class="credit-entry">
+          <h4>Three.js 0.169.0</h4>
+          <p><span class="credit-label">Creator / source</span> Three.js Authors, <a href="https://threejs.org/" target="_blank" rel="noreferrer">threejs.org</a></p>
+          <p><span class="credit-label">Licence</span> MIT</p>
+          <p><span class="credit-label">Used for</span> Rendering, including GLTFLoader, SkeletonUtils, and MeshoptDecoder.</p>
+        </article>
+        <article class="credit-entry">
+          <h4>three-mesh-bvh 0.9.15</h4>
+          <p><span class="credit-label">Creator / source</span> gkjohnson, <a href="https://github.com/gkjohnson/three-mesh-bvh" target="_blank" rel="noreferrer">github.com/gkjohnson/three-mesh-bvh</a></p>
+          <p><span class="credit-label">Licence</span> MIT</p>
+          <p><span class="credit-label">Used for</span> Collision detection.</p>
+        </article>
+        <article class="credit-entry">
+          <h4>Vite 5.4.0</h4>
+          <p><span class="credit-label">Creator / source</span> Evan You and the Vite Team, <a href="https://vitejs.dev/" target="_blank" rel="noreferrer">vitejs.dev</a></p>
+          <p><span class="credit-label">Licence</span> MIT</p>
+          <p><span class="credit-label">Used for</span> Development and production builds.</p>
+        </article>
+      </section>
+
+      <section>
+        <h3>Case 01 · Vale Manor</h3>
+        <article class="credit-entry">
+          <h4>Priest all animation</h4>
+          <p><span class="credit-label">Creator / source</span> alex.andain.777, <a href="https://sketchfab.com/3d-models/priest-all-animation-da4ccf81c80c477ab5491c23f88279af" target="_blank" rel="noreferrer">Sketchfab</a></p>
+          <p><span class="credit-label">Licence</span> CC BY</p><p><span class="credit-label">Used for</span> Player/priest model.</p>
+        </article>
+        <article class="credit-entry">
+          <h4>American vintage house (with interior)</h4>
+          <p><span class="credit-label">Creator / source</span> Katydid, <a href="https://sketchfab.com/3d-models/american-vintage-house-with-interior-5a9e087fbd3a4ae79b4c51d6279f0466" target="_blank" rel="noreferrer">Sketchfab</a></p>
+          <p><span class="credit-label">Licence</span> CC BY-NC</p><p><span class="credit-label">Used for</span> Manor and interior.</p>
+        </article>
+        <article class="credit-entry">
+          <h4>Forest</h4>
+          <p><span class="credit-label">Creator / source</span> rhfqcntrkf, <a href="https://sketchfab.com/3d-models/forest-9153c2b370934758bf14c395abe36b27" target="_blank" rel="noreferrer">Sketchfab</a></p>
+          <p><span class="credit-label">Licence</span> CC BY</p><p><span class="credit-label">Used for</span> Surrounding trees.</p>
+        </article>
+        <article class="credit-entry">
+          <h4>Girl with clothes. Worker set</h4>
+          <p><span class="credit-label">Creator / source</span> cattleya, <a href="https://sketchfab.com/3d-models/girl-with-clothes-worker-set-4cf10e2dde6d4b12b6dccd25a4cf3b77" target="_blank" rel="noreferrer">Sketchfab</a></p>
+          <p><span class="credit-label">Licence</span> CC BY</p><p><span class="credit-label">Used for</span> Evelyn.</p>
+        </article>
+        <article class="credit-entry">
+          <h4>Ghost Woman A-Pose</h4>
+          <p><span class="credit-label">Creator / source</span> FLUXIUM3D, <a href="https://sketchfab.com/3d-models/ghost-woman-a-pose-f4f4f2f59f124f54a787438bb3ed9ab0" target="_blank" rel="noreferrer">Sketchfab</a></p>
+          <p><span class="credit-label">Licence</span> CC BY</p><p><span class="credit-label">Used for</span> Chasing ghost.</p>
+        </article>
+        <article class="credit-entry">
+          <h4>Grave</h4>
+          <p><span class="credit-label">Creator / source</span> Sketchfab, <a href="https://sketchfab.com/3d-models/grave-84252dd6d74f4a00bac4a460deef0a80" target="_blank" rel="noreferrer">Sketchfab</a></p>
+          <p><span class="credit-label">Licence</span> Creator and licence to verify.</p><p><span class="credit-label">Used for</span> Grave prop.</p>
+        </article>
+        <article class="credit-entry">
+          <h4>Vale Manor audio</h4>
+          <p><span class="credit-label">Creator / source</span> Door creaks by fractilegames, <a href="https://opengameart.org/content/creaky-light-wooden-door" target="_blank" rel="noreferrer">OpenGameArt</a>; footsteps by Fantozzi, <a href="https://opengameart.org/content/fantozzis-footsteps-grasssand-stone" target="_blank" rel="noreferrer">OpenGameArt</a>; ambient track by Clement Panchout, <a href="https://opengameart.org/content/horror-unsettling-victory-loop" target="_blank" rel="noreferrer">OpenGameArt</a>; screams pack by congusbongus, <a href="https://opengameart.org/content/female-screams" target="_blank" rel="noreferrer">OpenGameArt</a>; ringtone uploaded by cyberdyne, <a href="https://opengameart.org/content/crank-movie-telephone-ringtone" target="_blank" rel="noreferrer">OpenGameArt</a>.</p>
+          <p><span class="credit-label">Licence</span> Door creaks: CC BY 3.0. Footsteps: CC0. Ambient: CC BY 4.0. Screams: CC BY 3.0, recordings by tcrocker68, pushkin, and Archeos. Ringtone attribution names Mike Patton.</p>
+          <p><span class="credit-label">Used for</span> Door, footstep, ambient, scream, and telephone effects.</p>
+        </article>
+      </section>
+
+      <section>
+        <h3>Case 02 · Night Train</h3>
+        <article class="credit-entry">
+          <h4>Train models</h4>
+          <p><span class="credit-label">Items</span> Train_Carriage_New_01.glb, Train_Carriage_New_02.glb, zombie_the_burnt.glb, and rocky_terrain_low_poly.glb.</p>
+          <p><span class="credit-label">Creator / source / licence</span> To verify from the original asset records.</p><p><span class="credit-label">Used for</span> Train environment, enemy, and terrain.</p>
+        </article>
+        <article class="credit-entry">
+          <h4>hakidame-subset.ttf</h4>
+          <p><span class="credit-label">Creator / source / licence</span> Original font name, author/foundry, source, and licence to verify.</p><p><span class="credit-label">Used for</span> Kana clue and rite interface.</p>
+        </article>
+        <article class="credit-entry">
+          <h4>Train audio</h4>
+          <p><span class="credit-label">Items</span> train-inside.mp3 and zombie-moans.mp3.</p>
+          <p><span class="credit-label">Creator / source / licence</span> To verify from the original asset records.</p><p><span class="credit-label">Used for</span> Train ambience and enemy sounds.</p>
+        </article>
+      </section>
+
+      <section>
+        <h3>Case 03 · Old Highway</h3>
+        <article class="credit-entry">
+          <h4>Old Rusty Car 2 / Old Rusty Car / Highway</h4>
+          <p><span class="credit-label">Creator / source</span> Renafox (player and ghost cars), <a href="https://sketchfab.com/3d-models/old-rusty-car-2-544aa41de67b48cf89f8fcc2bb06e8f4" target="_blank" rel="noreferrer">player car</a>, <a href="https://sketchfab.com/3d-models/old-rusty-car-95baa20ebc5d4d2e869f0b549be838fe" target="_blank" rel="noreferrer">ghost car</a>; Genkidonky, <a href="https://sketchfab.com/3d-models/highway-3a23cea9b8f2493f9e1ae93f82881145" target="_blank" rel="noreferrer">highway</a>.</p>
+          <p><span class="credit-label">Licence</span> Cars: CC BY-NC 4.0. Highway: CC BY 4.0.</p><p><span class="credit-label">Used for</span> Vehicles and highway environment; assets may have been modified, resized, or recoloured.</p>
+        </article>
+        <article class="credit-entry">
+          <h4>City and roadside models</h4>
+          <p><span class="credit-label">Creator / source</span> Street City Buildings (8) by dasy444, <a href="https://sketchfab.com/3d-models/street-city-buildings-8-873c5f14ec464966a11a4d772d187270" target="_blank" rel="noreferrer">Sketchfab</a>; Street lamp by Alex human, <a href="https://sketchfab.com/3d-models/street-lamp-bc7cecad7dc54863a5dc75bcd29b2c46" target="_blank" rel="noreferrer">Sketchfab</a>; Zombie by David Glynch, <a href="https://sketchfab.com/3d-models/zombie-6ff73b06cf63405d9557720c78cf5e0c" target="_blank" rel="noreferrer">Sketchfab</a>; Zombie Doom Scientist by photon (that one larry), <a href="https://sketchfab.com/3d-models/zombie-doom-scientist-f8968b245d2c4abfbe6f170069993476" target="_blank" rel="noreferrer">Sketchfab</a>; Barbed Wire Barrier by Mehdi Shahsavan, <a href="https://sketchfab.com/3d-models/barrier---wooden--barbed--wire-protection-13-mb-a99f8daa113a4439b24869e41643ecb4" target="_blank" rel="noreferrer">Sketchfab</a>.</p>
+          <p><span class="credit-label">Licence</span> City buildings and Zombie: Sketchfab Standard. Street lamp, Zombie Doom Scientist, and barrier: CC BY 4.0.</p><p><span class="credit-label">Used for</span> Highway scenery, enemies, and barrier props; assets may have been modified, resized, or recoloured.</p>
+        </article>
+        <article class="credit-entry">
+          <h4>Old Highway audio</h4>
+          <p><span class="credit-label">Creator / source</span> Lamborghini Urus Racing Sound Effect by mizanstock, <a href="https://pixabay.com/sound-effects/city-lamborghini-urus-racing-sound-effect-163336/" target="_blank" rel="noreferrer">Pixabay</a>; Robotic Countdown by bnewton103 / freesound_community, <a href="https://pixabay.com/sound-effects/film-special-effects-robotic-countdown-43935/" target="_blank" rel="noreferrer">Pixabay</a>; Horror Background Atmosphere by Universfield, <a href="https://pixabay.com/sound-effects/horror-horror-background-atmosphere-156462/" target="_blank" rel="noreferrer">Pixabay</a>.</p>
+          <p><span class="credit-label">Licence</span> Pixabay Content License.</p><p><span class="credit-label">Used for</span> Car engine, race countdown, and background music.</p>
+        </article>
+        <article class="credit-entry">
+          <h4>Red Apocalyptic Sky and environment</h4>
+          <p><span class="credit-label">Creator / source</span> Red Apocalyptic Sky created with OpenAI ChatGPT.</p>
+          <p><span class="credit-label">Licence</span> AI-generated image.</p><p><span class="credit-label">Used for</span> Skybox. The racetrack layout, procedural road textures, racing HUD, and several environmental elements were created by the team.</p>
+        </article>
+      </section>
+      <button id="closeCreditsBtn" type="button">CLOSE</button>
     </dialog>
     <script type="module" src="/src/main.js"></script>
   </body>
