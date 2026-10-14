@@ -1,6 +1,8 @@
 // Level 2 (train) audio: a constant carriage ambience bed plus the
 // stalker's moans, which only reach the player while it is close.
 
+import { audioGain } from '../../core/settings.js'
+
 export const TRAIN_AMBIENT_URL = '/levels/train/audio/train-inside.mp3'
 
 export const TRAIN_AMBIENT_VOLUME = 0.15
@@ -18,6 +20,13 @@ export const NAME_SCREAM_URL =
   '/levels/train/audio/dragon-studio-zombie-scream-324752.mp3'
 
 export const SCREAM_VOLUME = 0.85
+
+// The banshee cry sits a notch under the raw name scream.
+export const CHASE_SCREAM_VOLUME = SCREAM_VOLUME * 0.8
+
+export function screamVolume(kind) {
+  return kind === 'chase' ? CHASE_SCREAM_VOLUME : SCREAM_VOLUME
+}
 
 export const SCREAM_HEAR_RANGE = 16
 
@@ -40,6 +49,7 @@ export class TrainAudio {
     this.ambient = null
     this.moans = null
     this.moanPlaying = false
+    this.moanLevel = 0
     this.screams = { chase: null, name: null }
     this.hunting = false
     this.screamCooldown = 0
@@ -49,7 +59,7 @@ export class TrainAudio {
   ensureAmbient() {
     if (this.ambient) return this.ambient
     this.ambient = this.createAudio(TRAIN_AMBIENT_URL, true)
-    this.ambient.volume = TRAIN_AMBIENT_VOLUME
+    this.ambient.volume = audioGain('music', TRAIN_AMBIENT_VOLUME)
     return this.ambient
   }
 
@@ -57,6 +67,7 @@ export class TrainAudio {
     if (this.moans) return this.moans
     this.moans = this.createAudio(ZOMBIE_MOAN_URL, true)
     this.moans.volume = 0
+    this.moanLevel = 0
     return this.moans
   }
 
@@ -91,7 +102,7 @@ export class TrainAudio {
     this.enabled = true
 
     const ambient = this.ensureAmbient()
-    ambient.volume = TRAIN_AMBIENT_VOLUME
+    ambient.volume = audioGain('music', TRAIN_AMBIENT_VOLUME)
     if (ambient.paused) ambient.play().catch(() => {})
 
     if (this.moans) {
@@ -132,7 +143,7 @@ export class TrainAudio {
   ensureScream(kind) {
     if (this.screams[kind]) return this.screams[kind]
     this.screams[kind] = this.createAudio(kind === 'chase' ? CHASE_SCREAM_URL : NAME_SCREAM_URL)
-    this.screams[kind].volume = SCREAM_VOLUME
+    this.screams[kind].volume = audioGain('sfx', screamVolume(kind))
     return this.screams[kind]
   }
 
@@ -141,12 +152,25 @@ export class TrainAudio {
     const scream = this.ensureScream(kind)
     scream.pause()
     scream.currentTime = 0
-    scream.volume = SCREAM_VOLUME
+    scream.volume = audioGain('sfx', screamVolume(kind))
     scream.play().catch(() => {})
     return true
   }
 
+  // Re-apply the current mix after the player moves a volume slider. The
+  // moan bed keeps whatever distance-faded level it had before the change.
+  applyVolumes() {
+    if (this.ambient) this.ambient.volume = audioGain('music', TRAIN_AMBIENT_VOLUME)
+    for (const [kind, scream] of Object.entries(this.screams)) {
+      if (scream) scream.volume = audioGain('sfx', screamVolume(kind))
+    }
+    if (this.moans && this.moanPlaying) {
+      this.moans.volume = audioGain('sfx', this.moanLevel)
+    }
+  }
+
   setMoanVolume(volume) {
+    this.moanLevel = volume
     if (volume <= 0) {
       if (this.moanPlaying) {
         this.moanPlaying = false
@@ -156,7 +180,7 @@ export class TrainAudio {
     }
 
     const moans = this.ensureMoans()
-    moans.volume = volume
+    moans.volume = audioGain('sfx', volume)
     if (!this.moanPlaying) {
       this.moanPlaying = true
       if (moans.paused) {

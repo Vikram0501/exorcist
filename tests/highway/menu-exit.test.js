@@ -50,8 +50,19 @@ function campaign() {
     exitToMenu() { exits++; this.currentLevel = null; this.loaded = false },
   }
   const storage = new Map()
+  const settings = { master: 1, music: 1, sfx: 1, sensitivity: 1 }
+  const settingListeners = []
+  game.applySettings = function () {
+    this.applySettingsCalls = (this.applySettingsCalls || 0) + 1
+  }
   const context = {
     Game: function () { return game }, console, queueMicrotask,
+    getSettings() { return { ...settings } },
+    updateSetting(key, value) {
+      settings[key] = value
+      for (const listener of settingListeners) listener({ ...settings })
+    },
+    subscribe(listener) { settingListeners.push(listener) },
     setTimeout(fn) { timers.push(fn) },
     localStorage: {
       getItem(key) { return storage.get(key) }, setItem(key, value) { storage.set(key, value) },
@@ -67,7 +78,7 @@ function campaign() {
   const source = readFileSync(new URL('../../src/main.js', import.meta.url), 'utf8').replace(/^import .*$/gm, '')
   vm.runInNewContext(source, context)
   return {
-    node, cards, game, listeners, storage, starts, controlSections, controlsButtons,
+    node, cards, game, listeners, storage, starts, controlSections, controlsButtons, settings,
     advanceIntro() { timers.splice(0).forEach(fn => fn()) },
     get exits() { return exits }, get pauses() { return pauses },
   }
@@ -136,4 +147,29 @@ test('title credits open separately while pause controls show only the active ca
   ui.node('pauseBtn').onclick()
   ui.controlsButtons[0].onclick()
   assert.deepEqual(ui.controlSections.map(section => section.hidden), [true, true, false])
+})
+
+test('the pause sliders live-apply the mix as they move', async () => {
+  const ui = campaign()
+  ui.node('startBtn').onclick()
+  await new Promise(resolve => setImmediate(resolve))
+  ui.advanceIntro()
+  await new Promise(resolve => setImmediate(resolve))
+  ui.node('beginCaseBtn').onclick()
+  ui.node('pauseBtn').onclick()
+  assert.equal(ui.node('pause').hidden, false)
+
+  ui.node('masterVolume').value = '50'
+  ui.node('masterVolume').oninput()
+  assert.equal(ui.settings.master, 0.5)
+  assert.equal(ui.node('masterVolumeValue').textContent, '50%')
+  assert.equal(ui.game.applySettingsCalls, 1, 'the game re-applies the mix as sliders move')
+
+  ui.node('sensitivitySlider').value = '150'
+  ui.node('sensitivitySlider').oninput()
+  assert.equal(ui.settings.sensitivity, 1.5)
+  assert.equal(ui.node('sensitivityValue').textContent, '150%')
+  assert.equal(ui.game.applySettingsCalls, 2)
+
+  assert.equal(ui.node('resumeBtn').onclick !== undefined, true, 'the pause actions are still wired')
 })

@@ -1,3 +1,5 @@
+export const BASE_LOOK_SENSITIVITY = 0.002
+
 export class Input {
   constructor(domElement) {
     this.dom = domElement
@@ -5,6 +7,7 @@ export class Input {
     this.pressed = new Set()
     this.yaw = 0
     this.pitch = 0
+    this.sensitivity = BASE_LOOK_SENSITIVITY
     this.isLocked = false
     this.preserveViewOnLock = false
     this.suppressMouseUntil = 0
@@ -25,8 +28,8 @@ export class Input {
       }
       // Some browsers deliver a warp-sized delta after recapturing the cursor.
       if (Math.abs(e.movementX) > 120 || Math.abs(e.movementY) > 120) return
-      this.yaw -= e.movementX * 0.002
-      this.pitch -= e.movementY * 0.002
+      this.yaw -= e.movementX * this.sensitivity
+      this.pitch -= e.movementY * this.sensitivity
       this.pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, this.pitch))
     }
     this.onLockChange = () => {

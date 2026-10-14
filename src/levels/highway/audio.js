@@ -4,6 +4,8 @@
 // Reuses the same HTMLAudio-element pattern as HauntedHouseAudio:
 // single persistent elements, started once per activation and
 // stopped on unload so overlapping copies can never play.
+import { audioGain } from '../../core/settings.js'
+
 export const LEVEL3_MUSIC_URL =
   '/levels/house/audio/level3_ambient_sound.mp3'
 
@@ -38,7 +40,7 @@ export class HighwayAudio {
       LEVEL3_MUSIC_URL,
       true,
     )
-    this.music.volume = LEVEL3_MUSIC_VOLUME
+    this.music.volume = audioGain('music', LEVEL3_MUSIC_VOLUME)
 
     return this.music
   }
@@ -50,7 +52,7 @@ export class HighwayAudio {
       CAR_SOUND_URL,
       true,
     )
-    this.carSound.volume = CAR_SOUND_VOLUME
+    this.carSound.volume = audioGain('sfx', CAR_SOUND_VOLUME)
 
     return this.carSound
   }
@@ -62,7 +64,7 @@ export class HighwayAudio {
       COUNTDOWN_URL,
       false,
     )
-    this.countdown.volume = COUNTDOWN_VOLUME
+    this.countdown.volume = audioGain('sfx', COUNTDOWN_VOLUME)
     this.countdown.addEventListener?.('ended', () => {
       this.restoreMusicAfterCountdown()
     })
@@ -185,7 +187,7 @@ export class HighwayAudio {
     this.enabled = true
     this.carDriving = false
     this.ensureMusic()
-    this.music.volume = LEVEL3_MUSIC_VOLUME
+    this.music.volume = audioGain('music', LEVEL3_MUSIC_VOLUME)
 
     if (this.music.paused) {
       this.music.play().catch(() => {})
@@ -212,7 +214,7 @@ export class HighwayAudio {
 
     this.carDriving = driving
     this.ensureCarSound()
-    this.carSound.volume = CAR_SOUND_VOLUME
+    this.carSound.volume = audioGain('sfx', CAR_SOUND_VOLUME)
 
     if (driving) {
       if (this.carSound.paused) {
@@ -234,11 +236,11 @@ export class HighwayAudio {
     if (!this.countdown.paused) return
 
     this.countdown.loop = false
-    this.countdown.volume = COUNTDOWN_VOLUME
+    this.countdown.volume = audioGain('sfx', COUNTDOWN_VOLUME)
     this.countdown.currentTime = 0
 
     if (this.music) {
-      this.music.volume = COUNTDOWN_DUCKED_MUSIC_VOLUME
+      this.music.volume = audioGain('music', COUNTDOWN_DUCKED_MUSIC_VOLUME)
     }
 
     this.countdown.play().catch(() => {})
@@ -255,8 +257,19 @@ export class HighwayAudio {
   // (also restored automatically when the voice recording ends).
   restoreMusicAfterCountdown() {
     if (this.enabled && this.music) {
-      this.music.volume = LEVEL3_MUSIC_VOLUME
+      this.music.volume = audioGain('music', LEVEL3_MUSIC_VOLUME)
     }
+  }
+
+  // Re-apply the current mix after the player moves a volume slider. The
+  // music stays ducked while the countdown voice is still playing.
+  applyVolumes() {
+    if (this.music) {
+      const ducked = this.countdown && !this.countdown.paused
+      this.music.volume = audioGain('music', ducked ? COUNTDOWN_DUCKED_MUSIC_VOLUME : LEVEL3_MUSIC_VOLUME)
+    }
+    if (this.carSound) this.carSound.volume = audioGain('sfx', CAR_SOUND_VOLUME)
+    if (this.countdown) this.countdown.volume = audioGain('sfx', COUNTDOWN_VOLUME)
   }
 
   createAudio(source, loop = false) {

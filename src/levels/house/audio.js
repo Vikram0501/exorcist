@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { HOUSE_JUMP_SCARE_DURATION } from './story-data.js'
+import { audioGain } from '../../core/settings.js'
 
 const SOUND = {
   music: '/levels/house/audio/ambience.ogg',
@@ -22,7 +23,9 @@ const JUMP_SCARE_SOUNDS = [
 ]
 
 const MUSIC_VOLUME = 0.3
+const CALM_MUSIC_VOLUME = 0.07
 const DUCKED_MUSIC_VOLUME = 0.1
+const PHONE_VOLUME = 0.75
 
 export function prepareScareBuffer(buffer) {
   let peak = 0
@@ -47,7 +50,7 @@ export class HauntedHouseAudio {
   constructor() {
     this.enabled = false
     this.music = this.createAudio(SOUND.music, true)
-    this.music.volume = MUSIC_VOLUME
+    this.music.volume = audioGain('music', MUSIC_VOLUME)
     this.nextFootstepAt = 0
     this.nextGhostAt = 0
     this.interiorZones = []
@@ -60,10 +63,10 @@ export class HauntedHouseAudio {
     this.paused = false
     this.scareUntil = 0
     this.phone = this.createAudio(SOUND.phoneRing)
-    this.phone.volume = 0.75
+    this.phone.volume = audioGain('sfx', PHONE_VOLUME)
     this.jumpScares = JUMP_SCARE_SOUNDS.map(url => {
       const fallback = this.createAudio(url)
-      fallback.volume = 1
+      fallback.volume = audioGain('sfx', 1)
       return { url, fallback, decoded: null }
     })
     this.lastJumpScare = null
@@ -118,7 +121,7 @@ export class HauntedHouseAudio {
 
     this.findInteriorZones(model)
     this.nextGhostAt = performance.now() / 1000 + randomBetween(7, 13)
-    this.music.volume = MUSIC_VOLUME
+    this.music.volume = audioGain('music', MUSIC_VOLUME)
     this.music.play().catch(() => {})
   }
 
@@ -170,7 +173,8 @@ export class HauntedHouseAudio {
     if (!this.enabled || this.paused || this.quiet) return
     if (performance.now() / 1000 < this.scareUntil) return
     const sound = this.createAudio(source)
-    sound.volume = volume
+    sound._baseVolume = volume
+    sound.volume = audioGain('sfx', volume)
     this.effects.add(sound)
     sound.addEventListener('ended', () => this.effects.delete(sound), { once: true })
     sound.play().catch(() => this.effects.delete(sound))
@@ -206,7 +210,7 @@ export class HauntedHouseAudio {
       const gain = this.context.createGain()
       const limiter = this.context.createDynamicsCompressor()
       source.buffer = decoded.buffer
-      gain.gain.value = 2
+      gain.gain.value = 2 * audioGain('sfx', 1)
       limiter.threshold.value = -4
       limiter.knee.value = 6
       limiter.ratio.value = 12
@@ -231,7 +235,7 @@ export class HauntedHouseAudio {
 
   setCalm(calm) {
     this.calm = calm
-    this.music.volume = calm ? 0.07 : MUSIC_VOLUME
+    this.music.volume = audioGain('music', calm ? CALM_MUSIC_VOLUME : MUSIC_VOLUME)
   }
 
   setQuiet() {
@@ -276,7 +280,7 @@ export class HauntedHouseAudio {
     oscillator.type = type
     oscillator.frequency.value = frequency
     gain.gain.setValueAtTime(0, start)
-    gain.gain.linearRampToValueAtTime(volume, start + 0.015)
+    gain.gain.linearRampToValueAtTime(audioGain('sfx', volume), start + 0.015)
     gain.gain.exponentialRampToValueAtTime(0.0001, start + duration)
     oscillator.connect(gain)
     gain.connect(this.context.destination)
@@ -307,7 +311,7 @@ export class HauntedHouseAudio {
 
   duckMusic(seconds) {
     if (!this.enabled || this.quiet || performance.now() / 1000 < this.scareUntil) return
-    this.music.volume = DUCKED_MUSIC_VOLUME
+    this.music.volume = audioGain('music', DUCKED_MUSIC_VOLUME)
     window.clearTimeout(this.restoreTimer)
     this.restoreTimer = window.setTimeout(
       () => this.restoreMusic(),
@@ -318,7 +322,24 @@ export class HauntedHouseAudio {
   restoreMusic() {
     window.clearTimeout(this.restoreTimer)
     this.restoreTimer = null
-    this.music.volume = this.quiet ? 0 : this.calm ? 0.07 : MUSIC_VOLUME
+    this.music.volume = this.quiet
+      ? 0
+      : audioGain('music', this.calm ? CALM_MUSIC_VOLUME : MUSIC_VOLUME)
+  }
+
+  // Re-apply the current mix after the player moves a volume slider. The
+  // music bed follows its ducked/calm/quiet state; one-shots keep their
+  // authored level via the base volume stored when they started.
+  applyVolumes() {
+    this.phone.volume = audioGain('sfx', PHONE_VOLUME)
+    for (const scream of this.jumpScares) scream.fallback.volume = audioGain('sfx', 1)
+    for (const sound of this.effects) {
+      if (Number.isFinite(sound._baseVolume)) sound.volume = audioGain('sfx', sound._baseVolume)
+    }
+    if (this.quiet) this.music.volume = 0
+    else if (performance.now() / 1000 < this.scareUntil) this.music.volume = 0
+    else if (this.restoreTimer) this.music.volume = audioGain('music', DUCKED_MUSIC_VOLUME)
+    else this.music.volume = audioGain('music', this.calm ? CALM_MUSIC_VOLUME : MUSIC_VOLUME)
   }
 
   findInteriorZones(model) {

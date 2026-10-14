@@ -6,6 +6,8 @@ import {
   TRAIN_AMBIENT_VOLUME,
   ZOMBIE_MOAN_VOLUME,
   SCREAM_VOLUME,
+  CHASE_SCREAM_VOLUME,
+  screamVolume,
   SCREAM_COOLDOWN,
   CHASE_SCREAM_URL,
   NAME_SCREAM_URL,
@@ -96,7 +98,8 @@ test('the banshee cry fires once when a chase starts, and never twice', t => {
   assert.equal(cries().length, 1, 'the cry fires on the rising edge of the hunt')
   const chase = created.find(sound => sound.url === CHASE_SCREAM_URL)
   assert.equal(chase.paused, false)
-  assert.equal(chase.volume, SCREAM_VOLUME)
+  assert.equal(chase.volume, CHASE_SCREAM_VOLUME, 'the banshee cry sits under the name scream')
+  assert.equal(screamVolume('chase'), SCREAM_VOLUME * 0.8)
 
   audio.update(player, zombie, 0.1)
   audio.update(player, zombie, 0.1)

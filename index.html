@@ -124,6 +124,10 @@
       .credit-label { color: #d8ccba; font: 700 10px system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
       #closeCreditsBtn { display: block; width: 100%; margin-top: 28px; padding: 12px; color: #eee5d1; font: 700 12px system-ui, sans-serif; letter-spacing: 0.12em; background: #4a1c20; border: 1px solid #a44a43; cursor: pointer; }
       #closeCreditsBtn:hover, #closeCreditsBtn:focus-visible { background: #70302f; }
+      #settingsList { display: grid; gap: 18px; margin-top: 26px; text-align: left; }
+      .settings-row { display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; align-items: center; color: #ddd5c5; font: 700 13px system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
+      .settings-row input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: #c85c50; }
+      .settings-value { color: #b8ab8e; font: 700 12px system-ui, sans-serif; letter-spacing: 0.08em; }
       #overlay button:focus-visible { outline: 1px solid #c85c50; outline-offset: 3px; }
       @media (max-width: 560px) { .level-card { grid-template-columns: 54px 1fr; } .level-card-action { grid-column: 2; } }
       #overlay.hidden {
@@ -557,6 +561,12 @@
       <section class="campaign-screen" data-screen="pause" hidden>
         <div class="title-kicker">YOUR WORK IS NOT FINISHED</div>
         <h2>PAUSED</h2>
+        <div id="settingsList">
+          <div class="settings-row"><label for="masterVolume">Master volume</label><span class="settings-value" id="masterVolumeValue">100%</span><input id="masterVolume" type="range" min="0" max="100" step="1" value="100"></div>
+          <div class="settings-row"><label for="musicVolume">Music volume</label><span class="settings-value" id="musicVolumeValue">100%</span><input id="musicVolume" type="range" min="0" max="100" step="1" value="100"></div>
+          <div class="settings-row"><label for="sfxVolume">SFX volume</label><span class="settings-value" id="sfxVolumeValue">100%</span><input id="sfxVolume" type="range" min="0" max="100" step="1" value="100"></div>
+          <div class="settings-row"><label for="sensitivitySlider">Mouse sensitivity</label><span class="settings-value" id="sensitivityValue">100%</span><input id="sensitivitySlider" type="range" min="25" max="300" step="5" value="100"></div>
+        </div>
         <div class="campaign-actions"><button id="resumeBtn" type="button">RESUME</button><button id="restartBtn" type="button">RESTART CASE</button><button id="pauseCasesBtn" type="button">CASE FILES</button><button data-controls type="button">CONTROLS</button></div>
       </section>
       <section class="campaign-screen" data-screen="complete" hidden>

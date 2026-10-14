@@ -1,5 +1,6 @@
 import * as THREE from 'three'
-import { Input } from './input.js'
+import { Input, BASE_LOOK_SENSITIVITY } from './input.js'
+import { getSettings } from './settings.js'
 import { Player } from './player.js'
 import { PostFx } from './postfx.js'
 import { createLevelLoadTracker, LEVEL_LOAD_EVENT } from './loading.js'
@@ -177,6 +178,7 @@ export class Game {
     this.trainAudio = new TrainAudio()
     this.trainShake = new TrainCameraShake(this.camera)
     this.houseScareShake = new HouseScareShake(this.camera)
+    this.applySettings()
     this.houseStory = null
     this.houseStoryView = null
     this.houseAvatar = null
@@ -804,9 +806,9 @@ if (this.loaded) {
         this.trainEnding.start()
       }
       this.trainEnding.update(dt)
-      if (this.trainEnding.finished && !this.trainEnding.promptShown) {
+      if (this.trainEnding.finished && !this.trainEnding.caseClosed) {
         this.trainStory?.closeCase()
-        this.trainEnding.promptShown = true
+        this.trainEnding.caseClosed = true
       }
       if (this.trainZombie?.state === 'apparition') {
         this.trainZombie.update(dt, { position: this.player.position })
@@ -1438,6 +1440,7 @@ if (this.loaded) {
                 zombie: this.trainZombie,
                 exorcism: this.trainExorcism,
                 audio: this.trainAudio,
+                shake: this.trainShake,
                 onExit: () => this.completeLevel('train'),
               })
             : null
@@ -2233,6 +2236,16 @@ if (this.loaded) {
         return [element, display]
       })
 
+  }
+
+  // Re-apply the stored settings mix: look sensitivity and each level's
+  // audio. Called on construction and whenever a slider changes a value.
+  applySettings() {
+    const settings = getSettings()
+    if (this.input) this.input.sensitivity = BASE_LOOK_SENSITIVITY * settings.sensitivity
+    this.houseAudio?.applyVolumes()
+    this.trainAudio?.applyVolumes()
+    this.highwayAudio?.applyVolumes()
   }
 
   pauseAudio() {

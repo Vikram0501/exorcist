@@ -1,4 +1,5 @@
 import { Game } from './core/game.js'
+import { getSettings, updateSetting, subscribe } from './core/settings.js'
 
 const game = new Game(document.getElementById('app'))
 const overlay = document.getElementById('overlay')
@@ -127,6 +128,42 @@ document.getElementById('completionCasesBtn').addEventListener('click', caseFile
 document.getElementById('pauseCasesBtn').addEventListener('click', caseFiles)
 document.getElementById('resumeBtn').addEventListener('click', resume)
 document.getElementById('restartBtn').addEventListener('click', () => prepareCase(selectedLevel))
+
+const masterVolume = document.getElementById('masterVolume')
+const musicVolume = document.getElementById('musicVolume')
+const sfxVolume = document.getElementById('sfxVolume')
+const sensitivitySlider = document.getElementById('sensitivitySlider')
+
+function syncSettingsScreen() {
+  const settings = getSettings()
+  masterVolume.value = String(Math.round(settings.master * 100))
+  document.getElementById('masterVolumeValue').textContent = `${Math.round(settings.master * 100)}%`
+  musicVolume.value = String(Math.round(settings.music * 100))
+  document.getElementById('musicVolumeValue').textContent = `${Math.round(settings.music * 100)}%`
+  sfxVolume.value = String(Math.round(settings.sfx * 100))
+  document.getElementById('sfxVolumeValue').textContent = `${Math.round(settings.sfx * 100)}%`
+  sensitivitySlider.value = String(Math.round(settings.sensitivity * 100))
+  document.getElementById('sensitivityValue').textContent = `${Math.round(settings.sensitivity * 100)}%`
+}
+
+function bindPercentSlider(input, apply) {
+  input.addEventListener('input', () => {
+    const percent = Number(input.value)
+    document.getElementById(`${input.id}Value`).textContent = `${percent}%`
+    apply(percent / 100)
+  })
+}
+
+bindPercentSlider(masterVolume, value => updateSetting('master', value))
+bindPercentSlider(musicVolume, value => updateSetting('music', value))
+bindPercentSlider(sfxVolume, value => updateSetting('sfx', value))
+bindPercentSlider(sensitivitySlider, value => updateSetting('sensitivity', value))
+
+subscribe(() => {
+  game.applySettings()
+  syncSettingsScreen()
+})
+syncSettingsScreen()
 beginCaseBtn.addEventListener('click', beginCase)
 pauseBtn.addEventListener('click', pause)
 cards.forEach((card, index) => card.addEventListener('click', () => prepareCase(levels[index])))
