@@ -585,6 +585,49 @@ export function toggleCarriageLightDebug(controllers, visible) {
 }
 
 
+/**
+ * Compile every light-count state the train reaches while playing, so the
+ * carriage light cut and the front carriage cull are program-cache hits
+ * instead of a synchronous recompile of every material mid-frame.
+ *
+ * Each pass changes exactly one thing from the previous pass, so a pass only
+ * compiles the variant that is not in the cache yet.
+ *
+ * @param {object} opts
+ * @param {CarriageLightController[]} [opts.controllers]
+ * @param {THREE.Object3D|null} [opts.glowGroup] - group holding the rite glow, culled with the front carriage
+ * @param {() => (void|Promise<void>)} opts.compile - run against the active render target
+ */
+export async function prewarmTrainLightStates({ controllers = [], glowGroup = null, compile }) {
+  const lights = []
+  for (const controller of controllers) {
+    if (!controller?.lights) continue
+    for (const light of controller.lights) lights.push(light)
+  }
+  const lightVisibility = lights.map(light => light.visible)
+  const glowVisibility = glowGroup ? glowGroup.visible : null
+  try {
+    // Starting state: spawn carriage lit, front carriage culled.
+    if (glowGroup) glowGroup.visible = false
+    await compile()
+
+    // State after crossing the first boundary: the cut removed every
+    // carriage point light from the GPU light list.
+    for (const light of lights) light.visible = false
+    await compile()
+
+    // State near the front of the train: cut lights plus the rite glow.
+    if (glowGroup) {
+      glowGroup.visible = true
+      await compile()
+    }
+  } finally {
+    for (let i = 0; i < lights.length; i++) lights[i].visible = lightVisibility[i]
+    if (glowGroup) glowGroup.visible = glowVisibility
+  }
+}
+
+
 export function setupTrainLighting(level, model, size) {
   const { moon } = addLevelLights(level, size)
   moon.castShadow = false

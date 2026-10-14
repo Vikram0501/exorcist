@@ -79,7 +79,7 @@ import {
 import { loadTrain, updateTrainCarriageVisibility, updateTrainCarriageLights } from '../levels/train/index.js'
 import { TrainZombie } from '../levels/train/zombie.js'
 import { TrainEnding } from '../levels/train/ending.js'
-import { toggleCarriageLightDebug } from '../levels/train/lighting.js'
+import { toggleCarriageLightDebug, prewarmTrainLightStates } from '../levels/train/lighting.js'
 import { createFlashlight } from '../levels/shared/lighting.js'
 
 
@@ -1776,6 +1776,22 @@ if (this.loaded) {
                   this.houseAvatar.toggleView()
                 }
               }
+            }
+
+            // The train changes its light count at runtime: cutting the spawn
+            // carriage's lights and culling the front carriage each invalidate
+            // every material's program, recompiling them mid-frame (the hitch
+            // when crossing into the second carriage). Compile those variants
+            // now while the LOADING overlay is still up.
+            if (levelName === 'train' && (this.carriageLightControllers || this.trainExorcism)) {
+              const compileScene = this.renderer.compileAsync
+                ? () => this.renderer.compileAsync(this.scene, this.camera)
+                : () => this.renderer.compile(this.scene, this.camera)
+              await prewarmTrainLightStates({
+                controllers: this.carriageLightControllers || [],
+                glowGroup: this.trainExorcism?.carriage?.group || null,
+                compile: compileScene,
+              })
             }
           } catch (err) {
             console.warn('Shader warmup failed:', err)
