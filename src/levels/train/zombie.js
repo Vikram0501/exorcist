@@ -94,7 +94,35 @@ function sampleFloor(world, x, z) {
   return floor
 }
 
+function rampSurfaceAt(colliders, x, z, minY = -Infinity) {
+  let surface = null
+
+  for (const ramp of colliders?.filter?.(collider => collider.type === 'meshRamp') || []) {
+    for (const segment of ramp.segments) {
+      const dx = segment.end[0] - segment.start[0]
+      const dz = segment.end[2] - segment.start[2]
+      const lengthSq = dx * dx + dz * dz
+      const t = Math.max(
+        0,
+        Math.min(
+          1,
+          ((x - segment.start[0]) * dx + (z - segment.start[2]) * dz) / lengthSq,
+        ),
+      )
+      const nearestX = segment.start[0] + dx * t
+      const nearestZ = segment.start[2] + dz * t
+      if (Math.hypot(x - nearestX, z - nearestZ) > segment.width / 2) continue
+      const height = THREE.MathUtils.lerp(segment.start[1], segment.end[1], t)
+      if (height >= minY && (surface === null || height < surface)) surface = height
+    }
+  }
+
+  return surface
+}
+
 export function trainFloorAt(colliders, x, z) {
+  const rampSurface = rampSurfaceAt(colliders, x, z)
+  if (rampSurface !== null) return rampSurface
   const world = floorWorld(colliders)
   if (!world) return 0
   return sampleFloor(world, x, z) ?? 0
@@ -104,6 +132,8 @@ export function trainFloorAt(colliders, x, z) {
 // sits well above the lower deck, so the standing capsule is probed directly
 // at the known deck heights and backed by a surface probe from the roof void.
 export function trainUpperFloorAt(colliders, x, z) {
+  const rampSurface = rampSurfaceAt(colliders, x, z, UPPER_MIN_Y)
+  if (rampSurface !== null) return rampSurface
   const world = floorWorld(colliders)
   if (!world) return UPPER_FALLBACK
   for (const feet of UPPER_DECK_HEIGHTS) {

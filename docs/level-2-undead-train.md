@@ -19,6 +19,12 @@ chairs, partitions, side walls, floors, and ceilings. Thin panels block from
 either side. Movement uses small collision steps to prevent sprinting through
 walls, while openings in the models stay open.
 
+The authored U-stair treads and risers are replaced only in collision by five
+measured walk surfaces, so the player can walk up and down without jumping while
+the visible stairs, rails, walls, furniture, and decks retain model collision.
+The three doors between carriages remain interactive; the rear door of the
+furthest spawn carriage is sealed shut and stays solid.
+
 A balanced triangle BVH is built in a background worker once per unique
 carriage model and shared by repeated cars. Each triangle is stored once;
 long train surfaces cannot multiply across spatial subdivisions. Geometry

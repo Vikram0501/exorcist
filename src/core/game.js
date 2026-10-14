@@ -2940,7 +2940,9 @@ if (this.loaded) {
 
 
     this.interactionPrompt.textContent =
-      door.isOpen
+      door.locked
+        ? 'The end door is sealed shut'
+        : door.isOpen
         ? 'Press E to close'
         : 'Press E to open'
 
