@@ -1,24 +1,32 @@
 // The train's closing beat. Speaking the name calls the spirit up one last
-// time in the burnt carriage: it stands in the aisle, screams, and the world
-// burns out to white before the case menu takes over.
+// time: it appears in the burnt carriage's doorway, screams as the camera
+// shakes, and the world burns out to white before the level ends.
 
 export const APPARITION_SECONDS = 1.6
 
-export const FADE_SECONDS = 2.2
+// The name scream runs ~8.1s; the white-out rides the whole cry plus a
+// beat of silence after it.
+export const FADE_SECONDS = 8.6
 
-// How far past the ash ring the spirit stands — deep enough that the player
-// has to look up the carriage at it.
+// How far inside the burnt carriage's doorway the spirit stands.
+export const ENTRANCE_OFFSET = 1.2
+
+// Fallback when the chamber is missing: how far past the ash ring it stands.
 export const APPARITION_OFFSET = 3.2
 
+// Camera shake layered over the train's sway during the whiteout.
+export const SHAKE_INTENSITY = 0.07
+
 export class TrainEnding {
-  constructor({ zombie = null, exorcism = null, audio = null, onExit = () => {} } = {}) {
+  constructor({ zombie = null, exorcism = null, audio = null, shake = null, onExit = () => {} } = {}) {
     this.zombie = zombie
     this.exorcism = exorcism
     this.audio = audio
+    this.shake = shake
     this.onExit = onExit
     this.active = false
     this.finished = false
-    this.promptShown = false
+    this.caseClosed = false
     this.elapsed = 0
     this.fading = false
     this.fade = null
@@ -28,14 +36,18 @@ export class TrainEnding {
     if (this.active || this.finished || !this.zombie) return false
     this.active = true
     this.finished = false
-    this.promptShown = false
+    this.caseClosed = false
     this.elapsed = 0
     this.fading = false
 
+    const entrance = this.exorcism?.carriage?.bounds?.min?.z
     const seal = this.exorcism?.position
-    const z = seal ? seal.z + APPARITION_OFFSET : this.zombie.maxZ - 6
+    const z = entrance !== undefined
+      ? entrance + ENTRANCE_OFFSET
+      : seal
+        ? seal.z + APPARITION_OFFSET
+        : this.zombie.maxZ - 6
     this.zombie.appearAt(z)
-    this.audio?.playScream('name')
     this.buildFade()
     return true
   }
@@ -47,12 +59,14 @@ export class TrainEnding {
     if (!this.fading && this.elapsed >= APPARITION_SECONDS) {
       this.fading = true
       if (this.fade) this.fade.style.opacity = '1'
+      this.audio?.playScream('name')
+      this.shake?.rattle(SHAKE_INTENSITY, FADE_SECONDS)
     }
 
     if (this.elapsed >= APPARITION_SECONDS + FADE_SECONDS) {
-      this.active = false
+      this.dispose()
       this.finished = true
-      this.showPrompt()
+      this.onExit()
       return true
     }
     return false
@@ -69,42 +83,9 @@ export class TrainEnding {
     this.fade = fade
   }
 
-  // The white screen becomes the exit prompt: no panel, no backdrop, just the
-  // line and the way out.
-  showPrompt() {
-    if (typeof document === 'undefined' || !this.fade || this.prompt) return
-    const prompt = document.createElement('div')
-    prompt.id = 'trainEndingPrompt'
-    prompt.style.cssText =
-      'position:absolute;inset:0;display:grid;place-content:center;gap:26px;' +
-      'text-align:center;color:#241d1a;font-family:Georgia,serif;pointer-events:auto;'
-
-    const line = document.createElement('p')
-    line.textContent = 'THE TRAIN RUNS ON QUIET'
-    line.style.cssText = 'margin:0;font-size:clamp(20px,3.4vw,34px);letter-spacing:.16em;'
-
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.textContent = 'CONTINUE'
-    button.style.cssText =
-      'padding:14px 26px;border:1px solid #241d1a;background:transparent;color:#241d1a;' +
-      'font:700 12px/1 system-ui,sans-serif;letter-spacing:.22em;cursor:pointer;'
-    button.addEventListener('click', () => {
-      this.dispose()
-      this.onExit()
-    })
-
-    prompt.append(line, button)
-    this.fade.append(prompt)
-    this.fade.style.pointerEvents = 'auto'
-    this.prompt = prompt
-    button.focus()
-  }
-
   dispose() {
     this.fade?.remove()
     this.fade = null
-    this.prompt = null
     this.active = false
   }
 }

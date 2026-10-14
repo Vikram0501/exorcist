@@ -66,3 +66,28 @@ test('the sway keeps moving so the carriage never looks frozen', () => {
 
   assert.ok(first.distanceTo(later) > 0, 'the offset changes over time')
 })
+
+test('a rattle shakes the camera hard, then decays back to the plain sway', t => {
+  const originalRandom = Math.random
+  Math.random = () => 1
+  t.after(() => { Math.random = originalRandom })
+
+  const camera = new THREE.PerspectiveCamera()
+  const shake = new TrainCameraShake(camera)
+
+  shake.rattle(0.07, 0.5)
+  shake.apply(1 / 60)
+  const rattled = camera.position.length()
+  shake.clear()
+  assert.ok(rattled > 0.05, 'the shake dwarfs the usual sway')
+
+  for (let frame = 0; frame < 60; frame++) {
+    shake.apply(1 / 60)
+    shake.clear()
+  }
+  shake.apply(1 / 60)
+  const settled = camera.position.length()
+  shake.clear()
+  assert.ok(settled < 0.05, 'once the rattle lapses only the gentle sway remains')
+  assert.equal(shake.rattleDuration, 0, 'the rattle turns itself off')
+})

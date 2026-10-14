@@ -181,18 +181,18 @@ level opens with — as an ash seal ringed by candles.
   `the-name-spoken`.
 - The closing beat is `TrainEnding` (`ending.js`), started the frame after the
   name is spoken and updated outside the pointer-lock gate so it keeps playing
-  with the mouse free. It calls `zombie.appearAt()` a few metres past the ash
-  ring: the stalker stands up in the aisle of the burnt carriage
+  with the mouse free. It calls `zombie.appearAt()` just inside the burnt
+  carriage's doorway (`ENTRANCE_OFFSET`): the stalker stands up in the aisle
   (`state: 'apparition'`, never `banished`), turns to face the player, and
-  `update` returns `null` so it can never catch anyone. The zombie-scream
-  one-shot (`NAME_SCREAM_URL`) fires on the call; after
+  `update` returns `null` so it can never catch anyone. After
   `APPARITION_SECONDS` (`1.6`) a full-screen white div fades in over
-  `FADE_SECONDS` (`2.2`). When the screen is white the story calls
-  `closeCase()` — no walk back out of the carriage is needed — and the fade
-  becomes the exit prompt: `THE TRAIN RUNS ON QUIET` with **RETURN TO THE CASE
-  FILES**, which disposes the fade and un-hides `#overlay` exactly as Level 1
-  does. `unloadCurrentLevel` disposes the sequence, so a restart tears the white
-  screen down.
+  `FADE_SECONDS` (`8.6` — the name scream's length plus half a second);
+  the fade start also fires the zombie-scream one-shot
+  (`NAME_SCREAM_URL`) and a `TrainCameraShake.rattle()` that decays across
+  the fade. When the screen is white the story calls `closeCase()` — no walk back
+  out of the carriage is needed — and the sequence disposes itself and exits
+  straight to the level-completion screen. `unloadCurrentLevel` disposes the
+  sequence, so a restart tears any leftover white screen down.
 - `exitZ` is still the front carriage's `bounds.min.z`: walking back across it
   after the name is spoken closes the case the long way, if the player somehow
   slips past the sequence.
