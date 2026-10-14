@@ -433,6 +433,24 @@ export class Player {
     snapDistance
   ) {
 
+    const feetY =
+      this.position.y - this.eyeHeight
+
+    const supportY =
+      world.findWalkableStepSurface?.(
+        this.position.x,
+        this.position.z,
+        feetY - snapDistance,
+        feetY,
+      )
+
+    if (supportY !== null && supportY !== undefined) {
+      this.position.y =
+        supportY + this.eyeHeight + 0.0001
+      this.velocity.y = 0
+      return true
+    }
+
     const originalY =
       this.position.y
 

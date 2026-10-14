@@ -301,6 +301,10 @@ export function updateDoors(doors, dt) {
   for (const door of doors) {
     if (door.type === 'animation') {
       door.mixer.update(dt)
+      if (!door.activeAction) {
+        door.openProgress = door.isOpen ? 1 : 0
+        continue
+      }
       const duration = door.activeAction?.getClip().duration || 0
       const clipProgress = duration > 0
         ? THREE.MathUtils.clamp(door.activeAction.time / duration, 0, 1)
