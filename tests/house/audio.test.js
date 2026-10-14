@@ -22,12 +22,13 @@ test('scares choose among all four new screams without an immediate repeat', t =
   const originalAudio = globalThis.Audio
   const originalWindow = globalThis.window
   const played = []
+  let musicHoldMs = 0
   globalThis.Audio = class {
-    constructor(url) { this.url = url; this.duration = 2 }
+    constructor(url) { this.url = url; this.duration = 1 }
     pause() {}
     play() { played.push(this.url); return Promise.resolve() }
   }
-  globalThis.window = { clearTimeout() {}, setTimeout() { return 1 } }
+  globalThis.window = { clearTimeout() {}, setTimeout(_callback, ms) { musicHoldMs = ms; return 1 } }
   t.after(() => {
     if (originalAudio === undefined) delete globalThis.Audio
     else globalThis.Audio = originalAudio
@@ -50,4 +51,37 @@ test('scares choose among all four new screams without an immediate repeat', t =
     '/levels/house/audio/screams/scream-04.ogg',
   ])
   assert.equal(audio.music.volume, 0)
+  assert.equal(musicHoldMs, 1950)
+})
+
+test('the completed rite stops all house sounds and keeps the yard silent', async t => {
+  const originalAudio = globalThis.Audio
+  const originalWindow = globalThis.window
+  const played = []
+  globalThis.Audio = class {
+    constructor(url) { this.url = url; this.paused = true; this.currentTime = 0 }
+    pause() { this.paused = true }
+    play() { this.paused = false; played.push(this.url); return Promise.resolve() }
+    addEventListener() {}
+  }
+  globalThis.window = { clearTimeout() {} }
+  t.after(() => {
+    if (originalAudio === undefined) delete globalThis.Audio
+    else globalThis.Audio = originalAudio
+    if (originalWindow === undefined) delete globalThis.window
+    else globalThis.window = originalWindow
+  })
+  const audio = new HauntedHouseAudio()
+  await audio.setHouseActive(true)
+  audio.playEffect('/test.ogg', 1)
+  audio.setQuiet()
+  assert.equal(audio.music.paused, true)
+  assert.equal(audio.phone.paused, true)
+  const count = played.length
+  audio.playDoor(true)
+  audio.playMelody()
+  audio.update({ velocity: { x: 3, z: 0 }, isGrounded: true, flying: false, position: {} })
+  audio.setPaused(true)
+  audio.setPaused(false)
+  assert.equal(played.length, count)
 })

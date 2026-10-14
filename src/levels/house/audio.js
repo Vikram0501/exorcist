@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { HOUSE_JUMP_SCARE_DURATION } from './story-data.js'
 
 const SOUND = {
   music: '/levels/house/audio/ambience.ogg',
@@ -55,6 +56,7 @@ export class HauntedHouseAudio {
     this.tones = new Set()
     this.context = null
     this.calm = false
+    this.quiet = false
     this.paused = false
     this.scareUntil = 0
     this.phone = this.createAudio(SOUND.phoneRing)
@@ -94,6 +96,7 @@ export class HauntedHouseAudio {
   async setHouseActive(active, model = null) {
     this.enabled = active
     this.calm = false
+    this.quiet = false
     this.paused = false
     this.scareUntil = 0
     this.nextFootstepAt = 0
@@ -120,7 +123,7 @@ export class HauntedHouseAudio {
   }
 
   update(player) {
-    if (!this.enabled || this.paused) return
+    if (!this.enabled || this.paused || this.quiet) return
     const now = performance.now() / 1000
     if (now < this.scareUntil) return
     const speed = Math.hypot(player.velocity.x, player.velocity.z)
@@ -147,12 +150,12 @@ export class HauntedHouseAudio {
   }
 
   playDoor(isOpen) {
-    if (!this.enabled) return
+    if (!this.enabled || this.quiet) return
     this.playEffect(isOpen ? SOUND.doorOpen : SOUND.doorClose, 0.72)
   }
 
   playRandomGhostSound() {
-    if (!this.enabled || this.paused || this.calm || performance.now() / 1000 < this.scareUntil) return
+    if (!this.enabled || this.paused || this.calm || this.quiet || performance.now() / 1000 < this.scareUntil) return
     const sounds = [
       SOUND.ghostFootsteps,
       SOUND.ghostBreath,
@@ -164,7 +167,7 @@ export class HauntedHouseAudio {
   }
 
   playEffect(source, volume) {
-    if (!this.enabled || this.paused) return
+    if (!this.enabled || this.paused || this.quiet) return
     if (performance.now() / 1000 < this.scareUntil) return
     const sound = this.createAudio(source)
     sound.volume = volume
@@ -178,7 +181,7 @@ export class HauntedHouseAudio {
   }
 
   playJumpScare() {
-    if (!this.enabled) return false
+    if (!this.enabled || this.quiet) return false
     this.jumpScareSource?.stop()
     this.lastJumpScare?.fallback.pause()
     const choices = this.jumpScares.filter(scream => scream !== this.lastJumpScare)
@@ -187,7 +190,8 @@ export class HauntedHouseAudio {
     const decoded = scream.decoded
     const fallbackDuration = Number.isFinite(scream.fallback.duration) ? scream.fallback.duration : 3
     const duration = decoded ? decoded.buffer.duration - decoded.offset : fallbackDuration
-    this.scareUntil = performance.now() / 1000 + Math.max(1.2, duration)
+    const holdDuration = Math.max(HOUSE_JUMP_SCARE_DURATION, duration)
+    this.scareUntil = performance.now() / 1000 + holdDuration
     this.stopPhoneRing()
     for (const sound of this.effects) sound.pause()
     this.effects.clear()
@@ -195,7 +199,7 @@ export class HauntedHouseAudio {
     this.tones.clear()
     window.clearTimeout(this.restoreTimer)
     this.music.volume = 0
-    this.restoreTimer = window.setTimeout(() => this.restoreMusic(), Math.max(1.2, duration) * 1000)
+    this.restoreTimer = window.setTimeout(() => this.restoreMusic(), holdDuration * 1000)
     this.nextGhostAt = this.scareUntil + randomBetween(7, 13)
     if (decoded && this.context?.state === 'running') {
       const source = this.context.createBufferSource()
@@ -230,6 +234,23 @@ export class HauntedHouseAudio {
     this.music.volume = calm ? 0.07 : MUSIC_VOLUME
   }
 
+  setQuiet() {
+    this.quiet = true
+    this.calm = true
+    window.clearTimeout(this.restoreTimer)
+    this.restoreTimer = null
+    this.stopPhoneRing()
+    this.jumpScareSource?.stop()
+    this.jumpScareSource = null
+    for (const scream of this.jumpScares) scream.fallback.pause()
+    for (const sound of this.effects) sound.pause()
+    this.effects.clear()
+    for (const tone of this.tones) { try { tone.stop() } catch {} }
+    this.tones.clear()
+    this.music.pause()
+    this.music.currentTime = 0
+  }
+
   setPaused(paused) {
     if (paused === this.paused) return
     this.paused = paused
@@ -240,14 +261,14 @@ export class HauntedHouseAudio {
       this.effects.clear()
       for (const tone of this.tones) { try { tone.stop() } catch {} }
       this.tones.clear()
-    } else if (this.enabled) {
+    } else if (this.enabled && !this.quiet) {
       this.music.play().catch(() => {})
       this.nextGhostAt = performance.now() / 1000 + randomBetween(10, 22)
     }
   }
 
   playTone(frequency, delay, duration, volume = 0.035, type = 'sine') {
-    if (!this.enabled || this.paused || !this.context || this.context.state !== 'running') return
+    if (!this.enabled || this.paused || this.quiet || !this.context || this.context.state !== 'running') return
     if (performance.now() / 1000 < this.scareUntil) return
     const oscillator = this.context.createOscillator()
     const gain = this.context.createGain()
@@ -266,7 +287,7 @@ export class HauntedHouseAudio {
   }
 
   playPhoneRing() {
-    if (!this.enabled || this.paused || !this.phone.paused) return
+    if (!this.enabled || this.paused || this.quiet || !this.phone.paused) return
     if (performance.now() / 1000 < this.scareUntil) return
     this.phone.currentTime = 0
     this.phone.play().catch(() => {})
@@ -285,7 +306,7 @@ export class HauntedHouseAudio {
   }
 
   duckMusic(seconds) {
-    if (!this.enabled || performance.now() / 1000 < this.scareUntil) return
+    if (!this.enabled || this.quiet || performance.now() / 1000 < this.scareUntil) return
     this.music.volume = DUCKED_MUSIC_VOLUME
     window.clearTimeout(this.restoreTimer)
     this.restoreTimer = window.setTimeout(
@@ -297,7 +318,7 @@ export class HauntedHouseAudio {
   restoreMusic() {
     window.clearTimeout(this.restoreTimer)
     this.restoreTimer = null
-    this.music.volume = this.calm ? 0.07 : MUSIC_VOLUME
+    this.music.volume = this.quiet ? 0 : this.calm ? 0.07 : MUSIC_VOLUME
   }
 
   findInteriorZones(model) {

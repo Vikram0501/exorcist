@@ -1,5 +1,6 @@
 import { Game } from './core/game.js'
 import { HIGHWAY_LOAD_EVENT } from './levels/highway/load-progress.js'
+import { LEVEL_LOAD_EVENT } from './core/loading.js'
 
 
 const container =
@@ -33,10 +34,9 @@ const buttonMarkup = new Map([
 
 let loadingButton = null
 
-// Which level the current loading session is for. While a highway load
-// is active, the shared `assetprogress` display is bypassed: the Level 3
-// session tracker owns the percentage, so cumulative manager totals can
-// never drag it backwards. Levels 1 and 2 keep the original path.
+// Each level reports completed steps for its own load session. Shared asset
+// counts are not used for the menu because they can reach 100% before the
+// scene and shaders are ready.
 let loadingLevel = null
 let menuRequest = 0
 
@@ -51,11 +51,10 @@ function exitHighway() {
   return true
 }
 
-window.addEventListener('assetprogress', (event) => {
-  if (!loadingButton) return
-  if (loadingLevel === 'highway') return
-  const { itemsLoaded, itemsTotal } = event.detail
-  const pct = itemsTotal > 0 ? Math.round((itemsLoaded / itemsTotal) * 100) : 0
+window.addEventListener(LEVEL_LOAD_EVENT, (event) => {
+  if (!loadingButton || event.detail.levelName !== loadingLevel) return
+  const { loaded, total } = event.detail
+  const pct = total > 0 ? Math.round((loaded / total) * 100) : 0
   loadingButton.textContent = `LOADING ${pct}%`
 })
 
@@ -144,12 +143,7 @@ async function startLevel(
 
   loadingLevel = levelName
 
-  // Level 3 starts at an explicit 0% (its session tracker owns every
-  // update from here); other levels keep the original label.
-  button.textContent =
-    levelName === 'highway'
-      ? 'LOADING 0%'
-      : 'LOADING...'
+  button.textContent = 'LOADING 0%'
 
 
   try {

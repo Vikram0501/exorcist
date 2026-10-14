@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { Input } from './input.js'
 import { Player } from './player.js'
 import { PostFx } from './postfx.js'
+import { createLevelLoadTracker, LEVEL_LOAD_EVENT } from './loading.js'
 import { HauntedHouseAudio } from '../levels/house/audio.js'
 import { HighwayAudio } from '../levels/highway/audio.js'
 import { TrainAudio } from '../levels/train/audio.js'
@@ -9,7 +10,9 @@ import { TrainCameraShake } from '../levels/train/shake.js'
 import { HouseStory } from '../levels/house/story.js'
 import { HouseStoryView, renderJournal } from '../levels/house/story-view.js'
 import { HouseAvatar } from '../levels/house/avatar.js'
+import { HouseScareShake } from '../levels/house/scare-shake.js'
 import { installBathroomMirror } from '../levels/house/mirror.js'
+import { createHouseShaderEffects } from '../levels/house/shaders.js'
 import { TrainRiteView } from '../levels/train/rite-view.js'
 
 import {
@@ -136,9 +139,11 @@ export class Game {
       window.innerHeight
     )
 
-    this.renderer.setPixelRatio(
-      Math.min(window.devicePixelRatio, 2)
-    )
+    this.maxPixelRatio = Math.min(window.devicePixelRatio || 1, 1.5)
+    this.pixelRatio = Math.min(this.maxPixelRatio, 1.25)
+    this.renderSampleTime = 0
+    this.renderSampleFrames = 0
+    this.renderer.setPixelRatio(this.pixelRatio)
 
     this.renderer.shadowMap.enabled = true
 
@@ -172,10 +177,12 @@ export class Game {
     this.highwayAudio = new HighwayAudio()
     this.trainAudio = new TrainAudio()
     this.trainShake = new TrainCameraShake(this.camera)
+    this.houseScareShake = new HouseScareShake(this.camera)
     this.houseStory = null
     this.houseStoryView = null
     this.houseAvatar = null
     this.houseMirror = null
+    this.houseShaders = null
 
 
     // LEVEL DATA
@@ -312,6 +319,9 @@ export class Game {
 
     this.raycaster.far =
       DOOR_INTERACTION_RANGE
+    this.nextInteractionSample = 0
+    this.cachedDoor = null
+    this.cachedInvestigationItem = null
 
 
     this.interactionPrompt =
@@ -508,10 +518,9 @@ export class Game {
     )
 
 
-    const dt = Math.min(
-      this.clock.getDelta(),
-      0.05
-    )
+    const frameTime = this.clock.getDelta()
+    const dt = Math.min(frameTime, 0.05)
+    this.updateRenderQuality(frameTime)
 
 
     // ----------------------------------------
@@ -837,11 +846,9 @@ if (this.loaded) {
     )
 
 
-    if (this.model) {
-
-      this.model.updateMatrixWorld(true)
-
-    }
+    // Static meshes already have world matrices from setup and rendering.
+    // Only doors move; forcing the full GLB tree here costs a lot per frame.
+    for (const door of this.doors) door.object.updateWorldMatrix(true, true)
 
 
     if (
@@ -875,13 +882,17 @@ if (this.loaded) {
     }
 
 
-    const door =
-      this.getLookedAtDoor()
-
-    const investigationItem =
-      this.currentLevel === 'house' || this.currentLevel === 'train'
+    const sampleInteraction = performance.now() >= this.nextInteractionSample ||
+      this.input.pressed.has('KeyE')
+    if (sampleInteraction) {
+      this.cachedDoor = this.getLookedAtDoor()
+      this.cachedInvestigationItem = this.currentLevel === 'house' || this.currentLevel === 'train'
         ? this.getLookedAtInvestigationItem()
         : null
+      this.nextInteractionSample = performance.now() + 80
+    }
+    const door = this.cachedDoor
+    const investigationItem = this.cachedInvestigationItem
 
 
     if (
@@ -1127,26 +1138,18 @@ if (this.loaded) {
         this.colliders.find((collider) => collider.type === 'octree')?.world,
       )
     }
-    const scareTime = this.currentLevel === 'house'
-      ? this.houseStory?.jumpScareTime || 0
-      : 0
-    if (scareTime > 0) {
-      const strength = Math.min(1, scareTime * 4)
-      const x = (Math.random() - 0.5) * 48 * strength
-      const y = (Math.random() - 0.5) * 38 * strength
-      const roll = (Math.random() - 0.5) * 3.5 * strength
-      this.renderer.domElement.style.transform = `translate(${x}px, ${y}px) rotate(${roll}deg) scale(1.12)`
-      this.renderer.domElement.style.filter = 'contrast(1.3) brightness(1.15)'
-    } else {
-      this.renderer.domElement.style.transform = ''
-      this.renderer.domElement.style.filter = ''
+    if (this.currentLevel === 'house') {
+      this.houseMirror?.update(this.houseAvatar?.renderCamera || this.camera)
+      this.houseShaders?.update(dt, this.houseAvatar?.renderCamera || this.camera)
     }
-
     // ----------------------------------------
     // RENDER
     // ----------------------------------------
 
     if (this.loaded && this.currentLevel === 'train') this.trainShake.apply(dt)
+    if (this.loaded && this.currentLevel === 'house') {
+      this.houseScareShake?.apply(this.houseStory?.jumpScareTime || 0)
+    }
 
     const renderCamera = this.currentLevel === 'house' && this.houseAvatar &&
       !this.newspaperOpen && !this.houseStoryView?.open &&
@@ -1161,6 +1164,7 @@ if (this.loaded) {
     if (this.houseAvatar) this.houseAvatar.root.visible = avatarVisible
 
     this.trainShake.clear()
+    this.houseScareShake?.clear()
 
     this.startHouseAudioAfterRender()
 
@@ -1179,6 +1183,28 @@ if (this.loaded) {
           !this.input.isLocked || this.houseAudio.enabled) return
       this.houseAudio.setHouseActive(true, this.model)
     })
+  }
+
+  updateRenderQuality(frameTime) {
+    if (!this.loaded || !Number.isFinite(frameTime) || frameTime <= 0) return
+    if (document.hidden) {
+      this.renderSampleTime = 0
+      this.renderSampleFrames = 0
+      return
+    }
+    this.renderSampleTime += Math.min(frameTime, 0.2)
+    this.renderSampleFrames++
+    if (this.renderSampleTime < 2) return
+    const average = this.renderSampleTime / this.renderSampleFrames
+    this.renderSampleTime = 0
+    this.renderSampleFrames = 0
+    let next = this.pixelRatio
+    if (average > 0.026) next = Math.max(0.85, next - 0.15)
+    else if (average < 0.017) next = Math.min(this.maxPixelRatio, next + 0.1)
+    if (Math.abs(next - this.pixelRatio) < 0.01) return
+    this.pixelRatio = next
+    this.renderer.setPixelRatio(next)
+    this.postFx.setSize(window.innerWidth, window.innerHeight)
   }
 
 
@@ -1251,6 +1277,16 @@ if (this.loaded) {
           })
         : null
 
+    const stageTracker = createLevelLoadTracker(
+      levelName,
+      () => loadId === this.levelLoadId,
+      ({ levelName: loadedLevel, loaded, total }) => {
+        window.dispatchEvent(new CustomEvent(LEVEL_LOAD_EVENT, {
+          detail: { levelName: loadedLevel, loaded, total },
+        }))
+      },
+    )
+
 
     // Remove old level.
     this.unloadCurrentLevel()
@@ -1283,7 +1319,7 @@ if (this.loaded) {
 
 
     return level
-      .load(levelRoot, highwayTracker)
+      .load(levelRoot, highwayTracker || stageTracker)
 
       .then(
           async ({
@@ -1372,6 +1408,7 @@ if (this.loaded) {
               return false
             }
             this.houseAvatar = avatar
+            stageTracker?.complete('avatar')
             this.houseMirror = installBathroomMirror(model, avatar)
             this.houseStoryView = new HouseStoryView(this)
             this.houseStory = new HouseStory({
@@ -1379,6 +1416,10 @@ if (this.loaded) {
               camera: this.camera, audio: this.houseAudio,
               onMessage: (text, duration) => this.houseStoryView.message(text, duration),
             })
+            this.houseShaders = createHouseShaderEffects({
+              level: levelRoot, model, story: this.houseStory, camera: this.camera,
+            })
+            stageTracker?.complete('setup')
           }
 
           this.trainTerrain =
@@ -1761,6 +1802,7 @@ if (this.loaded) {
           console.debug(
             `[load:${levelName}] shader warmup: ${(performance.now() - warmupStarted).toFixed(0)}ms`,
           )
+          stageTracker?.complete('warmup')
 
           // A newer level was selected during warmup.
           if (loadId !== this.levelLoadId) {
@@ -1775,10 +1817,9 @@ if (this.loaded) {
           // gameplay systems are all ready, so reporting 100% is honest.
           // This runs before `loaded` flips, so gameplay can only start
           // after the display has reached 100%.
-          highwayTracker?.complete('init')
-
-
           this.loaded = true
+          highwayTracker?.complete('init')
+          stageTracker?.complete('ready')
 
           // Bottom-centre controls hint: racing keys on the highway,
           // on-foot keys everywhere else (also restores the default
@@ -1818,6 +1859,7 @@ if (this.loaded) {
         // A failed load must never display 100%: settle this session so
         // no late completion can push the percentage there.
         highwayTracker?.abort()
+        stageTracker?.abort()
 
 
         console.error(
@@ -1843,6 +1885,11 @@ if (this.loaded) {
   // ============================================
 
   unloadCurrentLevel() {
+    this.nextInteractionSample = 0
+    this.cachedDoor = null
+    this.cachedInvestigationItem = null
+    this.renderSampleTime = 0
+    this.renderSampleFrames = 0
     clearTimeout(this.nameFocusTimer)
     clearTimeout(this.exorcismFadeTimer)
     this.nameFocusTimer = null
@@ -1853,6 +1900,7 @@ if (this.loaded) {
       cancelAnimationFrame(this.houseAudioStartFrame)
       this.houseAudioStartFrame = null
     }
+    this.houseShaders?.dispose()
     this.houseStory?.dispose()
     this.houseStoryView?.dispose()
     this.houseMirror?.dispose()
@@ -1860,6 +1908,7 @@ if (this.loaded) {
     this.houseStory = null
     this.houseStoryView = null
     this.houseMirror = null
+    this.houseShaders = null
     this.houseAvatar = null
 
     this.houseAudio.setHouseActive(false)
@@ -2281,6 +2330,17 @@ if (this.loaded) {
       return null
     }
 
+    // The authored grave is low and partly buried, so the centre ray often
+    // hits the soil or stone first. Standing beside it should start the rite.
+    if (this.currentLevel === 'house' && this.houseStory?.canInspect('evelyn-grave')) {
+      const grave = this.houseStory.gravePosition
+      const player = this.player.position
+      if (grave && Math.abs(player.y - grave.y) < 2.5 &&
+          Math.hypot(player.x - grave.x, player.z - grave.z) < 3.6) {
+        return this.investigationItems.find(item => item.id === 'evelyn-grave') || null
+      }
+    }
+
     this.setInteractionRay()
 
     const targets = [this.model, ...(this.houseStory ? [this.houseStory.root] : [])]
@@ -2544,7 +2604,7 @@ if (this.loaded) {
     this.hideNewspaperReader()
     this.currentInspectionItemId = null
 
-    this.input.lock()
+    this.input.lock({ preserveView: true })
 
     if (inspectionId === 'vale-frame' && !this.bedroomPhoneAnswered &&
         this.houseStory?.phoneRingStartsAt === Infinity) this.houseStory.schedulePhoneRing(3)

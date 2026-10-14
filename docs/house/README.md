@@ -12,6 +12,7 @@ the pursuing caretaker Elias Wren, and complete the exorcism at Evelyn's grave.
 | `src/levels/house/audio.js` | Music, footsteps, doors, telephone, ghost sounds, and screams |
 | `src/levels/house/story.js` | Evidence, progression, apparition timing, and release rite |
 | `src/levels/house/story-assets.js` | Authored ghost and grave helpers |
+| `src/levels/house/shaders.js` | Phone signal, Elias veil, and grave illumination |
 | `src/levels/house/story-view.js` | Captions, journal, and rite UI |
 | `src/levels/house/pursuit.js` | Ghost chase and retry state |
 | `tests/house/` | Story, audio, and music startup tests |
@@ -55,6 +56,7 @@ Replacement exports need their evidence placement and collision checked in game.
 ## Story and verification
 
 - [Current playable route and behavior](playthrough.md)
+- [Custom shader effects and demo explanation](shaders.md)
 - [Original design brief](archive/design-brief.md): historical planning, including
   ideas that are not implemented; use the playable route for current behavior.
 - [Project conventions](../BUILDSPEC.md)

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '..', '..')
 const src = (p) =>
-  fs.readFileSync(path.join(repoRoot, 'src', p), 'utf8')
+  fs.readFileSync(path.join(repoRoot, 'src', p), 'utf8').replace(/\r\n/g, '\n')
 
 // ---------------------------------------------------------------------------
 // Every Level 3 network asset must load through the shared LoadingManager,
@@ -60,7 +60,7 @@ test('no Level 3 asset loader bypasses progress tracking', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Progress events drive the existing menu percentage UI (same as L1/L2).
+// Progress events drive the menu percentage UI.
 // ---------------------------------------------------------------------------
 
 test('loadingManager progress events carry itemsLoaded/itemsTotal', async (t) => {
@@ -114,12 +114,11 @@ test('menu shows LOADING pct%, resets per entry, hides overlay only on success',
   const mainJs = src('main.js')
   assert.ok(
     mainJs.includes('`LOADING ${pct}%`'),
-    'button shows the live percentage (L1/L2 format)'
+    'button shows the live percentage'
   )
   assert.ok(
-    mainJs.includes("button.textContent =\n    'LOADING...'") ||
-      mainJs.includes("'LOADING...'"),
-    'label resets each time a level is entered'
+    mainJs.includes("button.textContent = 'LOADING 0%'"),
+    'every level resets to zero on entry'
   )
   assert.ok(
     mainJs.includes('if (!loaded)') &&
@@ -131,17 +130,14 @@ test('menu shows LOADING pct%, resets per entry, hides overlay only on success',
 test('Level 3 starts at 0% and owns its display session', () => {
   const mainJs = src('main.js')
   assert.ok(
-    mainJs.includes("? 'LOADING 0%'"),
+    mainJs.includes("button.textContent = 'LOADING 0%'"),
     'highway entries start at an explicit 0%'
   )
   assert.ok(
     mainJs.includes('HIGHWAY_LOAD_EVENT'),
     'menu listens to the session tracker event'
   )
-  assert.ok(
-    mainJs.includes("if (loadingLevel === 'highway') return"),
-    'shared manager display is bypassed during highway loads'
-  )
+  assert.ok(mainJs.includes('LEVEL_LOAD_EVENT'), 'house and train use session progress')
   assert.ok(
     mainJs.includes('loadingLevel = levelName') &&
       mainJs.includes('loadingLevel = null'),
@@ -157,7 +153,7 @@ test('game threads one session tracker through the highway load', () => {
     'tracker is bound to the load session (exit invalidates it)'
   )
   assert.ok(
-    gameJs.includes('.load(levelRoot, highwayTracker)'),
+    gameJs.includes('.load(levelRoot, highwayTracker || stageTracker)'),
     'tracker reaches the highway builder'
   )
   assert.ok(
@@ -167,7 +163,7 @@ test('game threads one session tracker through the highway load', () => {
   )
   assert.ok(
     gameJs.includes("highwayTracker?.complete('init')"),
-    'init completes last, just before the level is marked loaded'
+    'init completes after the level is marked loaded'
   )
   assert.ok(
     gameJs.includes('highwayTracker?.abort()'),

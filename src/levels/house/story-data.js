@@ -1,3 +1,5 @@
+export const HOUSE_JUMP_SCARE_DURATION = 1.95
+
 export const HOUSE_EVIDENCE = [
   {
     id: 'evelyn-diary', title: "Evelyn's diary", foundAt: "Upstairs, beside Evelyn's bed",

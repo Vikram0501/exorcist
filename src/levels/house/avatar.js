@@ -5,7 +5,7 @@ import { loadingManager } from '../../core/loading.js'
 const MODEL_URL = '/levels/house/models/priest-player.glb'
 const WALK_SUFFIXES = new Set(['F', 'B', 'L', 'R', 'FL', 'FR', 'BL', 'BR'])
 // Level 1's collision body is roughly 1 m tall, including its head radius.
-const PLAYER_VISUAL_HEIGHT = 1
+const PLAYER_VISUAL_HEIGHT = 0.92
 const CAMERA_DISTANCE = 2.5
 const CAMERA_RADIUS = 0.18
 const CAMERA_STEP = 0.2

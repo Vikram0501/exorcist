@@ -87,18 +87,22 @@ export function createJumpScareGhost(source, camera) {
   artwork.scale.setScalar(1)
   artwork.traverse(object => {
     if (!object.isMesh) return
-    const material = original => new THREE.MeshBasicMaterial({
-      map: original.map || null,
-      color: original.color || 0xffffff,
-      alphaMap: original.alphaMap || null,
-      alphaTest: original.alphaTest || 0,
-      side: THREE.FrontSide,
-      transparent: true,
-      depthTest: false,
-      depthWrite: false,
-      fog: false,
-      toneMapped: false,
-    })
+    const material = original => {
+      // Retain the supplied model's normal/detail maps and shading. The
+      // flat BasicMaterial copy made the enlarged face look washed out.
+      const copy = original.clone()
+      copy.side = THREE.FrontSide
+      copy.transparent = false
+      copy.opacity = 1
+      copy.depthTest = true
+      copy.depthWrite = true
+      copy.fog = false
+      if (copy.emissive) {
+        copy.emissive.setHex(0x221111)
+        copy.emissiveIntensity = 0.22
+      }
+      return copy
+    }
     object.material = Array.isArray(object.material)
       ? object.material.map(material) : material(object.material)
     object.renderOrder = 10000
@@ -129,7 +133,12 @@ export function createJumpScareGhost(source, camera) {
   closeup.add(artwork)
   const distance = Math.max(camera.near + 0.15, 0.38)
   const visibleHeight = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * distance
-  closeup.scale.setScalar(visibleHeight * 1.8 / (height * 0.18))
+  // Bring the face close enough to fill the view without clipping the head.
+  closeup.scale.setScalar(visibleHeight * 1.15 / (height * 0.24))
+  closeup.userData.baseScale = closeup.scale.x
+  const faceLight = new THREE.PointLight(0xffdacb, 1.6, 3, 2)
+  faceLight.position.set(0.22, 0.3, 0.5)
+  closeup.add(faceLight)
   closeup.position.z = -distance
   closeup.visible = false
   camera.add(closeup)

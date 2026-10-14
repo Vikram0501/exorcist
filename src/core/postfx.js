@@ -46,10 +46,10 @@ export class PostFx {
     const size = renderer.getDrawingBufferSize(new THREE.Vector2())
 
     this.target = new THREE.WebGLRenderTarget(size.x, size.y, {
-      type: THREE.HalfFloatType,
-      // The canvas is created with antialias: true, so the offscreen target
-      // needs its own MSAA or edges would suddenly look jagged on the train.
-      samples: 4,
+      type: THREE.UnsignedByteType,
+      // Two samples keep edges readable without the bandwidth cost of a
+      // four-sample floating point buffer on the train.
+      samples: 2,
     })
 
     const shader = CHROMATIC_ABERRATION_SHADER

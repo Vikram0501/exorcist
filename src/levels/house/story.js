@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { HousePursuit } from './pursuit.js'
 import { findStoryAsset, createAuthoredGhost, createJumpScareGhost, darkenGraves } from './story-assets.js'
 
-import { HOUSE_EVIDENCE, RITE_QUESTIONS } from './story-data.js'
+import { HOUSE_EVIDENCE, HOUSE_JUMP_SCARE_DURATION, RITE_QUESTIONS } from './story-data.js'
 export { HOUSE_EVIDENCE, RITE_QUESTIONS } from './story-data.js'
 
 export class HouseStory {
@@ -383,12 +383,16 @@ export class HouseStory {
     // deliberate final scare and must still start the story's chase.
     if (!startChase && !force && this.time < this.nextScareAllowedAt) return false
     this.chaseAfterScare = startChase
-    this.jumpScareTime = 0.95
-    this.jumpScareEndsAt = performance.now() + 950
+    this.jumpScareTime = HOUSE_JUMP_SCARE_DURATION
+    this.jumpScareEndsAt = performance.now() + HOUSE_JUMP_SCARE_DURATION * 1000
     this.nextScareAllowedAt = this.time + 35
     this.nextApparitionAt = this.time + 35 + Math.random() * 25
     this.audio.playJumpScare?.()
     this.ghost.visible = false
+    this.jumpScareGhost.userData.baseScale ??= this.jumpScareGhost.scale.x
+    this.jumpScareGhost.scale.setScalar(this.jumpScareGhost.userData.baseScale)
+    this.jumpScareGhost.position.x = 0
+    this.jumpScareGhost.position.y = 0
     this.jumpScareGhost.visible = true
     return true
   }
@@ -402,6 +406,13 @@ export class HouseStory {
       (this.jumpScareEndsAt - performance.now()) / 1000,
     ))
     this.jumpScareGhost.visible = this.jumpScareTime > 0
+    if (this.jumpScareTime > 0) {
+      const elapsed = HOUSE_JUMP_SCARE_DURATION - this.jumpScareTime
+      const lunge = Math.min(1, elapsed / 0.14)
+      this.jumpScareGhost.scale.setScalar(this.jumpScareGhost.userData.baseScale * (0.94 + 0.18 * lunge))
+      this.jumpScareGhost.position.x = Math.sin(elapsed * 67) * 0.012
+      this.jumpScareGhost.position.y = Math.sin(elapsed * 83 + 0.7) * 0.01
+    }
     if (this.jumpScareTime === 0 && this.chaseAfterScare) {
       this.chaseAfterScare = false
       this.pursuit.start(player.position)
@@ -444,8 +455,7 @@ export class HouseStory {
       this.pursuit.stop()
       this.releaseTime = this.time
       if (this.ghost) this.ghost.visible = false
-      this.audio.setCalm(true)
-      this.audio.playMelody()
+      this.audio.setQuiet()
       this.onMessage('EVELYN · “Thank you. I am free now.” Elias is gone. The yard falls quiet.', 12)
     }
     return true
@@ -462,12 +472,12 @@ export class HouseStory {
     if (!this.phoneAnswered) return null
     if (this.complete) return 'LEVEL 1 COMPLETE - EVELYN IS FREE'
     if (this.released) return 'EVELYN IS FREE - ELIAS IS GONE'
-    if (this.pendingLetterScare || this.chaseAfterScare || this.pursuit?.state === 'chasing') return 'BACKYARD - FACE THE GRAVE AND PRESS E'
+    if (this.pendingLetterScare || this.chaseAfterScare || this.pursuit?.state === 'chasing') return "BACKYARD - GET CLOSE TO EVELYN'S GRAVE AND PRESS E"
     if (!this.found.has('evelyn-diary')) return "UPSTAIRS · FIND EVELYN'S DIARY BESIDE HER BED"
     if (!this.found.has('music-box')) return 'UPSTAIRS · INSPECT THE MUSIC BOX IN THE MAIN BEDROOM'
     if (!this.found.has('annex-message')) return 'UPSTAIRS · READ THE SCRATCHES IN THE ANNEX'
     if (!this.found.has('caretaker-record')) return 'KITCHEN · READ THE VALE ESTATE SERVICE RECORD'
-    if (!this.found.has('daniel-confession')) return 'DINING ROOM - OPEN DANIELS ENVELOPE ON THE TABLE'
+    if (!this.found.has('daniel-confession')) return "FIND DANIEL'S ENVELOPE AND LETTER ON THE DINING ROOM TABLE"
     return 'BACKYARD · FIND EVELYN’S UNMARKED GRAVE'
   }
 

@@ -178,9 +178,10 @@ async function placeBurntZombie(level) {
 }
 
 
-export function loadTrain(level) {
+export function loadTrain(level, loadTracker = null) {
   loadModel(ZOMBIE_PATH).catch(() => null)
   return Promise.all([loadModel(CARRIAGE_01_PATH), loadModel(CARRIAGE_02_PATH)]).then(async () => {
+    loadTracker?.complete('carriages')
     if (typeof document !== 'undefined' && document.fonts?.load) {
       await document.fonts.load('100px "hakidame"', 'アイウエオカキクケコあいうえおREAD THE RESIDUE').catch(() => null)
     }
@@ -204,18 +205,22 @@ export function loadTrain(level) {
     }
 
     const controllers = carriages.map(c => c.controller)
+    loadTracker?.complete('layout')
 
     const colliders = await createTrainCollision(carriages)
+    loadTracker?.complete('collision')
 
     setupTrainLighting(level, carriages[carriages.length - 1].model, carriage02Size)
     const trainTerrain = createTrainTerrain(level, carriages)
     const zombie = await placeBurntZombie(level)
+    loadTracker?.complete('zombie')
 
     const plan = createCluePlan()
     const clues = createTrainClues({ carriages, plan, colliders })
     const exorcism = createExorcismChamber({ carriages, colliders })
     if (exorcism) clues.items.push(exorcism.item)
     const trainStory = new TrainStory({ plan, items: clues.items })
+    loadTracker?.complete('clues')
     trainStory.frontZ = carriages[1] ? carriages[1].bounds.min.z : -Infinity
     trainStory.exitZ = exorcism ? exorcism.carriage.bounds.min.z : -Infinity
 

@@ -21,6 +21,7 @@ test('actual menu handlers exit on browser-consumed ESC, but preserve death retr
   }
   const context = {
     Game: function () { return game }, HIGHWAY_LOAD_EVENT: 'highwayloadprogress',
+    LEVEL_LOAD_EVENT: 'levelloadprogress',
     window: { addEventListener(type, fn) { (handlers.window[type] ??= []).push(fn) } },
     document: {
       getElementById: node, pointerLockElement: null,

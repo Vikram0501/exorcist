@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { Octree } from 'three/addons/math/Octree.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { loadingManager } from '../../core/loading.js'
 import { setupHouseLighting } from './lighting.js'
 
@@ -81,6 +82,10 @@ function isBoundaryCollisionMesh(object) {
   )
 }
 
+function isBathroomMirrorMesh(object) {
+  return object?.isMesh && object.name.toLowerCase().replace(/[^a-z0-9]/g, '') === 'bathroommirror'
+}
+
 // Furniture collision.
 // These two meshes contain the furniture in the current GLB.
 // Their real triangles are used in the Octree rather than one huge box.
@@ -127,6 +132,8 @@ function shouldUseForCollision(object) {
 
   if (!name) return false
 
+  if (isBathroomMirrorMesh(object)) return true
+
   if (COLLISION_EXACT_EXCLUDES.has(name)) {
     return false
   }
@@ -165,6 +172,97 @@ function shouldHideAtRuntime(object) {
     .toLowerCase()
 
   return HIDDEN_RENDER_MESH_NAMES.has(name)
+}
+
+// The supplied gravel meshes have roughly 95k triangles each even though
+// their height varies by only a few centimetres. Keep their textured surface
+// and normal map while drawing a small grid instead.
+export function simplifyDecorativeGravel(model) {
+  const replaced = new Set()
+  let count = 0
+  model.traverse(object => {
+    if (!object.isMesh || !/^gravelroadinvillage\d*$/.test(object.name.toLowerCase().replace(/[^a-z0-9]/g, ''))) return
+    const original = object.geometry
+    if (!original.boundingBox) original.computeBoundingBox()
+    const bounds = original.boundingBox
+    const size = bounds.getSize(new THREE.Vector3())
+    const center = bounds.getCenter(new THREE.Vector3())
+    const proxy = new THREE.PlaneGeometry(size.x, size.z, 8, 8)
+    proxy.rotateX(-Math.PI / 2)
+    const vertices = proxy.getAttribute('position')
+    const baseHeight = bounds.max.y - Math.min(size.y * 0.25, 0.018)
+    const relief = Math.min(size.y * 0.2, 0.012)
+    for (let i = 0; i < vertices.count; i++) {
+      const x = vertices.getX(i)
+      const z = vertices.getZ(i)
+      vertices.setY(i, baseHeight + relief * Math.sin(x * 13) * Math.sin(z * 11))
+    }
+    proxy.translate(center.x, 0, center.z)
+    proxy.computeVertexNormals()
+    proxy.computeBoundingBox()
+    proxy.computeBoundingSphere()
+    object.geometry = proxy
+    replaced.add(original)
+    count++
+  })
+  const inUse = new Set()
+  model.traverse(object => { if (object.isMesh) inUse.add(object.geometry) })
+  for (const geometry of replaced) if (!inUse.has(geometry)) geometry.dispose()
+  return count
+}
+
+// The supplied upstairs chair alone has about 480k triangles. Keep its
+// authored mesh close up and use the same textured material on a small chair
+// silhouette at room distance and outdoors.
+export function installHeavyChairLod(model) {
+  let count = 0
+  const heavyMeshes = []
+  model.traverse(object => {
+    if (object.isMesh && /^abound_/.test(object.name) &&
+        object.parent?.name.toLowerCase().replace(/[^a-z0-9]/g, '') === 'simplewoodenchair') {
+      heavyMeshes.push(object)
+    }
+  })
+  for (const original of heavyMeshes) {
+    if (!original.geometry.boundingBox) original.geometry.computeBoundingBox()
+    const bounds = original.geometry.boundingBox
+    const size = bounds.getSize(new THREE.Vector3())
+    const center = bounds.getCenter(new THREE.Vector3())
+    const pieces = []
+    const box = (width, height, depth, x, y, z) => {
+      const geometry = new THREE.BoxGeometry(width, height, depth)
+      geometry.translate(x, y, z)
+      pieces.push(geometry)
+    }
+    box(size.x * 0.9, size.y * 0.08, size.z * 0.85,
+      center.x, bounds.min.y + size.y * 0.48, center.z)
+    box(size.x * 0.9, size.y * 0.48, size.z * 0.08,
+      center.x, bounds.min.y + size.y * 0.74, bounds.min.z + size.z * 0.08)
+    for (const x of [bounds.min.x + size.x * 0.14, bounds.max.x - size.x * 0.14]) {
+      for (const z of [bounds.min.z + size.z * 0.15, bounds.max.z - size.z * 0.15]) {
+        box(size.x * 0.11, size.y * 0.45, size.z * 0.11,
+          x, bounds.min.y + size.y * 0.225, z)
+      }
+    }
+    const proxyGeometry = mergeGeometries(pieces)
+    for (const piece of pieces) piece.dispose()
+    if (!proxyGeometry) continue
+    const proxy = new THREE.Mesh(proxyGeometry, original.material)
+    proxy.name = 'Simple Wooden Chair Distance Mesh'
+    proxy.position.copy(original.position)
+    proxy.quaternion.copy(original.quaternion)
+    proxy.scale.copy(original.scale)
+    proxy.castShadow = false
+    proxy.receiveShadow = true
+    const lod = new THREE.LOD()
+    lod.name = 'Simple Wooden Chair LOD'
+    const parent = original.parent
+    lod.addLevel(original, 0)
+    lod.addLevel(proxy, 3)
+    parent.add(lod)
+    count++
+  }
+  return count
 }
 
 function getPlacementBox(root) {
@@ -368,10 +466,11 @@ export function getDoorColliders(doors) {
 // HOUSE LOAD
 // -----------------------------------------------------------------------------
 
-export async function loadHouse(level) {
+export async function loadHouse(level, loadTracker = null) {
   const loader = new GLTFLoader(loadingManager)
   loader.setMeshoptDecoder(MeshoptDecoder)
   const gltf = await loader.loadAsync(HOUSE_MODEL_URL)
+  loadTracker?.complete('model')
   const model = gltf.scene
 
   // If the uncleaned House(5).glb is accidentally used, remove the duplicate
@@ -408,6 +507,9 @@ export async function loadHouse(level) {
   child.castShadow = false
   child.receiveShadow = true
   })
+
+  simplifyDecorativeGravel(model)
+  installHeavyChairLod(model)
 
   model.updateMatrixWorld(true)
 
@@ -456,6 +558,7 @@ export async function loadHouse(level) {
 
   const { lightHelpers } =
     setupHouseLighting(level, model, size)
+  loadTracker?.complete('world')
 
   const spawn = new THREE.Vector3(
     1,
@@ -537,7 +640,7 @@ function removeKnownDuplicateMesh(model) {
 // COLLISION WORLD FROM LABELLED MESHES
 // -----------------------------------------------------------------------------
 
-function buildLabelledCollisionWorld(model) {
+export function buildLabelledCollisionWorld(model) {
   model.updateMatrixWorld(true)
 
   const collisionRoot = new THREE.Group()
@@ -551,6 +654,27 @@ function buildLabelledCollisionWorld(model) {
 
     const cleanName =
       (object.name || '').trim().toLowerCase()
+
+    if (isBathroomMirrorMesh(object)) {
+      if (!object.geometry.boundingBox) object.geometry.computeBoundingBox()
+      const bounds = object.geometry.boundingBox
+      const size = bounds.getSize(new THREE.Vector3())
+      const center = bounds.getCenter(new THREE.Vector3())
+      const worldScale = object.getWorldScale(new THREE.Vector3())
+      const minimumThickness = 0.12
+      size.x = Math.max(size.x, minimumThickness / Math.max(Math.abs(worldScale.x), 0.0001))
+      size.y = Math.max(size.y, minimumThickness / Math.max(Math.abs(worldScale.y), 0.0001))
+      size.z = Math.max(size.z, minimumThickness / Math.max(Math.abs(worldScale.z), 0.0001))
+      const root = new THREE.Group()
+      object.matrixWorld.decompose(root.position, root.quaternion, root.scale)
+      const proxy = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z))
+      proxy.name = 'COLLISION_BATHROOM_MIRROR'
+      proxy.position.copy(center)
+      root.add(proxy)
+      collisionRoot.add(root)
+      names.push(`${object.name} [solid mirror]`)
+      return
+    }
 
     // =====================================================
     // INVISIBLE FOREST BOUNDARY WALLS
@@ -641,7 +765,7 @@ function buildLabelledCollisionWorld(model) {
     // almost flat (about 12 cm of height variation). A thin walkable box for
     // each tile preserves its footprint without making the Octree process
     // hundreds of thousands of triangles before the level can start.
-    if (/^gravel_road_in_village\d*$/i.test(object.name)) {
+    if (/^gravelroadinvillage\d*$/.test(object.name.toLowerCase().replace(/[^a-z0-9]/g, ''))) {
       const box = new THREE.Box3().setFromObject(object)
       const size = box.getSize(new THREE.Vector3())
       const thickness = Math.max(size.y, 0.15)

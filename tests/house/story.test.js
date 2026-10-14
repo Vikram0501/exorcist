@@ -13,10 +13,25 @@ function createStory() {
     complete: false, time: 0, onMessage() {},
     nextScareAllowedAt: 0,
     pursuit: new HousePursuit(),
-    audio: { playCue() {}, playMelody() {}, setCalm() {}, stopPhoneRing() {} },
+    audio: { playCue() {}, playMelody() {}, setCalm() {}, setQuiet() {}, stopPhoneRing() {} },
   })
   return story
 }
+
+test('the jump scare keeps the authored surface detail and adds local face light', () => {
+  const source = new THREE.Group()
+  const detail = new THREE.Texture()
+  source.add(new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.5),
+    new THREE.MeshStandardMaterial({ color: 0x67574f, roughness: 0.38, normalMap: detail })))
+  const closeup = createJumpScareGhost(source, new THREE.PerspectiveCamera())
+  const face = closeup.getObjectByProperty('isMesh', true)
+  assert.ok(face.material.isMeshStandardMaterial)
+  assert.equal(face.material.normalMap, detail)
+  assert.equal(face.material.opacity, 1)
+  assert.equal(face.material.transparent, false)
+  assert.equal(face.material.depthWrite, true)
+  assert.ok(closeup.children.some(child => child.isPointLight))
+})
 
 test('the phone unlocks the new clues and all four must precede Daniel’s envelope', () => {
   const story = createStory()
@@ -113,6 +128,7 @@ test('wrong rite answers scare the player and require a respawn', () => {
   assert.equal(story.pursuit.state, 'caught')
   assert.equal(story.failureReason, 'wrong-answer')
   assert.equal(story.jumpScareGhost.visible, true)
+  assert.equal(story.jumpScareTime, 1.95)
   assert.equal(story.answerRite(RITE_QUESTIONS[0].answer), false)
   story.pursuit.retry(new THREE.Vector3(0, 1, 0))
   story.pursuit.state = 'safe'
@@ -224,7 +240,7 @@ test('the annex clue can be found first, but the letter waits for the kitchen re
   assert.match(story.objective(), /GRAVE/)
 })
 
-test('closing the confession triggers a brief close-up scare before the chase', () => {
+test('closing the confession triggers a two-second close-up scare before the chase', () => {
   const story = createStory()
   const camera = new THREE.PerspectiveCamera()
   const ghost = new THREE.Group()
@@ -250,7 +266,10 @@ test('closing the confession triggers a brief close-up scare before the chase', 
   const player = { position: new THREE.Vector3(0, 1, 0) }
   story.updateJumpScare(0.5, player)
   assert.equal(story.jumpScareGhost.visible, true)
+  assert.ok(story.jumpScareGhost.scale.x > story.jumpScareGhost.userData.baseScale)
   story.updateJumpScare(0.7, player)
+  assert.equal(story.jumpScareGhost.visible, true)
+  story.updateJumpScare(0.8, player)
   assert.equal(story.pursuit.state, 'chasing')
   assert.equal(ghost.visible, false)
   assert.equal(story.jumpScareGhost.visible, false)
@@ -301,7 +320,7 @@ test('ordinary house appearances play the loud close-up scare and do not start t
   assert.equal(scares, 1)
   assert.equal(story.jumpScareGhost.visible, true)
   assert.equal(ghost.visible, false)
-  story.updateJumpScare(1, player)
+  story.updateJumpScare(2, player)
   assert.equal(story.jumpScareGhost.visible, false)
   assert.equal(story.pursuit.state, 'idle')
   story.update(21, player, false)
@@ -339,7 +358,7 @@ test('nearby clue scares share the cooldown while the confession can still begin
   story.audio.playJumpScare = () => { scares++ }
   const player = { position: new THREE.Vector3(0, 1, 0) }
   assert.equal(story.startHouseApparition(), true)
-  story.updateJumpScare(1, player)
+  story.updateJumpScare(2, player)
   for (const id of ['evelyn-diary', 'annex-message']) {
     story.inspect(id)
     assert.equal(story.finishInspection(id), false)
@@ -349,7 +368,7 @@ test('nearby clue scares share the cooldown while the confession can still begin
   story.inspect('caretaker-record')
   story.inspect('daniel-confession')
   assert.equal(story.finishInspection('daniel-confession'), true)
-  story.updateJumpScare(1, player)
+  story.updateJumpScare(2, player)
   assert.equal(scares, 2)
   assert.equal(story.pursuit.state, 'chasing')
 })

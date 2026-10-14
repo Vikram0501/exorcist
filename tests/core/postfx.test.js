@@ -65,13 +65,13 @@ test('while enabled the scene is drawn offscreen and blitted back with the aberr
   )
 })
 
-test('the offscreen target matches the drawing buffer, pixel ratio and MSAA of the canvas', () => {
+test('the offscreen target follows drawing size with a cheaper train buffer', () => {
   const { postFx } = setup()
 
   assert.equal(postFx.target.width, 640, 'drawing buffer size is already device pixels')
   assert.equal(postFx.target.height, 360)
-  assert.equal(postFx.target.samples, 4, 'keeps the antialias: true edge quality')
-  assert.equal(postFx.target.texture.type, THREE.HalfFloatType, 'no banding in the dark carriages')
+  assert.equal(postFx.target.samples, 2)
+  assert.equal(postFx.target.texture.type, THREE.UnsignedByteType)
 
   postFx.setSize(500, 300)
   assert.equal(postFx.target.width, 1000)
