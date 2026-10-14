@@ -52,7 +52,7 @@ function cloneCarriage(gltf) {
   return model
 }
 
-export function createTrainCarriageDoor(model, animations = []) {
+export function createTrainCarriageDoor(model, animations = [], { locked = false } = {}) {
   const object = model.getObjectByName('Rear_Lower_Door')
   const openClip = animations.find(clip => clip.name === 'Door_Open')
   const closeClip = animations.find(clip => clip.name === 'Door_Close')
@@ -74,6 +74,7 @@ export function createTrainCarriageDoor(model, animations = []) {
     activeAction: null,
     isOpen: false,
     openProgress: 0,
+    locked,
   }
 }
 
@@ -83,7 +84,7 @@ function placeCarriage(gltf, z, level, carriages, doors, carriageType, instanceI
   group.name = 'carriage'
   group.add(model)
   const door = carriageType === '02'
-    ? createTrainCarriageDoor(model, gltf.animations)
+    ? createTrainCarriageDoor(model, gltf.animations, { locked: options.terminalDoor })
     : null
   if (door) doors.push(door)
   const controller = createCarriageLights(group, carriageType, instanceIndex, options)
@@ -201,6 +202,7 @@ export function loadTrain(level, loadTracker = null) {
       placeCarriage(cachedGltf[CARRIAGE_02_PATH], -i * carriage02Size.z, level, carriages, doors, '02', i, {
         lit: spawnCarriage,
         presetIndex: spawnCarriage ? 0 : i,
+        terminalDoor: spawnCarriage,
       })
     }
 

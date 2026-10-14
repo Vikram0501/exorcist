@@ -96,6 +96,15 @@ export class Player {
 
     if (octreeCollider) {
 
+      const maxStepHeight =
+        octreeCollider.maxStepHeight || 0
+
+      const groundSnapDistance =
+        octreeCollider.groundSnapDistance || 0.18
+
+      const lockVerticalOnGround =
+        octreeCollider.lockVerticalOnGround === true
+
       // Gravity before movement.
       this.velocity.y +=
         GRAVITY * dt
@@ -131,6 +140,12 @@ export class Player {
             collider.type === 'door'
         )
 
+      const meshRamps =
+        colliders.filter(
+          (collider) =>
+            collider.type === 'meshRamp'
+        )
+
 
       for (
         let step = 0;
@@ -138,16 +153,58 @@ export class Player {
         step++
       ) {
 
+        const previousPosition =
+          this.position.clone()
+
+        const movementVelocity =
+          this.velocity.clone()
+
         this.move(subDt)
+
+        const rampSurface =
+          this.getMeshRampSurface(
+            meshRamps,
+            this.position.y - this.eyeHeight,
+            maxStepHeight,
+            groundSnapDistance,
+          )
+
+        const rampGrounded =
+          rampSurface !== null
+
+        if (rampGrounded) {
+          this.position.y =
+            rampSurface + this.eyeHeight
+          this.velocity.y = 0
+        }
+
+        const stepCollision =
+          maxStepHeight > 0 && wasGrounded
+            ? octreeCollider.world.capsuleIntersect(
+              this.getCollisionCapsule(),
+            )
+            : false
 
         const grounded =
           this.collideWithOctree(
             octreeCollider.world,
-            5
+            5,
+            lockVerticalOnGround,
+          )
+
+        const stepped =
+          stepCollision &&
+          stepCollision.normal.y <= 0.25 &&
+          this.tryStepUp(
+            octreeCollider.world,
+            previousPosition,
+            movementVelocity,
+            subDt,
+            maxStepHeight,
           )
 
         groundedThisFrame =
-          groundedThisFrame || grounded
+          groundedThisFrame || grounded || stepped || rampGrounded
 
         this.collide(
           dynamicColliders
@@ -166,7 +223,7 @@ export class Player {
         groundedThisFrame =
           this.snapToOctreeGround(
             octreeCollider.world,
-            0.18
+            groundSnapDistance
           )
       }
 
@@ -269,7 +326,8 @@ export class Player {
 
   collideWithOctree(
     world,
-    maxIterations = 4
+    maxIterations = 4,
+    lockVerticalOnGround = false,
   ) {
 
     let grounded = false
@@ -301,10 +359,13 @@ export class Player {
         result.normal
 
 
-      // Floor / stair tread.
-      if (
+      const floorCollision =
         normal.y > 0.25 &&
         this.velocity.y <= 0
+
+      // Floor / stair tread.
+      if (
+        floorCollision
       ) {
 
         grounded = true
@@ -328,6 +389,10 @@ export class Player {
           normal,
           -velocityIntoSurface
         )
+      }
+
+      if (floorCollision && lockVerticalOnGround) {
+        this.velocity.y = 0
       }
 
 
@@ -415,6 +480,110 @@ export class Player {
       originalY
 
     return false
+  }
+
+  tryStepUp(
+    world,
+    previousPosition,
+    velocity,
+    dt,
+    maxStepHeight,
+  ) {
+    const blockedPosition =
+      this.position.clone()
+
+    const horizontalSpeed =
+      Math.hypot(
+        velocity.x,
+        velocity.z,
+      )
+
+    if (
+      horizontalSpeed <= 0.0001 ||
+      typeof world.findWalkableStepSurface !== 'function'
+    ) {
+      return false
+    }
+
+    const feetY =
+      previousPosition.y - this.eyeHeight
+
+    const probeDistance =
+      this.movement.radius
+
+    const supportY =
+      world.findWalkableStepSurface(
+        previousPosition.x + (velocity.x / horizontalSpeed) * probeDistance,
+        previousPosition.z + (velocity.z / horizontalSpeed) * probeDistance,
+        feetY,
+        feetY + maxStepHeight,
+      )
+
+    if (supportY === null) return false
+
+    const rise =
+      supportY - feetY
+
+    if (rise <= 0.0001 || rise > maxStepHeight) return false
+
+    this.position.copy(previousPosition)
+    this.position.y =
+      supportY + this.eyeHeight + 0.0001
+
+    if (world.capsuleIntersect(this.getCollisionCapsule())) {
+      this.position.copy(blockedPosition)
+      return false
+    }
+
+    this.position.x += velocity.x * dt
+    this.position.z += velocity.z * dt
+
+    if (world.capsuleIntersect(this.getCollisionCapsule())) {
+      this.position.copy(blockedPosition)
+      return false
+    }
+
+    this.velocity.x = velocity.x
+    this.velocity.y = 0
+    this.velocity.z = velocity.z
+    return true
+  }
+
+  getMeshRampSurface(
+    ramps,
+    feetY,
+    maxStepHeight,
+    groundSnapDistance,
+  ) {
+    let surface = null
+
+    for (const ramp of ramps) {
+      for (const segment of ramp.segments) {
+        const dx = segment.end[0] - segment.start[0]
+        const dz = segment.end[2] - segment.start[2]
+        const lengthSq = dx * dx + dz * dz
+        const t = Math.max(
+          0,
+          Math.min(
+            1,
+            ((this.position.x - segment.start[0]) * dx +
+              (this.position.z - segment.start[2]) * dz) / lengthSq,
+          ),
+        )
+        const nearestX = segment.start[0] + dx * t
+        const nearestZ = segment.start[2] + dz * t
+        if (Math.hypot(this.position.x - nearestX, this.position.z - nearestZ) > segment.width / 2) continue
+        const height = THREE.MathUtils.lerp(
+          segment.start[1],
+          segment.end[1],
+          t,
+        )
+        if (height > feetY + maxStepHeight || height < feetY - groundSnapDistance) continue
+        if (surface === null || height > surface) surface = height
+      }
+    }
+
+    return surface
   }
 
   updateRotation() {

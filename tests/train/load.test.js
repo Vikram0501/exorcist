@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { getDoorColliders, toggleDoor } from '../../src/levels/house/index.js'
 import { loadTrain, updateTrainCarriageVisibility } from '../../src/levels/train/index.js'
 import { Player } from '../../src/core/player.js'
 
@@ -11,6 +12,7 @@ test('loaded carriage bounds follow their parents, expose the spawn car, and all
   const previousWindow = globalThis.window
   GLTFLoader.prototype.loadAsync = async function (url) {
     const first = url.includes('_01.')
+    const carriage02 = url.includes('Train_Carriage_New_02')
     const bounds = first
       ? new THREE.Box3(new THREE.Vector3(0.06, -1.63, 8.5), new THREE.Vector3(4.78, 3.5, 25.45))
       : new THREE.Box3(new THREE.Vector3(0.63, 0.1, -26.31), new THREE.Vector3(4.89, 6.13, 8.71))
@@ -19,7 +21,20 @@ test('loaded carriage bounds follow their parents, expose the spawn car, and all
     mesh.position.copy(bounds.getCenter(new THREE.Vector3()).multiplyScalar(10))
     const scene = new THREE.Group()
     scene.add(mesh)
-    return { scene }
+    if (carriage02) {
+      const door = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.1), new THREE.MeshBasicMaterial())
+      door.name = 'Rear_Lower_Door'
+      mesh.add(door)
+    }
+    return {
+      scene,
+      animations: carriage02
+        ? [
+          new THREE.AnimationClip('Door_Open', 1, []),
+          new THREE.AnimationClip('Door_Close', 1, []),
+        ]
+        : [],
+    }
   }
   THREE.TextureLoader.prototype.load = () => new THREE.Texture()
   globalThis.window = { addEventListener() {} }
@@ -38,6 +53,11 @@ test('loaded carriage bounds follow their parents, expose the spawn car, and all
     assert.ok(spawnLights.length > 0, 'the spawn carriage must be lit')
     assert.ok(spawnLights.every(light => light.color.getHex() === 0xffcc88), 'the spawn carriage uses the warm/normal preset')
     assert.ok(carriages.slice(0, -1).every(c => c.controller.lights.length === 0), 'every other carriage stays dark')
+    assert.equal(level.doors.length, 4, 'every Type 02 carriage keeps its rear door collider')
+    assert.deepEqual(level.doors.map(door => door.locked), [false, false, false, true])
+    const terminalDoor = level.doors.at(-1)
+    assert.equal(toggleDoor(terminalDoor), false, 'the end-of-train door cannot open')
+    assert.equal(getDoorColliders([terminalDoor]).length, 1, 'the end-of-train door remains solid')
     const input = { yaw: 0, pitch: 0, isDown: code => code === 'KeyW', consumePressed: () => false }
     const player = new Player(new THREE.PerspectiveCamera(), input)
     player.reset(spawn, level.spawnYaw)

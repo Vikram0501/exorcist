@@ -356,6 +356,8 @@ export function updateDoors(doors, dt) {
 }
 
 export function toggleDoor(door, playerWorldPosition = null) {
+  if (door.locked) return false
+
   door.isOpen = !door.isOpen
 
   if (door.type === 'animation') {
@@ -370,7 +372,7 @@ export function toggleDoor(door, playerWorldPosition = null) {
     action.clampWhenFinished = true
     action.play()
     door.activeAction = action
-    return
+    return true
   }
 
   if (door.type === 'slide') {
@@ -383,7 +385,7 @@ export function toggleDoor(door, playerWorldPosition = null) {
         door.slideSign * door.slideDistance
     }
 
-    return
+    return true
   }
 
   if (door.isOpen) {
@@ -398,6 +400,8 @@ export function toggleDoor(door, playerWorldPosition = null) {
   } else {
     door.targetRotation = 0
   }
+
+  return true
 }
 
 function chooseSwingDirection(door, playerWorldPosition) {
