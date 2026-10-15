@@ -2899,8 +2899,30 @@ if (this.loaded) {
     this.levelTimer = 0
 
 
+    // Release pointer lock so the cursor is visible and the input,
+    // letter slots and submit button are clickable immediately.
+    // Matches showGameOver() and the train/house rite views: while
+    // locked, mouse events stay captured by the canvas and the
+    // victory UI cannot receive clicks. Safe when already unlocked.
+    try {
+
+      this.input?.release?.()
+
+    } catch (err) {
+
+      void err
+
+    }
+
+
     const el =
       document.createElement('div')
+
+    el.setAttribute('role', 'dialog')
+
+    el.setAttribute('aria-modal', 'true')
+
+    el.setAttribute('aria-label', 'Name the driver')
 
     el.style.position = 'fixed'
 
@@ -2910,74 +2932,134 @@ if (this.loaded) {
 
     el.style.display = 'flex'
 
-    el.style.flexDirection = 'column'
-
     el.style.alignItems = 'center'
 
     el.style.justifyContent = 'center'
 
-    el.style.background =
-      'rgba(5, 5, 15, 0.92)'
+    el.style.padding = '24px'
 
-    el.style.fontFamily =
-      'monospace'
+    el.style.overflowY = 'auto'
+
+    el.style.pointerEvents = 'auto'
+
+    el.style.background =
+      'radial-gradient(ellipse at 50% 18%, rgba(81, 33, 30, 0.28), transparent 38%), linear-gradient(105deg, rgba(4, 5, 7, 0.94), rgba(11, 10, 12, 0.84))'
+
+    el.style.backdropFilter =
+      'blur(8px)'
+
+
+    // Panel mirrors the in-game rite panels (.rite-panel): parchment
+    // text on a dark gradient, single muted border with the game's
+    // red left accent, deep drop shadow.
+    const panel =
+      document.createElement('div')
+
+    panel.style.width =
+      'min(590px, 100%)'
+
+    panel.style.maxHeight = '100%'
+
+    panel.style.overflowY = 'auto'
+
+    panel.style.padding =
+      'clamp(24px, 5vw, 46px)'
+
+    panel.style.textAlign = 'center'
+
+    panel.style.color = '#e6dcc9'
+
+    panel.style.background =
+      'radial-gradient(ellipse at top, #252c2b, #101517)'
+
+    panel.style.border =
+      '1px solid #796e58'
+
+    panel.style.borderLeft =
+      '3px solid #9e3b3b'
+
+    panel.style.boxShadow =
+      '0 25px 100px #000'
+
+    el.appendChild(panel)
+
+
+    const kicker =
+      document.createElement('div')
+
+    kicker.textContent =
+      'CASE 03 / OLD HIGHWAY — THE LAST RITE'
+
+    kicker.style.marginBottom = '18px'
+
+    kicker.style.color = '#b8ab8e'
+
+    kicker.style.font =
+      '700 11px system-ui, sans-serif'
+
+    kicker.style.letterSpacing = '0.16em'
+
+    kicker.style.textTransform =
+      'uppercase'
+
+    panel.appendChild(kicker)
 
 
     const title =
       document.createElement('div')
 
     title.textContent =
-      'YOU WON THE RACE.'
+      'You won the race.'
 
-    title.style.color = '#22ff22'
+    title.style.color = '#e7dfd0'
 
-    title.style.fontSize = '32px'
+    title.style.font =
+      '700 clamp(30px, 6vw, 44px)/1.1 Georgia, serif'
 
-    title.style.fontWeight = 'bold'
+    title.style.letterSpacing = '0.08em'
 
-    title.style.marginBottom = '8px'
+    title.style.marginBottom = '6px'
 
     title.style.textShadow =
-      '0 0 16px #006600'
+      '2px 4px 15px #000'
 
-    el.appendChild(title)
+    panel.appendChild(title)
 
 
     const subtitle =
       document.createElement('div')
 
     subtitle.textContent =
-      'NOW END IT.'
+      'NOW END IT'
 
-    subtitle.style.color = '#66ffff'
+    subtitle.style.color = '#a23932'
 
-    subtitle.style.fontSize = '20px'
+    subtitle.style.font =
+      '700 12px system-ui, sans-serif'
 
-    subtitle.style.fontWeight = 'bold'
+    subtitle.style.letterSpacing = '0.42em'
 
-    subtitle.style.marginBottom = '28px'
+    subtitle.style.marginBottom = '18px'
 
-    subtitle.style.textShadow =
-      '0 0 12px #006666'
+    subtitle.style.textIndent = '0.42em'
 
-    el.appendChild(subtitle)
+    panel.appendChild(subtitle)
 
 
     const instr =
       document.createElement('div')
 
     instr.textContent =
-      'ENTER THE DRIVER\'S FULL NAME:'
+      'Speak the driver\'s full name to finish the exorcism.'
 
-    instr.style.color = '#999999'
+    instr.style.color = '#c5baaa'
 
-    instr.style.fontSize = '15px'
+    instr.style.font =
+      '15px/1.7 Georgia, serif'
 
-    instr.style.marginBottom = '16px'
+    instr.style.marginBottom = '18px'
 
-    instr.style.letterSpacing = '1px'
-
-    el.appendChild(instr)
+    panel.appendChild(instr)
 
 
     // Collected letter slots
@@ -2990,14 +3072,20 @@ if (this.loaded) {
       const slotsRow =
         document.createElement('div')
 
-      slotsRow.style.fontSize = '26px'
+      slotsRow.style.display = 'flex'
 
-      slotsRow.style.letterSpacing = '3px'
+      slotsRow.style.flexWrap = 'wrap'
 
-      slotsRow.style.marginBottom = '24px'
+      slotsRow.style.gap = '8px'
 
-      slotsRow.style.textShadow =
-        '0 0 10px #006666'
+      slotsRow.style.justifyContent =
+        'center'
+
+      slotsRow.style.alignItems =
+        'center'
+
+      slotsRow.style.margin =
+        '4px 0 22px'
 
       const slots =
         this.ghostNameUI._slots
@@ -3014,25 +3102,46 @@ if (this.loaded) {
         const span =
           document.createElement('span')
 
-        span.style.display =
-          'inline-block'
+        span.style.display = 'grid'
 
-        span.style.width = '1ch'
+        span.style.placeItems = 'center'
 
-        span.style.textAlign = 'center'
+        span.style.minWidth = '40px'
+
+        span.style.height = '52px'
+
+        span.style.padding = '0 6px'
+
+        span.style.font =
+          '28px/1 Georgia, serif'
 
         if (slots[i].revealed) {
 
           span.textContent =
             slots[i].letter
 
-          span.style.color = '#22ff22'
+          span.style.color = '#e8564a'
+
+          span.style.border =
+            '1px solid #c42a20'
+
+          span.style.background =
+            'rgba(8, 6, 4, 0.78)'
+
+          span.style.boxShadow =
+            'inset 0 0 14px rgba(196, 42, 32, 0.4), 0 0 12px rgba(196, 42, 32, 0.25)'
 
         } else {
 
           span.textContent = '_'
 
-          span.style.color = '#66ffff'
+          span.style.color = '#8a8272'
+
+          span.style.border =
+            '1px solid #7a4038'
+
+          span.style.background =
+            'rgba(8, 6, 4, 0.78)'
 
         }
 
@@ -3044,12 +3153,14 @@ if (this.loaded) {
           const gap =
             document.createElement('span')
 
-          gap.textContent = '\u00A0\u00A0\u00A0\u00A0'
+          gap.setAttribute(
+            'aria-hidden',
+            'true'
+          )
 
-          gap.style.display =
-            'inline-block'
+          gap.style.flexBasis = '100%'
 
-          gap.style.width = '4ch'
+          gap.style.height = '2px'
 
           slotsRow.appendChild(gap)
 
@@ -3057,7 +3168,7 @@ if (this.loaded) {
 
       }
 
-      el.appendChild(slotsRow)
+      panel.appendChild(slotsRow)
 
     }
 
@@ -3069,38 +3180,80 @@ if (this.loaded) {
 
     input.type = 'text'
 
-    input.placeholder =
-      'Type full name...'
+    input.setAttribute(
+      'autocomplete',
+      'off'
+    )
 
-    input.style.width = '320px'
+    input.setAttribute(
+      'spellcheck',
+      'false'
+    )
+
+    input.setAttribute(
+      'aria-label',
+      'Ghost name'
+    )
+
+    input.placeholder =
+      'Type the full name…'
+
+    input.style.display = 'block'
+
+    input.style.width = '100%'
+
+    input.style.boxSizing =
+      'border-box'
 
     input.style.padding =
-      '12px 16px'
+      '15px 18px'
 
-    input.style.fontSize = '20px'
+    input.style.fontSize = '16px'
+
+    input.style.lineHeight = '1.4'
 
     input.style.fontFamily =
-      'monospace'
+      'Georgia, serif'
 
     input.style.textAlign = 'center'
 
-    input.style.background =
-      'rgba(0, 0, 0, 0.6)'
+    input.style.letterSpacing = '0.1em'
 
-    input.style.color = '#ffffff'
+    input.style.color = '#eee5d1'
+
+    input.style.background =
+      'rgba(8, 6, 4, 0.78)'
 
     input.style.border =
-      '2px solid #444444'
+      '1px solid #7a4038'
 
-    input.style.borderRadius = '6px'
+    input.style.borderRadius = '2px'
 
     input.style.outline = 'none'
 
-    input.style.marginBottom = '16px'
+    input.style.margin =
+      '0 0 10px'
 
-    input.style.letterSpacing = '2px'
+    input.addEventListener('focus', () => {
 
-    el.appendChild(input)
+      input.style.borderColor =
+        '#c85c50'
+
+      input.style.boxShadow =
+        '0 0 0 1px #c85c50, 0 0 18px rgba(200, 92, 80, 0.25)'
+
+    })
+
+    input.addEventListener('blur', () => {
+
+      input.style.borderColor =
+        '#7a4038'
+
+      input.style.boxShadow = 'none'
+
+    })
+
+    panel.appendChild(input)
 
     this.nameInput = input
 
@@ -3110,18 +3263,21 @@ if (this.loaded) {
     const errEl =
       document.createElement('div')
 
-    errEl.style.color = '#ff4444'
+    errEl.setAttribute(
+      'role',
+      'status'
+    )
 
-    errEl.style.fontSize = '15px'
+    errEl.style.color = '#d5a68b'
 
-    errEl.style.marginBottom = '12px'
+    errEl.style.font =
+      '13px/1.5 Georgia, serif'
 
-    errEl.style.minHeight = '20px'
+    errEl.style.minHeight = '24px'
 
-    errEl.style.textShadow =
-      '0 0 8px #660000'
+    errEl.style.marginBottom = '4px'
 
-    el.appendChild(errEl)
+    panel.appendChild(errEl)
 
     this.nameErrorEl = errEl
 
@@ -3131,45 +3287,90 @@ if (this.loaded) {
     const submitBtn =
       document.createElement('button')
 
+    submitBtn.type = 'button'
+
     submitBtn.textContent =
-      'SUBMIT NAME'
+      'SPEAK THE NAME'
+
+    submitBtn.style.display = 'block'
+
+    submitBtn.style.width = '100%'
+
+    submitBtn.style.margin =
+      '10px 0'
 
     submitBtn.style.padding =
-      '12px 36px'
+      '14px 22px'
 
-    submitBtn.style.fontSize = '16px'
+    submitBtn.style.font =
+      '700 12px system-ui, sans-serif'
 
-    submitBtn.style.fontFamily =
-      'monospace'
+    submitBtn.style.letterSpacing =
+      '0.15em'
 
-    submitBtn.style.fontWeight =
-      'bold'
+    submitBtn.style.textAlign =
+      'center'
+
+    submitBtn.style.color = '#eee0ce'
 
     submitBtn.style.background =
-      '#22ff22'
+      '#411c1e'
 
-    submitBtn.style.color =
-      '#003300'
+    submitBtn.style.border =
+      '1px solid #8d4b42'
 
-    submitBtn.style.border = 'none'
-
-    submitBtn.style.borderRadius =
-      '6px'
+    submitBtn.style.borderRadius = '2px'
 
     submitBtn.style.cursor = 'pointer'
 
-    submitBtn.style.letterSpacing =
-      '1px'
+    submitBtn.addEventListener(
+      'mouseenter',
+      () => {
 
-    submitBtn.style.marginBottom =
-      '18px'
+        submitBtn.style.background =
+          '#79302c'
+
+      }
+    )
+
+    submitBtn.addEventListener(
+      'mouseleave',
+      () => {
+
+        submitBtn.style.background =
+          '#411c1e'
+
+      }
+    )
+
+    submitBtn.addEventListener(
+      'focus',
+      () => {
+
+        submitBtn.style.outline =
+          '1px solid #c85c50'
+
+        submitBtn.style.outlineOffset =
+          '3px'
+
+      }
+    )
+
+    submitBtn.addEventListener(
+      'blur',
+      () => {
+
+        submitBtn.style.outline = 'none'
+
+      }
+    )
 
     submitBtn.addEventListener(
       'click',
       () => this.submitNamePuzzle()
     )
 
-    el.appendChild(submitBtn)
+    panel.appendChild(submitBtn)
 
 
     // Attempt warning
@@ -3178,18 +3379,20 @@ if (this.loaded) {
       document.createElement('div')
 
     warn.textContent =
-      'ONE ATTEMPT ONLY.'
+      'ONE ATTEMPT ONLY — A WRONG NAME ENDS THE RACE.'
 
-    warn.style.color = '#ff3333'
+    warn.style.color = '#b74a41'
 
-    warn.style.fontSize = '13px'
+    warn.style.font =
+      '700 10px system-ui, sans-serif'
 
-    warn.style.letterSpacing = '2px'
+    warn.style.letterSpacing = '0.2em'
 
-    warn.style.textShadow =
-      '0 0 8px #660000'
+    warn.style.lineHeight = '1.6'
 
-    el.appendChild(warn)
+    warn.style.marginTop = '8px'
+
+    panel.appendChild(warn)
 
 
     document.body.appendChild(el)

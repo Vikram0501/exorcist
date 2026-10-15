@@ -278,10 +278,11 @@ test('brakesWorking=false preserves brake-cut behaviour', () => withWindow(() =>
   c.brakesWorking = false
   const rolling = c.speed
   step(c, 0.5, { KeyS: true })
-  // Failed brakes: S adds no braking force; only passive drag applies.
+  // Failed brakes: S neither brakes nor drags the car down — a cut car
+  // keeps rolling.
   assert.ok(
-    c.speed < rolling && c.speed > rolling - c.friction * 0.5 - 0.01,
-    `only coasting drag, ${rolling} -> ${c.speed}`
+    Math.abs(c.speed - rolling) < 1e-9,
+    `brakes dead, ${rolling} -> ${c.speed}`
   )
   // Steering still works with failed brakes.
   step(c, 0.5, { KeyA: true })
@@ -404,8 +405,8 @@ for (const throttle of [true, false]) {
         assert.equal(peakSpeed, MAX_FORWARD_SPEED)
         assert.ok(player.pathProgress >= race.finishDistance)
         assert.ok(player.pathProgress - race.finishDistance < MAX_FORWARD_SPEED / 30)
-        assert.equal(race.brakeCutPhase, 'done')
-        assert.equal(player.brakesWorking, true)
+        assert.equal(race.brakeCutPhase, 'cut', 'failure persists to race end')
+        assert.equal(player.brakesWorking, true, 'finish restores for reuse')
       } else {
         assert.ok(race.ghostPathProgress >= race.finishDistance)
       }

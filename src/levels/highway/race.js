@@ -27,12 +27,11 @@ function seatGhostPitch(ghostCar, sample) {
 const LEGACY_BRAKE_CUT_WARNING_PROGRESS = 230
 const LEGACY_BRAKE_CUT_TRIGGER_PROGRESS = 250
 
-// Brake-cut timing: 1.5 s warning, then 5.0 s of disabled brakes (within
-// the 4-6 s design window) with the failure message visible throughout,
-// then automatic restore. The restore is explicit so controls can never
-// be left permanently disabled.
+// Brake-cut timing: 1.5 s warning, then the brakes fail permanently for
+// the remainder of the race. The failure message stays visible while the
+// cut holds, and the brakes only come back via a race reset, race finish
+// or level teardown (which all restore normal braking explicitly).
 export const BRAKE_CUT_WARNING_DURATION = 1.5
-export const BRAKE_CUT_DISABLED_DURATION = 5.0
 
 
 // ============================================
@@ -666,7 +665,9 @@ export class HighwayRaceController {
                     'none'
 
 
-                // Disable brakes
+                // Disable brakes for the rest of the race: no timed
+                // restore. The cut ends only via finishRace(), reset()
+                // or dispose(), which all restore normal braking.
                 this.carController
                     .brakesWorking = false
 
@@ -682,7 +683,7 @@ export class HighwayRaceController {
 
 
         // ============================================
-        // PHASE: CUT
+        // PHASE: CUT (permanent until race end/restart)
         // ============================================
 
         if (this.brakeCutPhase === 'cut') {
@@ -715,32 +716,16 @@ export class HighwayRaceController {
             }
 
 
-            if (
-                this.brakeCutTimer >= BRAKE_CUT_DISABLED_DURATION
-            ) {
-
-                this.brakeCutPhase =
-                    'done'
-
-                this.brakeCutTimer = 0
-
-                // Temporary failure ends here: restore normal braking so
-                // controls can never be left permanently disabled.
-                this.carController
-                    .brakesWorking = true
-
-                // Hide aftermath message
-                this.brakeCutAftermathEl
-                    .style.display = 'none'
-
-            }
+            // No automatic restore: brakes stay disabled until the race
+            // ends (finishRace), restarts (reset) or tears down
+            // (dispose). The failure message stays visible throughout.
 
         }
 
 
-        // Legacy 'aftermath' phase retained as a no-op alias: older saves
-        // or tests may still set it directly. It shares the same disabled
-        // window and restore path as 'cut'.
+        // Legacy 'aftermath' phase retained as a permanent-failure alias:
+        // older saves or tests may still set it directly. It matches the
+        // 'cut' state above and likewise never restores on its own.
         if (
             this.brakeCutPhase === 'aftermath'
         ) {
@@ -751,21 +736,6 @@ export class HighwayRaceController {
                 'block'
 
             this.brakeCutTimer += dt
-
-
-            if (
-                this.brakeCutTimer >= BRAKE_CUT_DISABLED_DURATION
-            ) {
-
-                this.brakeCutPhase = 'done'
-
-                this.carController
-                    .brakesWorking = true
-
-                this.brakeCutAftermathEl
-                    .style.display = 'none'
-
-            }
 
         }
 

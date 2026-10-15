@@ -382,22 +382,27 @@ test('ghost is unaffected by space', () => withWindow(() => {
   }
 }))
 
-// 19. Brake-cut: no Space brake loophole, sliding preserved.
+// 19. Brake-cut: Space is fully neutered — no drift state, no slide,
+// no scrubbed speed. Plain steering still yaws the car.
 test('handbrake cannot bypass failed brakes', () => withWindow(() => {
   const c = makeController()
   cruise(c)
   c.brakesWorking = false
   const rolling = c.speed
-  // Space must not brake like S would with working brakes.
+  // Space must not brake like S would with working brakes: a cut car
+  // keeps rolling, so Space leaves speed untouched.
   step(c, 0.5, { Space: true })
   assert.ok(
-    Math.abs(c.speed - (rolling - c.friction * 0.5)) < 0.1,
-    `only passive drag, ${rolling.toFixed(1)} -> ${c.speed.toFixed(1)}`
+    Math.abs(c.speed - rolling) < 0.1,
+    `no substitute brake, ${rolling.toFixed(1)} -> ${c.speed.toFixed(1)}`
   )
-  // But sliding gameplay remains: Space + steering still builds angle.
+  assert.equal(c.driftInput, false, 'Space ignored while cut holds')
+  assert.ok(Math.abs(c.driftFactor) < 1e-9, 'no drift state builds')
+  // Space plus steering behaves like steering alone and still yaws.
   step(c, 0.6, { KeyW: true, KeyA: true, Space: true })
-  assert.ok(c.driftFactor > 0.5, 'drift state available after cut')
-  assert.ok(Math.abs(c.slipAngle) > 0.08, 'slide available after cut')
+  const withSpaceYaw = c.yawRate
+  assert.ok(Math.abs(withSpaceYaw) > 0.05, 'steering still responds')
+  assert.ok(Math.abs(c.driftFactor) < 1e-9, 'no drift state from Space')
   c.dispose()
 }))
 

@@ -427,6 +427,14 @@ export class HighwayCarController {
   stepPhysics(dt) {
     this.readInputs()
 
+    // Brake-failure invariant: while the scripted cut holds, no brake
+    // input may produce braking force. readInputs() already gates KeyS,
+    // but clear the latched input here too so a stale or externally set
+    // brakeInput can never reapply the brakes in the block below.
+    if (!this.brakesWorking) {
+      this.brakeInput = false
+    }
+
     const forward = this.forwardVector(new THREE.Vector3())
 
     // Longitudinal inputs work on the forward component in the current
@@ -465,9 +473,14 @@ export class HighwayCarController {
       }
     }
 
-    // Rolling friction is passive, not a brake control. It still slows a
-    // coasting car during a brake failure, whether or not S is held.
-    if (!this.throttleInput) {
+    // Rolling drag only while the brakes work: preserves the scripted
+    // brake-cut contract (a cut car keeps rolling instead of coasting
+    // down). Without this gate, lifting off — or holding S — during
+    // "BRAKES FAILED" still scrubs ROLLING_DRAG (8 m/s) off the car for
+    // the whole failure, which reads as working brakes in gameplay and
+    // defeats the failure. Throttle, steering, collisions and the
+    // post-cut restore are unaffected.
+    if (!this.throttleInput && this.brakesWorking) {
       const drag = this.friction * dt
       if (Math.abs(forwardSpeed) <= drag) {
         forwardSpeed = 0
@@ -476,9 +489,10 @@ export class HighwayCarController {
       }
     }
 
-    // Handbrake forward penalty: long drifts cost pace. Disabled while the
-    // scripted brake-cut holds (brakesWorking === false) so Space cannot
-    // become a loophole substitute brake; sliding itself stays available.
+    // Handbrake forward penalty: long drifts cost pace. Unreachable
+    // while the scripted brake-cut holds (driftInput is neutered above,
+    // so driftFactor can only decay), which keeps Space from becoming a
+    // loophole substitute brake.
     if (this.driftFactor > 0 && this.brakesWorking) {
       const bite = DRIFT_FORWARD_DRAG * this.driftFactor * dt
       if (Math.abs(forwardSpeed) <= bite) {
@@ -621,8 +635,11 @@ export class HighwayCarController {
     const right = this.keys['KeyD'] ? 1 : 0
     this.steerInput = left - right
     this.throttleInput = Boolean(this.keys['KeyW'])
+    // While the scripted brake-cut holds, Space is fully neutered: the
+    // handbrake must not build drift state, change grip/yaw response, or
+    // apply any drag. Steering and throttle are unaffected.
     this.brakeInput = this.brakesWorking && Boolean(this.keys['KeyS'])
-    this.driftInput = Boolean(this.keys['Space'])
+    this.driftInput = this.brakesWorking && Boolean(this.keys['Space'])
   }
 
 
