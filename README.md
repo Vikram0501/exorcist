@@ -1,3 +1,5 @@
+[Play the hosted game](https://wmc.ms.wits.ac.za/students/sgroup3891/index.html)
+
 # Exorcist: The Last Rites
 
 A browser-based 3D first-person game built with Three.js. You play as a disgraced exorcist working to regain your qualifications by completing increasingly dangerous supernatural missions.
@@ -73,8 +75,9 @@ npm run preview
 
 ### Department LAMP deployment
 
-The course handout requires a static ZIP uploaded through Moodle. The game is
-built for a group subdirectory, and the archive contains only runtime assets.
+The course handout requires a static ZIP uploaded through Moodle's **CGV Project
+hosting** tool. The game is built for a group subdirectory, and the archive
+contains only runtime assets.
 
 ```bash
 npm run build
@@ -84,9 +87,11 @@ python -m http.server 8765 --directory deployment
 
 Play the packaged site at `http://127.0.0.1:8765/site/` before uploading. The
 archive is `deployment/exorcist-deployment.zip`, with `index.html` at its top
-level. Check the Moodle submission for the required archive filename and group
-folder, upload the ZIP there, then open the published URL in Chrome to verify
-all three levels. The development server is not the deployment build.
+level. Upload the ZIP in the group file manager, click its filename, and choose
+**UnZip** so `index.html` is in the group root. Open the hosted game linked at
+the top of this README in Chrome to verify all three levels. Rebuild and
+repackage after every game change; the development server is not the deployment
+build.
 
 ## Tech Stack
 
