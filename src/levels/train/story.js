@@ -52,7 +52,7 @@ export class TrainStory {
       if (!this.nameComplete) return `The name is not whole · ${this.slotsDone.size} of ${this.total} marks`
       return 'Hold E · Speak the name'
     }
-    if (this.found.has(item.id)) return `${item.title} · recorded in field notes`
+    if (this.found.has(item.id)) return `${item.title} · already read`
     if (item.kind === 'note') return 'Hold E · Read the letter'
     return item.kind === 'residue' ? 'Hold E · Read the residue' : 'Hold E · Read the mark'
   }
@@ -95,7 +95,7 @@ export class TrainStory {
       const mark = item.slot + 1
       this.onMessage(`IT REMEMBERS · ${item.char} · mark ${mark} of ${this.total}`)
     } else if (item.kind !== 'note') {
-      this.onMessage(`INFERRED · ${item.title} · read its field note`)
+      this.onMessage(`INFERRED · ${item.title} · mark ${item.slot + 1} of ${this.total}`)
     }
     return true
   }

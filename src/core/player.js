@@ -19,15 +19,7 @@ export class Player {
     this.position = camera.position
     this.position.set(20, EYE_HEIGHT, 25)
     this.isGrounded = true
-    this.flying = false
     this.crouching = false
-
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'KeyF' && this.input.isLocked && !e.repeat) {
-        this.flying = !this.flying
-        this.velocity.y = 0
-      }
-    })
   }
 
   configureForLevel(levelName) {
@@ -49,7 +41,6 @@ export class Player {
     this.velocity.set(0, 0, 0)
     this.position.copy(spawn)
     this.isGrounded = true
-    this.flying = false
     this.crouching = false
     this.input.yaw = yaw
     this.input.pitch = 0
@@ -62,23 +53,6 @@ export class Player {
 
 
     this.updateVelocity(dt)
-
-
-
-    // ============================================
-    // FLY MODE
-    // ============================================
-
-    if (this.flying) {
-
-      this.move(dt)
-
-      this.camera.position.copy(
-        this.position
-      )
-
-      return
-    }
 
 
 
@@ -614,8 +588,7 @@ export class Player {
     const forward = this.getForward()
     const right = this.getRight()
 
-    if (this.flying) this.setCrouching(false)
-    else if (this.input.consumePressed?.('KeyC')) this.setCrouching(!this.crouching)
+    if (this.input.consumePressed?.('KeyC')) this.setCrouching(!this.crouching)
 
     const moveX = (this.input.isDown('KeyD') ? 1 : 0) - (this.input.isDown('KeyA') ? 1 : 0)
     const moveZ = (this.input.isDown('KeyW') ? 1 : 0) - (this.input.isDown('KeyS') ? 1 : 0)
@@ -640,20 +613,9 @@ export class Player {
     this.velocity.x += (targetVx - this.velocity.x) * blend
     this.velocity.z += (targetVz - this.velocity.z) * blend
 
-    if (this.flying) {
-      const flySpeed = sprinting ? this.movement.sprint : this.movement.walk
-      if (this.input.isDown('Space')) {
-        this.velocity.y = flySpeed
-      } else if (this.input.isDown('KeyC')) {
-        this.velocity.y = -flySpeed
-      } else {
-        this.velocity.y = 0
-      }
-    } else {
-      if (this.input.isDown('Space') && this.isGrounded) {
-        this.velocity.y = this.movement.jump
-        this.isGrounded = false
-      }
+    if (this.input.isDown('Space') && this.isGrounded) {
+      this.velocity.y = this.movement.jump
+      this.isGrounded = false
     }
   }
 

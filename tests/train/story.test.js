@@ -196,7 +196,7 @@ test('holding E fills the mark, releasing resets, and it cannot read twice', () 
   assert.deepEqual(revealed, [letter.slot])
   assert.ok(messages[0].includes(letter.char))
   assert.equal(story.canInspect(letter.id), false)
-  assert.match(story.prompt(letter), /recorded/)
+  assert.match(story.prompt(letter), /already read/)
 })
 
 test('reading a residue clue reveals an inferred mark', () => {
@@ -241,7 +241,7 @@ test('field notes list the rear letter, residue, letters in order, then the fire
   assert.equal(after[after.length - 1], 'the-fire')
 })
 
-test('the rear letter is held open like a mark and recorded once read', () => {
+test('the rear letter is held open like a mark and marked as read', () => {
   const { story } = createStory()
   const note = story.items.find((item) => item.kind === 'note')
   assert.equal(note.story, true)
@@ -249,7 +249,7 @@ test('the rear letter is held open like a mark and recorded once read', () => {
   assert.equal(story.hold(HOLD_SECONDS - 0.01, note), false)
   assert.equal(story.hold(0.02, note), true)
   assert.equal(story.read(note), true)
-  assert.match(story.prompt(note), /recorded/)
+  assert.match(story.prompt(note), /already read/)
   assert.equal(story.journalEntries()[0].id, REAR_LETTER.id)
 })
 

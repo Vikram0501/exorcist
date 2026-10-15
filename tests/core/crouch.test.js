@@ -57,16 +57,17 @@ test('C toggles crouch, keeps the feet planted, and slows the walk', () => {
   assert.ok(Math.abs((player.position.y - player.eyeHeight) - feet) < 0.000001)
 })
 
-test('C remains the fly-down key while flying', () => {
+test('F does not enable flight or change crouch controls', () => {
   const input = makeInput()
   const player = makePlayer(input)
   input.press('KeyC')
   player.updateVelocity(2)
   assert.equal(player.crouching, true)
-  player.flying = true
+  input.press('KeyF')
   player.updateVelocity(2)
-  assert.equal(player.crouching, false)
-  assert.ok(player.velocity.y < 0)
+  assert.equal(player.crouching, true)
+  assert.equal(player.flying, undefined)
+  assert.equal(player.velocity.y, 0)
 })
 
 test('reset clears the crouch stance', () => {

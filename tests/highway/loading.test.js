@@ -158,7 +158,7 @@ test('game threads one session tracker through the highway load', () => {
 test('highway builder reports each asset to the session tracker', () => {
   const indexJs = src('levels/highway/index.js')
   assert.ok(
-    indexJs.includes('levelRoot,\n  loadTracker = null'),
+    /levelRoot,\r?\n  loadTracker = null/.test(indexJs),
     'tracker param is optional (existing callers unaffected)'
   )
   for (const id of ['road', 'city', 'streetlights']) {

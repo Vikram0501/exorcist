@@ -131,7 +131,7 @@ export class HauntedHouseAudio {
     if (now < this.scareUntil) return
     const speed = Math.hypot(player.velocity.x, player.velocity.z)
 
-    if (player.isGrounded && !player.flying && speed > 0.7) {
+    if (player.isGrounded && speed > 0.7) {
       const sprinting = speed > 3.2
       if (now >= this.nextFootstepAt) {
         this.playEffect(

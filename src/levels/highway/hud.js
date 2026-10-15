@@ -64,7 +64,7 @@ const HUD_CSS = `
   text-shadow: 0 0 10px rgba(160, 30, 30, 0.65), 0 2px 4px #000; }
 .highway-hud .hw-unit { font-size: 11px; color: #b08a84; margin-left: 5px; }
 .highway-hud .hw-timer { top: 150px; left: 20px; border-left: 2px solid rgba(156, 44, 39, 0.9); }
-.highway-hud .hw-position { top: 20px; right: 20px; text-align: right; border-right: 2px solid rgba(156, 44, 39, 0.9); }
+.highway-hud .hw-position { top: 78px; right: 20px; text-align: right; border-right: 2px solid rgba(156, 44, 39, 0.9); }
 .highway-hud .hw-position .hw-value { color: #ffd9d2; }
 .highway-hud .hw-speed { bottom: 20px; right: 20px; text-align: right; border-right: 2px solid rgba(156, 44, 39, 0.9); }
 .highway-hud .hw-speed .hw-value { font-size: 40px; }
@@ -84,12 +84,12 @@ const HUD_CSS = `
 @media (max-width: 700px) {
   .highway-hud .hw-timer { top: auto; bottom: 64px; left: 12px; padding: 4px 9px 5px; }
   .highway-hud .hw-timer .hw-value { font-size: 19px; }
-  .highway-hud .hw-position { top: 12px; right: 12px; padding: 4px 9px 5px; }
+  .highway-hud .hw-position { top: 64px; right: 12px; padding: 4px 9px 5px; }
   .highway-hud .hw-position .hw-value { font-size: 19px; }
   .highway-hud .hw-speed { bottom: 64px; right: 12px; padding: 4px 9px 5px; }
   .highway-hud .hw-speed .hw-value { font-size: 27px; }
-  .highway-hud .hw-progress { top: 76px; width: min(300px, 62vw); }
-  .highway-hud .hw-toast { top: 128px; font-size: 12px; max-width: 92vw; white-space: normal; text-align: center; }
+  .highway-hud .hw-progress { top: 130px; width: min(300px, 62vw); }
+  .highway-hud .hw-toast { top: 190px; font-size: 12px; max-width: 92vw; white-space: normal; text-align: center; }
 }
 `
 

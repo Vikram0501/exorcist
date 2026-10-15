@@ -128,7 +128,7 @@ test('panel markup and styling match the Level 1 conventions', () => {
     'bottom-centre placement like #hudControls'
   )
   assert.ok(
-    indexHtml.includes('background: rgba(4, 5, 6, 0.42)'),
+    indexHtml.includes('background: rgba(8, 9, 11, .58)'),
     'dark semi-transparent background'
   )
   assert.ok(

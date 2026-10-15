@@ -80,7 +80,7 @@ import {
 import { loadTrain, updateTrainCarriageVisibility, updateTrainCarriageLights } from '../levels/train/index.js'
 import { TrainZombie } from '../levels/train/zombie.js'
 import { TrainEnding } from '../levels/train/ending.js'
-import { toggleCarriageLightDebug, prewarmTrainLightStates } from '../levels/train/lighting.js'
+import { prewarmTrainLightStates } from '../levels/train/lighting.js'
 import { createFlashlight } from '../levels/shared/lighting.js'
 
 
@@ -257,10 +257,6 @@ export class Game {
     this.holdProgressFill = document.getElementById('holdProgressFill')
 
     this.carriageLightControllers = null
-
-    this.carriageLightDebug = false
-
-    this.debugPositionEl = null
 
 
     // ============================================
@@ -547,7 +543,7 @@ export class Game {
     }
 
     if (
-      (this.currentLevel === 'house' || this.currentLevel === 'train') &&
+      this.currentLevel === 'house' &&
       this.input.consumePressed('KeyI')
     ) {
       if (this.evidenceBookOpen) this.closeEvidenceBook()
@@ -855,17 +851,6 @@ if (this.loaded) {
 
     }
 
-    if (
-      this.currentLevel === 'train' &&
-      this.carriageLightDebug &&
-      this.debugPositionEl
-    ) {
-      const p = this.camera.position
-      this.debugPositionEl.textContent =
-        `Pos  X: ${p.x.toFixed(2)}  Y: ${p.y.toFixed(2)}  Z: ${p.z.toFixed(2)}`
-    }
-
-
     const sampleInteraction = performance.now() >= this.nextInteractionSample ||
       this.input.pressed.has('KeyE')
     if (sampleInteraction) {
@@ -933,87 +918,6 @@ if (this.loaded) {
           this.houseAudio.playDoor(door.isOpen)
         }
       }
-
-    }
-
-
-    // Toggle collider helpers
-    if (
-      this.input.consumePressed('KeyH')
-    ) {
-
-      this.colliderHelpers.forEach(
-        (helper) => {
-
-          helper.visible =
-            !helper.visible
-
-        }
-      )
-
-    }
-
-
-    // Toggle light helpers
-    if (
-      this.input.consumePressed('KeyL')
-    ) {
-
-      this.lightHelpers.forEach(
-        (helper) => {
-
-          helper.visible =
-            !helper.visible
-
-        }
-      )
-
-    }
-
-
-    // Toggle carriage light debug (train level)
-    if (
-      this.currentLevel === 'train' &&
-      this.input.consumePressed('KeyK')
-    ) {
-
-      this.carriageLightDebug =
-        !this.carriageLightDebug
-
-      if (this.carriageLightControllers) {
-        toggleCarriageLightDebug(
-          this.carriageLightControllers,
-          this.carriageLightDebug
-        )
-      }
-
-      if (this.trainClues?.debug) {
-        if (this.carriageLightDebug) this.trainClues.debug.show()
-        else this.trainClues.debug.hide()
-      }
-
-      if (this.carriageLightDebug) {
-        if (!this.debugPositionEl) {
-          this.debugPositionEl = document.createElement('div')
-          this.debugPositionEl.style.cssText =
-            'position:fixed;top:10px;left:10px;color:#0f0;font:14px/1.4 monospace;' +
-            'background:rgba(0,0,0,0.6);padding:6px 10px;border-radius:4px;z-index:9999;pointer-events:none;'
-          document.body.appendChild(this.debugPositionEl)
-        }
-        this.debugPositionEl.style.display = 'block'
-      } else if (this.debugPositionEl) {
-        this.debugPositionEl.style.display = 'none'
-      }
-
-    }
-
-
-    // Debug wall colliders
-    if (
-      this.input.consumePressed('KeyJ')
-    ) {
-
-      this.logNearbyWallColliders()
 
     }
 
@@ -1443,10 +1347,6 @@ if (this.loaded) {
                 shake: this.trainShake,
                 onExit: () => this.completeLevel('train'),
               })
-            : null
-
-          this.journalBuilder = levelName === 'train' && this.trainStory
-            ? (game) => game.trainStory.journalEntries()
             : null
 
           if (this.trainStory) {
@@ -2074,13 +1974,6 @@ if (this.loaded) {
 
     this.carriageLightControllers = null
 
-    this.carriageLightDebug = false
-
-    if (this.debugPositionEl) {
-      this.debugPositionEl.remove()
-      this.debugPositionEl = null
-    }
-
     if (this.flashlight) {
       this.camera.remove(this.flashlight)
       this.camera.remove(this.flashlight.target)
@@ -2118,8 +2011,6 @@ if (this.loaded) {
     this.trainTerrain = null
 
     this.carriageLightControllers = null
-
-    this.carriageLightDebug = false
 
     this.loaded = false
 
@@ -2302,6 +2193,8 @@ if (this.loaded) {
       const element = document.getElementById(id)
       if (element) element.style.display = onFootHud ? '' : 'none'
     }
+    const evidenceHint = document.getElementById('hudEvidenceControl')
+    if (evidenceHint) evidenceHint.style.display = this.currentLevel === 'house' ? '' : 'none'
 
     const hudObjective =
       document.getElementById('hudObjective')
@@ -2358,7 +2251,7 @@ if (this.loaded) {
 
       evidenceButton.classList.toggle(
         'hidden',
-        this.currentLevel !== 'house' && this.currentLevel !== 'train'
+        this.currentLevel !== 'house'
       )
     }
   }
@@ -2587,6 +2480,9 @@ if (this.loaded) {
 
   setInspectionPanelContent(investigationItem) {
 
+    const logNote = document.querySelector('.inspection-log-note')
+    if (logNote) logNote.style.display = this.currentLevel === 'house' ? '' : 'none'
+
     const foundAt = document.getElementById(
       'inspectionFoundAt',
     )
@@ -2761,7 +2657,7 @@ if (this.loaded) {
 
   openEvidenceBook() {
 
-    const supportsEvidence = this.currentLevel === 'house' || this.currentLevel === 'train'
+    const supportsEvidence = this.currentLevel === 'house'
     const riteOpen = this.houseStoryView?.open || this.trainRiteView?.open
     const riteOutcome = this.houseStoryView?.outcome || this.trainRiteView?.outcome
     if (!supportsEvidence || this.evidenceBookOpen || this.newspaperOpen || riteOutcome) {
@@ -4472,61 +4368,6 @@ if (this.loaded) {
 
     }
 
-  }
-
-
-
-  // ============================================
-  // DEBUG COLLIDERS
-  // ============================================
-
-  logNearbyWallColliders() {
-
-    const position =
-      this.player.position
-
-
-    const nearby =
-      this.colliders
-
-        .filter(
-          (collider) =>
-            collider.type === 'wall'
-        )
-
-        .filter(
-          (collider) => {
-
-            const nearestX =
-              THREE.MathUtils.clamp(
-                position.x,
-                collider.minX,
-                collider.maxX
-              )
-
-
-            const nearestZ =
-              THREE.MathUtils.clamp(
-                position.z,
-                collider.minZ,
-                collider.maxZ
-              )
-
-
-            return (
-              Math.hypot(
-                position.x - nearestX,
-                position.z - nearestZ
-              ) <= 1.5
-            )
-          }
-        )
-
-
-    console.log(
-      'Nearby wall colliders:',
-      nearby
-    )
   }
 
 

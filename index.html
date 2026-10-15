@@ -55,7 +55,7 @@
       #hudControls span { white-space: nowrap; }
       #hudControls kbd, #respawnBtn kbd, #evidenceBtn kbd { padding: 0; color: #d9d0be; font: inherit; font-weight: 700; background: transparent; border-radius: 0; }
       #hudControls.hidden { display: none; }
-      #highwayControls { position: fixed; bottom: 18px; left: 50%; z-index: 10; max-width: calc(100vw - 24px); padding: 5px 9px; color: rgba(213, 205, 189, 0.58); font: 9px Georgia, serif; letter-spacing: 0.1em; text-align: center; line-height: 1.8; background: rgba(4, 5, 6, 0.42); pointer-events: none; user-select: none; transform: translateX(-50%); }
+      #highwayControls { position: fixed; bottom: 18px; left: 50%; z-index: 10; max-width: calc(100vw - 24px); padding: 7px 12px; color: #b8ada0; font: 9px system-ui, sans-serif; letter-spacing: .07em; text-align: center; line-height: 1.8; background: rgba(8, 9, 11, .58); border: 1px solid rgba(146, 111, 104, .25); pointer-events: none; user-select: none; transform: translateX(-50%); }
       #highwayControls kbd { padding: 0; color: #d9d0be; font: inherit; font-weight: 700; background: transparent; border-radius: 0; }
       #highwayControls.hidden { display: none; }
       @media (max-width: 700px) {
@@ -146,7 +146,7 @@
       #briefingCopy { animation: briefing-rise 12s ease-out both; }
       @keyframes briefing-rise { from { opacity: 0; transform: perspective(500px) rotateX(12deg) translateY(45px); } to { opacity: 1; transform: none; } }
       @media (prefers-reduced-motion: reduce) { #briefingCopy { animation: none; } }
-      #pauseBtn { position: fixed; right: 22px; top: 78px; z-index: 19; padding: 10px 15px; border: 1px solid #9e3b3b; background: #161112; color: #e7dfd0; cursor: pointer; }
+      #pauseBtn { position: fixed; right: 22px; top: 22px; z-index: 19; padding: 10px 15px; border: 1px solid #9e3b3b; background: #161112; color: #e7dfd0; font: 700 11px system-ui, sans-serif; letter-spacing: .11em; cursor: pointer; }
       #pauseBtn.hidden { display: none; }
       #interactionPrompt {
         position: fixed;
@@ -171,7 +171,7 @@
       #respawnBtn.hidden { display: none; }
       #evidenceBtn {
         position: fixed;
-        top: 22px;
+        top: 78px;
         right: 22px;
         z-index: 11;
         padding: 12px 16px;
@@ -450,7 +450,8 @@
       @media (max-width: 620px) {
         #hud { top: 12px; left: 12px; width: calc(100vw - 172px); min-width: 160px; padding: 11px 12px 13px; }
         #hudObjective { font-size: 13px; }
-        #evidenceBtn { top: 12px; right: 12px; padding: 10px 9px; font-size: 9px; }
+        #pauseBtn { top: 12px; right: 12px; }
+        #evidenceBtn { top: 64px; right: 12px; padding: 10px 9px; font-size: 9px; }
         #hudControls { bottom: 12px; max-width: calc(100vw - 24px); gap: 5px 10px; font-size: 8px; }
         #respawnBtn { right: 12px; bottom: 65px; }
         #houseCaption, #levelCaption { bottom: 100px; }
@@ -467,7 +468,7 @@
     </div>
     <div id="hudControls">
       <span><kbd>WASD</kbd> MOVE</span><span><kbd>E</kbd> INTERACT</span>
-      <span><kbd>I</kbd> EVIDENCE</span><span><kbd>T</kbd> TORCH</span>
+      <span id="hudEvidenceControl"><kbd>I</kbd> EVIDENCE</span><span><kbd>T</kbd> TORCH</span>
       <span><kbd>SHIFT</kbd> SPRINT</span><span><kbd>C</kbd> CROUCH</span>
       <span><kbd>V</kbd> VIEW</span>
     </div>
@@ -595,7 +596,7 @@
           <dt>Move / look</dt><dd>W A S D / Mouse</dd>
           <dt>Interact / hold to read clues</dt><dd>E</dd>
           <dt>Sprint / crouch / jump</dt><dd>Shift / C / Space</dd>
-          <dt>Toggle torch / field notes</dt><dd>T / I</dd>
+          <dt>Toggle torch</dt><dd>T</dd>
           <dt>Pause / resume</dt><dd>Esc</dd>
         </dl>
       </section>

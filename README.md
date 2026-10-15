@@ -14,7 +14,7 @@ Stripped of your title after a failed exorcism gone wrong, you must prove yourse
 
 **Mission 2 — The Undead Train**
 - An undead creature stalks the carriages of a moving train, attacking anything it finds
-- Evade it, collect name marks and residue hints, and record clues in your field notes
+- Evade it and collect name marks and residue hints to reveal its name
 - Speak its name in the burnt carriage to finish the rite
 - Focus: stealth, investigation, tension
 
@@ -37,7 +37,7 @@ Stripped of your title after a failed exorcism gone wrong, you must prove yourse
 | `C` | Crouch on foot |
 | `Shift` | Sprint |
 | `E` | Interact with doors, inspect evidence, begin the grave-side rite |
-| `I` | Open / close field notes |
+| `I` | Open / close field notes in Level 1 |
 | `T` | Toggle the torch in Levels 1 and 2 |
 | `V` | Change camera in Level 1 |
 | `R` | Respawn in Level 1 |
@@ -176,11 +176,11 @@ Level design documents live in `docs/`. Read `docs/BUILDSPEC.md` first if you pl
 
 ## Current Status
 
-- [x] First-person movement with gravity, jumping, and fly mode
+- [x] First-person movement with gravity and jumping
 - [x] Level 1 (Haunted House) — GLB loading, wall/floor collision, interactive doors, stair ramp
 - [x] Level 2 (Undead Train) — GLB loading, basic lighting
 - [ ] Level 2 collision, enemies, stealth mechanics
-- [x] Level 2 investigation: name marks, residue hints, field notes, and the burnt-carriage exorcism rite
+- [x] Level 2 investigation: name marks, residue hints, and the burnt-carriage exorcism rite
 - [x] Level 3 (Phantom Highway) — GLB road and cars, circuit scenery, vehicle controls, competitive ghost
 - [x] Level 3 — randomized ghost identities and collectible name letters
 - [x] Level 3 — dynamic roadside clue signs
