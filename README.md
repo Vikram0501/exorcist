@@ -25,7 +25,7 @@ Stripped of your title after a failed exorcism gone wrong, you must prove yourse
 - Race against a competitive ghost driver with randomized identity
 - Collect glowing letters scattered across the road to spell out the ghost's full name
 - Read roadside clue signs that progressively reveal the ghost's identity
-- Survive a temporary brake failure while the car still slows naturally through rolling drag
+- Survive a brake failure that lasts until the race ends
 - Beat the ghost to the finish, then enter its full name to perform the exorcism
 - Focus: vehicle control, reflexes, risk/reward, final confrontation
 
@@ -138,8 +138,8 @@ Level 3 is an elevated, banked racing circuit. The road and both cars use GLB as
 
 - The brake-cut sequence begins around one-quarter of the way around the circuit
 - **Warning phase** (1.5 s): "BRAKE FAILURE IMMINENT" flickers at the bottom of the screen
-- **Failure phase** (5 s): "BRAKES FAILED - DON'T STOP NOW" appears; `S` cannot brake or reverse, but rolling drag still slows a coasting car. Acceleration, steering, and drifting remain available.
-- The brakes restore automatically and the message disappears when the failure ends
+- **Failure phase** (rest of the race): "BRAKES FAILED - DON'T STOP NOW" appears; `S` cannot brake or reverse, and `Space` cannot engage the handbrake or drift. Acceleration and steering remain available.
+- The brakes restore when the race ends, restarts, or the level closes
 
 ### Name Puzzle and Finale
 
