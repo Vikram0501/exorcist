@@ -49,7 +49,7 @@ export class TrainRiteView {
     const copy = document.createElement('p')
     copy.textContent = story.assembled.length >= story.answer.length
       ? 'The name is whole in the ash ring. Say it once, out loud, and let the line end.'
-      : `The name you uncovered is ${story.answer.join('')}. Rebuild it mark by mark in that order.`
+      : 'The ring is waiting. Rebuild the name mark by mark from your field notes, in the order it was written.'
 
     const slots = document.createElement('div')
     slots.className = 'rite-slots'
@@ -87,13 +87,19 @@ export class TrainRiteView {
     feedback.className = 'rite-feedback'
     feedback.setAttribute('role', 'status')
 
+    const notes = document.createElement('button')
+    notes.type = 'button'
+    notes.className = 'rite-back'
+    notes.textContent = 'Open field notes'
+    notes.addEventListener('click', () => this.game.openEvidenceBook())
+
     const back = document.createElement('button')
     back.type = 'button'
     back.className = 'rite-back'
     back.textContent = 'Step back'
     back.addEventListener('click', () => this.closeRite())
 
-    panel.append(feedback, back)
+    panel.append(feedback, notes, back)
     this.dialog.append(panel)
     panel.querySelector('button')?.focus()
   }
@@ -135,7 +141,7 @@ export class TrainRiteView {
 
     if (type === 'broken') {
       title.textContent = 'The rite broke'
-      copy.textContent = 'That is not its name. The syllables carried down the aisle, and something heard them. Begin again once the carriage is clear.'
+      copy.textContent = 'That is not its name. The syllables carried down the aisle, and something heard them. Your field notes are safe — begin again once the carriage is clear.'
       action.textContent = 'Begin again'
       action.addEventListener('click', () => {
         if (story) story.failureReason = null

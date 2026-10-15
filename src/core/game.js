@@ -543,7 +543,7 @@ export class Game {
     }
 
     if (
-      this.currentLevel === 'house' &&
+      (this.currentLevel === 'house' || this.currentLevel === 'train') &&
       this.input.consumePressed('KeyI')
     ) {
       if (this.evidenceBookOpen) this.closeEvidenceBook()
@@ -1332,6 +1332,10 @@ if (this.loaded) {
             : null
 
           this.trainStory = levelName === 'train' ? trainStory || null : null
+
+          this.journalBuilder = levelName === 'train' && this.trainStory
+            ? (game) => game.trainStory.journalEntries()
+            : null
 
           this.trainClues = levelName === 'train' ? trainClues || null : null
 
@@ -2194,7 +2198,7 @@ if (this.loaded) {
       if (element) element.style.display = onFootHud ? '' : 'none'
     }
     const evidenceHint = document.getElementById('hudEvidenceControl')
-    if (evidenceHint) evidenceHint.style.display = this.currentLevel === 'house' ? '' : 'none'
+    if (evidenceHint) evidenceHint.style.display = onFootHud ? '' : 'none'
 
     const hudObjective =
       document.getElementById('hudObjective')
@@ -2251,7 +2255,7 @@ if (this.loaded) {
 
       evidenceButton.classList.toggle(
         'hidden',
-        this.currentLevel !== 'house'
+        this.currentLevel !== 'house' && this.currentLevel !== 'train'
       )
     }
   }
@@ -2481,7 +2485,7 @@ if (this.loaded) {
   setInspectionPanelContent(investigationItem) {
 
     const logNote = document.querySelector('.inspection-log-note')
-    if (logNote) logNote.style.display = this.currentLevel === 'house' ? '' : 'none'
+    if (logNote) logNote.style.display = this.currentLevel === 'house' || this.currentLevel === 'train' ? '' : 'none'
 
     const foundAt = document.getElementById(
       'inspectionFoundAt',
@@ -2657,7 +2661,7 @@ if (this.loaded) {
 
   openEvidenceBook() {
 
-    const supportsEvidence = this.currentLevel === 'house'
+    const supportsEvidence = this.currentLevel === 'house' || this.currentLevel === 'train'
     const riteOpen = this.houseStoryView?.open || this.trainRiteView?.open
     const riteOutcome = this.houseStoryView?.outcome || this.trainRiteView?.outcome
     if (!supportsEvidence || this.evidenceBookOpen || this.newspaperOpen || riteOutcome) {

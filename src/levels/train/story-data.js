@@ -124,7 +124,7 @@ export const CLUE_PLACEMENTS = {
 
 // Papers left in the upper-deck compartments. One per passenger carriage,
 // read with hold-E like any note; they open the inspection panel and are
-// revealed on the name display. The double-decker's upper level only exists
+// copied into the field notes. The double-decker's upper level only exists
 // over the rear half of the carriage, so `t` sits inside a roofed upper
 // compartment bay — well behind the step where the upper deck runs out.
 export const UPPER_LETTER_ANCHORS = [
@@ -197,7 +197,7 @@ export const REAR_LETTER = {
   storyNote:
     'Whoever sealed this door behind me is still aboard. I am leaving this where every run begins — at the back — so the next one does not have to discover it all the hard way.\n\n' +
     'The train does not go anywhere. It only keeps happening. Something burnt walks the aisle: it hears running and it follows your torch. Crouch, kill the light, and stand off the aisle line between the seats, and it will walk straight past you. Let it reach you and the run ends where it always ends — back here, at this letter.\n\n' +
-    'Its name was cut apart and hidden through the carriages, scratched in red. Hold E on a mark until it gives itself up; the torn ticket and the half-burnt tag give up marks as well. Every mark fills the name shown above.\n\n' +
+    'Its name was cut apart and hidden through the carriages, scratched in red. Hold E on a mark until it gives itself up; the torn ticket and the half-burnt tag give up marks as well. Every mark fills the name, and everything you read is copied into your field notes — press I to read them again.\n\n' +
     'When the name is whole, carry it forward to the burning carriage at the head of the train. That is where the line ended, and where it has to end.',
   riteNote:
     'Read its name without being seen. The train does not go anywhere; it only keeps happening.',
@@ -209,7 +209,7 @@ export const RITE_SEAL = {
   foundAt: 'Burnt carriage, at the head of the train',
   storyNote:
     'Salt and ash drawn in a ring on the burned deck, still warm. The carriages were never the trap — the name was. Say it here and the line lets go.',
-  riteNote: 'Hold E to begin. Rebuild the name you uncovered, then speak it.',
+  riteNote: 'Hold E to begin. Rebuild the name from your field notes, then speak it.',
   anchor: { id: 'rite-seal', x: 2.7, t: 0.62 },
 }
 
