@@ -1,8 +1,9 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { loadingManager } from '../../core/loading.js'
+import { assetUrl } from '../../core/asset-url.js'
 
-const MODEL_URL = '/levels/house/models/priest-player.glb'
+const MODEL_URL = assetUrl('/levels/house/models/priest-player.glb')
 const WALK_SUFFIXES = new Set(['F', 'B', 'L', 'R', 'FL', 'FR', 'BL', 'BR'])
 // Level 1's collision body is roughly 1 m tall, including its head radius.
 const PLAYER_VISUAL_HEIGHT = 0.92

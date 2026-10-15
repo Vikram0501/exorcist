@@ -4,6 +4,7 @@ import { clone as cloneSkinnedModel }
   from 'three/addons/utils/SkeletonUtils.js'
 import { asTrack } from './track.js'
 import { loadingManager } from '../../core/loading.js'
+import { assetUrl } from '../../core/asset-url.js'
 
 
 // ============================================
@@ -44,7 +45,7 @@ const LATERAL_MAX = 3.5
 const OBSTACLE_MODEL_DEFS = [
   {
     key: 'zombie',
-    url: '/models/zombie.glb',
+    url: assetUrl('/models/zombie.glb'),
     targetHeight: 2.2,
     yaw: Math.PI,
     halfWidth: 0.7,
@@ -53,7 +54,7 @@ const OBSTACLE_MODEL_DEFS = [
   },
   {
     key: 'scientist',
-    url: '/models/zombie_doom_scientist.glb',
+    url: assetUrl('/models/zombie_doom_scientist.glb'),
     targetHeight: 2.1,
     yaw: Math.PI,
     halfWidth: 1.0,
@@ -62,7 +63,7 @@ const OBSTACLE_MODEL_DEFS = [
   },
   {
     key: 'barbed',
-    url: '/models/barbed_wire.glb',
+    url: assetUrl('/models/barbed_wire.glb'),
     targetWidth: 4.0,
     yaw: 0,
     halfWidth: 2.0,

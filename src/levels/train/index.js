@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { clone as cloneSkinnedModel } from 'three/addons/utils/SkeletonUtils.js'
 import { loadingManager } from '../../core/loading.js'
+import { assetUrl } from '../../core/asset-url.js'
 import { createCarriageLights, setupTrainLighting } from './lighting.js'
 import { createTrainTerrain } from './terrain.js'
 import { createTrainCollision } from './collision.js'
@@ -12,10 +13,10 @@ import { TrainStory } from './story.js'
 
 const TRAIN_SCALE = 0.1
 
-const CARRIAGE_01_PATH = '/models/Train_Carriage_New_01.glb'
-const CARRIAGE_02_PATH = '/models/Train_Carriage_New_02.glb'
+const CARRIAGE_01_PATH = assetUrl('/models/Train_Carriage_New_01.glb')
+const CARRIAGE_02_PATH = assetUrl('/models/Train_Carriage_New_02.glb')
 
-const ZOMBIE_PATH = '/models/zombie_the_burnt.glb'
+const ZOMBIE_PATH = assetUrl('/models/zombie_the_burnt.glb')
 const ZOMBIE_TARGET_HEIGHT = 1.3
 
 

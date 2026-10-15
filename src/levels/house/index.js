@@ -4,11 +4,12 @@ import { Octree } from 'three/addons/math/Octree.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { loadingManager } from '../../core/loading.js'
+import { assetUrl } from '../../core/asset-url.js'
 import { setupHouseLighting } from './lighting.js'
 
 // Current house scene exported from Blender. Includes the surrounding forest and
 // four boundary meshes named Plane, Plane.001, Plane.002 and Plane.003.
-const HOUSE_MODEL_URL = '/levels/house/models/house-runtime.glb'
+const HOUSE_MODEL_URL = assetUrl('/levels/house/models/house-runtime.glb')
 const HOUSE_SCALE = 0.15
 
 const DOOR_SPEED = 12

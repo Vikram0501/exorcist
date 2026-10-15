@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { addLevelLights } from '../shared/lighting.js'
+import { assetUrl } from '../../core/asset-url.js'
 
 
 const HOUSE_INTERIOR_LIGHTS = [
@@ -92,7 +93,7 @@ function addHauntedSky(level) {
   sky.add(stars)
 
   const moonTexture = new THREE.TextureLoader().load(
-    '/levels/house/textures/moon.png',
+    assetUrl('/levels/house/textures/moon.png'),
   )
   moonTexture.colorSpace = THREE.SRGBColorSpace
 

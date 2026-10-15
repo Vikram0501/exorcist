@@ -2,22 +2,23 @@
 // stalker's moans, which only reach the player while it is close.
 
 import { audioGain } from '../../core/settings.js'
+import { assetUrl } from '../../core/asset-url.js'
 
-export const TRAIN_AMBIENT_URL = '/levels/train/audio/train-inside.mp3'
+export const TRAIN_AMBIENT_URL = assetUrl('/levels/train/audio/train-inside.mp3')
 
 export const TRAIN_AMBIENT_VOLUME = 0.15
 
-export const ZOMBIE_MOAN_URL = '/levels/train/audio/zombie-moans.mp3'
+export const ZOMBIE_MOAN_URL = assetUrl('/levels/train/audio/zombie-moans.mp3')
 
 export const ZOMBIE_MOAN_VOLUME = 0.7
 
 // One-shots: the banshee cry while it is running you down, and the raw scream
 // when its name is spoken over the ash ring.
 export const CHASE_SCREAM_URL =
-  '/levels/train/audio/dragon-studio-banshee-screaming-sound-effect-312864.mp3'
+  assetUrl('/levels/train/audio/dragon-studio-banshee-screaming-sound-effect-312864.mp3')
 
 export const NAME_SCREAM_URL =
-  '/levels/train/audio/dragon-studio-zombie-scream-324752.mp3'
+  assetUrl('/levels/train/audio/dragon-studio-zombie-scream-324752.mp3')
 
 export const SCREAM_VOLUME = 0.85
 

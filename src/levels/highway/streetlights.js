@@ -3,9 +3,10 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { mergeGeometries }
   from 'three/addons/utils/BufferGeometryUtils.js'
 import { loadingManager } from '../../core/loading.js'
+import { assetUrl } from '../../core/asset-url.js'
 
 export const STREETLIGHT_MODEL_URL =
-  '/models/street_lamp.glb'
+  assetUrl('/models/street_lamp.glb')
 
 
 export async function loadStreetlightTemplate() {

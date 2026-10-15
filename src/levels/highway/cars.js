@@ -1,9 +1,10 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { loadingManager } from '../../core/loading.js'
+import { assetUrl } from '../../core/asset-url.js'
 
-export const PLAYER_MODEL_URL = '/models/player_car.glb'
-export const GHOST_MODEL_URL = '/models/ghost_car.glb'
+export const PLAYER_MODEL_URL = assetUrl('/models/player_car.glb')
+export const GHOST_MODEL_URL = assetUrl('/models/ghost_car.glb')
 export const HIGHWAY_CAR_TARGET_LENGTH = 4
 // Browser inspection of grille/headlights versus tail fins confirms +Z noses.
 // The gameplay root also uses +Z as forward; no corrective yaw is needed.

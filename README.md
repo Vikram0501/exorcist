@@ -71,6 +71,23 @@ npm run build
 npm run preview
 ```
 
+### Department LAMP deployment
+
+The course handout requires a static ZIP uploaded through Moodle. The game is
+built for a group subdirectory, and the archive contains only runtime assets.
+
+```bash
+npm run build
+python scripts/package-deployment.py
+python -m http.server 8765 --directory deployment
+```
+
+Play the packaged site at `http://127.0.0.1:8765/site/` before uploading. The
+archive is `deployment/exorcist-deployment.zip`, with `index.html` at its top
+level. Check the Moodle submission for the required archive filename and group
+folder, upload the ZIP there, then open the published URL in Chrome to verify
+all three levels. The development server is not the deployment build.
+
 ## Tech Stack
 
 - [Three.js](https://threejs.org/) v0.169 — 3D rendering (WebGL, shadows)

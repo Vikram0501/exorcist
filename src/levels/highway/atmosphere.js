@@ -1,11 +1,12 @@
 import * as THREE from 'three'
 import { loadingManager } from '../../core/loading.js'
+import { assetUrl } from '../../core/asset-url.js'
 
 // Level 3 apocalyptic sky. The source is a 2:1 panorama, so it maps
 // directly as an equirectangular scene background: no geometry, no extra
 // draw calls, infinite distance, and it follows the camera rotation.
 export const RED_SKY_URL =
-  '/levels/house/textures/red_sky.png'
+  assetUrl('/levels/house/textures/red_sky.png')
 
 // Kept below 1 so the storm stays sombre instead of glaring.
 export const RED_SKY_INTENSITY = 0.6

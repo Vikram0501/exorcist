@@ -3,9 +3,10 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { mergeGeometries }
   from 'three/addons/utils/BufferGeometryUtils.js'
 import { loadingManager } from '../../core/loading.js'
+import { assetUrl } from '../../core/asset-url.js'
 
 export const CITY_MODEL_URL =
-  '/models/street_city_buildings_8.glb'
+  assetUrl('/models/street_city_buildings_8.glb')
 
 // The asset ships its own concrete ground slab. The highway already owns the
 // Level 3 ground, so only the buildings are kept. GLTFLoader strips dots from

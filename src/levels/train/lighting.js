@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { addLevelLights } from '../shared/lighting.js'
+import { assetUrl } from '../../core/asset-url.js'
 
 
 // ── Per-type light configs ──────────────────────────────
@@ -435,7 +436,7 @@ function addTrainNightSky(level) {
   stars.name = 'star-field'
   sky.add(stars)
 
-  const moonTexture = new THREE.TextureLoader().load('/textures/haunted-moon.png')
+  const moonTexture = new THREE.TextureLoader().load(assetUrl('/levels/house/textures/moon.png'))
   moonTexture.colorSpace = THREE.SRGBColorSpace
 
   const moon = new THREE.Sprite(

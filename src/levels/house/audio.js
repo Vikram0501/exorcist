@@ -1,25 +1,26 @@
 import * as THREE from 'three'
 import { HOUSE_JUMP_SCARE_DURATION } from './story-data.js'
 import { audioGain } from '../../core/settings.js'
+import { assetUrl } from '../../core/asset-url.js'
 
 const SOUND = {
-  music: '/levels/house/audio/ambience.ogg',
-  houseStep: '/levels/house/audio/footsteps-house.ogg',
-  pathStep: '/levels/house/audio/footsteps-path.ogg',
-  doorOpen: '/levels/house/audio/door-open.ogg',
-  doorClose: '/levels/house/audio/door-close.ogg',
-  ghostFootsteps: '/levels/house/audio/ghost-footsteps.ogg',
-  ghostBreath: '/levels/house/audio/ghost-breath.ogg',
-  ghostOne: '/levels/house/audio/ghost-voice-01.ogg',
-  ghostTwo: '/levels/house/audio/ghost-voice-02.ogg',
-  phoneRing: '/levels/house/audio/phone-ring.ogg',
+  music: assetUrl('/levels/house/audio/ambience.ogg'),
+  houseStep: assetUrl('/levels/house/audio/footsteps-house.ogg'),
+  pathStep: assetUrl('/levels/house/audio/footsteps-path.ogg'),
+  doorOpen: assetUrl('/levels/house/audio/door-open.ogg'),
+  doorClose: assetUrl('/levels/house/audio/door-close.ogg'),
+  ghostFootsteps: assetUrl('/levels/house/audio/ghost-footsteps.ogg'),
+  ghostBreath: assetUrl('/levels/house/audio/ghost-breath.ogg'),
+  ghostOne: assetUrl('/levels/house/audio/ghost-voice-01.ogg'),
+  ghostTwo: assetUrl('/levels/house/audio/ghost-voice-02.ogg'),
+  phoneRing: assetUrl('/levels/house/audio/phone-ring.ogg'),
 }
 
 const JUMP_SCARE_SOUNDS = [
-  '/levels/house/audio/screams/scream-01.ogg',
-  '/levels/house/audio/screams/scream-02.ogg',
-  '/levels/house/audio/screams/scream-03.ogg',
-  '/levels/house/audio/screams/scream-04.ogg',
+  assetUrl('/levels/house/audio/screams/scream-01.ogg'),
+  assetUrl('/levels/house/audio/screams/scream-02.ogg'),
+  assetUrl('/levels/house/audio/screams/scream-03.ogg'),
+  assetUrl('/levels/house/audio/screams/scream-04.ogg'),
 ]
 
 const MUSIC_VOLUME = 0.3

@@ -5,19 +5,20 @@
 // single persistent elements, started once per activation and
 // stopped on unload so overlapping copies can never play.
 import { audioGain } from '../../core/settings.js'
+import { assetUrl } from '../../core/asset-url.js'
 
 export const LEVEL3_MUSIC_URL =
-  '/levels/house/audio/level3_ambient_sound.mp3'
+  assetUrl('/levels/house/audio/level3_ambient_sound.mp3')
 
 export const LEVEL3_MUSIC_VOLUME = 0.25
 
 export const CAR_SOUND_URL =
-  '/levels/house/audio/car_sound.mp3'
+  assetUrl('/levels/house/audio/car_sound.mp3')
 
 export const CAR_SOUND_VOLUME = 0.35
 
 export const COUNTDOWN_URL =
-  '/levels/house/audio/countdown.mp3'
+  assetUrl('/levels/house/audio/countdown.mp3')
 
 export const COUNTDOWN_VOLUME = 0.9
 

@@ -1,8 +1,9 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { loadingManager } from '../../core/loading.js'
+import { assetUrl } from '../../core/asset-url.js'
 
-export const HIGHWAY_MODEL_URL = '/models/highway.glb'
+export const HIGHWAY_MODEL_URL = assetUrl('/models/highway.glb')
 export const HIGHWAY_SURFACE_Y = 0.05 // Original driving surface elevation.
 export const HIGHWAY_MODEL_SCALE = 1 // Asset: 20 long × 14 wide in game units.
 // Dense fixed-step rows follow the smooth CatmullRom bends directly; no
