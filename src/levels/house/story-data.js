@@ -1,4 +1,5 @@
-export const HOUSE_JUMP_SCARE_DURATION = 1.95
+// 75% of the former 1.95-second close-up, shared by the visual, shake and audio.
+export const HOUSE_JUMP_SCARE_DURATION = 1.4625
 
 export const HOUSE_EVIDENCE = [
   {

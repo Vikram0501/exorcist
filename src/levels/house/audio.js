@@ -193,9 +193,7 @@ export class HauntedHouseAudio {
     const scream = choices[Math.floor(Math.random() * choices.length)]
     this.lastJumpScare = scream
     const decoded = scream.decoded
-    const fallbackDuration = Number.isFinite(scream.fallback.duration) ? scream.fallback.duration : 3
-    const duration = decoded ? decoded.buffer.duration - decoded.offset : fallbackDuration
-    const holdDuration = Math.max(HOUSE_JUMP_SCARE_DURATION, duration)
+    const holdDuration = HOUSE_JUMP_SCARE_DURATION
     this.scareUntil = performance.now() / 1000 + holdDuration
     this.stopPhoneRing()
     for (const sound of this.effects) sound.pause()
@@ -204,7 +202,10 @@ export class HauntedHouseAudio {
     this.tones.clear()
     window.clearTimeout(this.restoreTimer)
     this.music.volume = 0
-    this.restoreTimer = window.setTimeout(() => this.restoreMusic(), holdDuration * 1000)
+    this.restoreTimer = window.setTimeout(() => {
+      scream.fallback.pause()
+      this.restoreMusic()
+    }, holdDuration * 1000)
     this.nextGhostAt = this.scareUntil + randomBetween(7, 13)
     if (decoded && this.context?.state === 'running') {
       const source = this.context.createBufferSource()
@@ -225,7 +226,7 @@ export class HauntedHouseAudio {
         if (this.jumpScareSource === source) this.jumpScareSource = null
       }
       this.jumpScareSource = source
-      source.start(0, decoded.offset)
+      source.start(0, decoded.offset, holdDuration)
     } else {
       scream.fallback.currentTime = 0
       scream.fallback.play().catch(error => console.error(`Jump-scare playback failed (${scream.url}):`, error))

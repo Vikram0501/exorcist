@@ -74,6 +74,7 @@ export function installBathroomMirror(model, avatar) {
   surface.parent.add(mount)
   surface.visible = false
   const mirrorWorldPosition = new THREE.Vector3()
+  const mirrorNormal = new THREE.Vector3()
   const cameraDirection = new THREE.Vector3()
   const towardMirror = new THREE.Vector3()
   let lastReflectionAt = -Infinity
@@ -100,9 +101,15 @@ export function installBathroomMirror(model, avatar) {
     faceLight,
     update(camera) {
       mirror.getWorldPosition(mirrorWorldPosition)
+      mirror.getWorldDirection(mirrorNormal)
       camera.getWorldDirection(cameraDirection)
       towardMirror.copy(mirrorWorldPosition).sub(camera.position)
-      const near = towardMirror.lengthSq() < 6.25 &&
+      // A nearby stairwell can put the camera within 2.5 m of the mirror
+      // through a floor or wall. Rendering a second view there causes a hitch
+      // even though the glass cannot be seen from that position.
+      const sameFloor = Math.abs(towardMirror.y) < 1.2
+      const inFront = mirrorNormal.dot(towardMirror) < -0.05
+      const near = sameFloor && inFront && towardMirror.lengthSq() < 6.25 &&
         cameraDirection.dot(towardMirror.normalize()) > 0.25
       mirror.visible = near
       surface.visible = !near

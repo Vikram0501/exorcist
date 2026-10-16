@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { HauntedHouseAudio, prepareScareBuffer } from '../../src/levels/house/audio.js'
+import { HOUSE_JUMP_SCARE_DURATION } from '../../src/levels/house/story-data.js'
 
 test('a quiet scare recording is normalized and skips silence before the hit', () => {
   const channel = new Float32Array(1000)
@@ -51,7 +52,7 @@ test('scares choose among all four new screams without an immediate repeat', t =
     '/levels/house/audio/screams/scream-04.ogg',
   ])
   assert.equal(audio.music.volume, 0)
-  assert.equal(musicHoldMs, 1950)
+  assert.equal(musicHoldMs, HOUSE_JUMP_SCARE_DURATION * 1000)
 })
 
 test('the completed rite stops all house sounds and keeps the yard silent', async t => {

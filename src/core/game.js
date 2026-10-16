@@ -13,6 +13,7 @@ import { HouseStoryView, renderJournal } from '../levels/house/story-view.js'
 import { HouseAvatar } from '../levels/house/avatar.js'
 import { HouseScareShake } from '../levels/house/scare-shake.js'
 import { installBathroomMirror } from '../levels/house/mirror.js'
+import { findHouseInvestigationItem } from '../levels/house/interaction.js'
 import { createHouseShaderEffects } from '../levels/house/shaders.js'
 import { TrainRiteView } from '../levels/train/rite-view.js'
 
@@ -2295,6 +2296,17 @@ if (this.loaded) {
     }
 
     this.setInteractionRay()
+
+    if (this.currentLevel === 'house') {
+      return findHouseInvestigationItem(
+        this.raycaster,
+        this.investigationItems,
+        this.doors,
+        this.colliders?.find(collider => collider.type === 'octree')?.world,
+        this.player.position,
+        DOOR_INTERACTION_RANGE,
+      )
+    }
 
     const targets = [this.model, ...(this.houseStory ? [this.houseStory.root] : [])]
     if (this.currentLevel === 'train' && this.trainCarriages) {

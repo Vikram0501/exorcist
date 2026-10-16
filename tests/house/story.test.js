@@ -4,6 +4,7 @@ import { HouseStory, HOUSE_EVIDENCE, RITE_QUESTIONS } from '../../src/levels/hou
 import { buildHouseJournalEntries } from '../../src/levels/house/story-view.js'
 import { HousePursuit } from '../../src/levels/house/pursuit.js'
 import { createAuthoredGhost, createJumpScareGhost, darkenGraves } from '../../src/levels/house/story-assets.js'
+import { HOUSE_JUMP_SCARE_DURATION } from '../../src/levels/house/story-data.js'
 import * as THREE from 'three'
 
 function createStory() {
@@ -128,7 +129,7 @@ test('wrong rite answers scare the player and require a respawn', () => {
   assert.equal(story.pursuit.state, 'caught')
   assert.equal(story.failureReason, 'wrong-answer')
   assert.equal(story.jumpScareGhost.visible, true)
-  assert.equal(story.jumpScareTime, 1.95)
+  assert.equal(story.jumpScareTime, HOUSE_JUMP_SCARE_DURATION)
   assert.equal(story.answerRite(RITE_QUESTIONS[0].answer), false)
   story.pursuit.retry(new THREE.Vector3(0, 1, 0))
   story.pursuit.state = 'safe'
@@ -240,7 +241,7 @@ test('the annex clue can be found first, but the letter waits for the kitchen re
   assert.match(story.objective(), /GRAVE/)
 })
 
-test('closing the confession triggers a two-second close-up scare before the chase', () => {
+test('closing the confession triggers a shorter close-up scare before the chase', () => {
   const story = createStory()
   const camera = new THREE.PerspectiveCamera()
   const ghost = new THREE.Group()
