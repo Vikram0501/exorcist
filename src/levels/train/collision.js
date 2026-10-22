@@ -8,6 +8,7 @@ const TRAIN_MAX_STEP_HEIGHT = 0.3
 // The flattened carriage asset stores the U-stair treads and risers in a broad
 // shared mesh, so these measured bounds replace only that walkable volume.
 const TRAIN_STAIR_MESH = 'Material2004_49'
+const TRAIN_STAIR_COLLISION_MESH = 'Material2004_1'
 const TRAIN_STAIR_MIN = new THREE.Vector3(0.85, 0.37, -24.33)
 const TRAIN_STAIR_MAX = new THREE.Vector3(2.83, 3.16, -22.14)
 const TRAIN_STAIR_SEGMENTS = [
@@ -51,7 +52,7 @@ async function extractTriangles(model, offset) {
         triangle.a.fromBufferAttribute(position, indices ? indices.getX(i) : i).applyMatrix4(mesh.matrixWorld).sub(offset)
         triangle.b.fromBufferAttribute(position, indices ? indices.getX(i + 1) : i + 1).applyMatrix4(mesh.matrixWorld).sub(offset)
         triangle.c.fromBufferAttribute(position, indices ? indices.getX(i + 2) : i + 2).applyMatrix4(mesh.matrixWorld).sub(offset)
-        if (hasStairs && isStairTriangle(triangle)) continue
+        if (hasStairs && mesh.name === TRAIN_STAIR_COLLISION_MESH && isStairTriangle(triangle)) continue
         if (triangle.getArea() > 1e-10) {
         triangle.a.toArray(packed, length)
         triangle.b.toArray(packed, length + 3)

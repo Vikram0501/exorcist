@@ -132,6 +132,15 @@ test('shipped stair treads are walkable in both directions without jumping', asy
   assert.ok(finalFlight.isGrounded, 'the player stays grounded across the final stair handoff')
 })
 
+test('shipped stair enclosure walls remain collidable', async () => {
+  const model = await loadTrainGeometry('02')
+  const [{ world }] = await createTrainCollision([{ model }])
+  const hit = world.capsuleIntersect(capsule(1.6, 2.4, -24.45))
+
+  assert.ok(hit, 'the wall beside the stairs blocks the player')
+  assert.ok(hit.normal.z < -0.8, 'the collision pushes the player back from the stair enclosure wall')
+})
+
 test('an opened lower door lets the player walk through an adjacent carriage join', async () => {
   const gltf = await loadTrainAsset('02')
   const first = gltf.scene.clone(true)
