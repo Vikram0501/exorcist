@@ -1,9 +1,5 @@
 import * as THREE from 'three'
 import { addLevelLights } from '../shared/lighting.js'
-import { assetUrl } from '../../core/asset-url.js'
-
-
-// ── Per-type light configs ──────────────────────────────
 
 const CARRIAGE_01_CONFIG = {
   color: 0x8b0000,
@@ -40,7 +36,6 @@ const CARRIAGE_02_BASE = {
     { x: 2.84, y: 2.6, z: -17.60 },
     { x: 2.84, y: 2.6, z: -19.60 },
     { x: 2.84, y: 2.6, z: -21.60 },
-
     { x: 2.84, y: 5.51, z: -22.95 },
     { x: 3.93, y: 5.51, z: -21.83 },
     { x: 3.93, y: 5.51, z: -19.83 },
@@ -54,11 +49,8 @@ const CARRIAGE_02_BASE = {
   ],
 }
 
-// Per-instance presets for the 4 carriage 02 instances.
-// Each overrides color/intensity for some or all of the 5 lights.
 const CARRIAGE_02_PRESETS = [
   {
-    // Instance 0: Warm / Normal — the "safe" carriage
     label: 'Warm/Normal',
     lights: [
       { color: 0xffcc88, intensity: 0.4 },
@@ -80,7 +72,6 @@ const CARRIAGE_02_PRESETS = [
       { color: 0xffcc88, intensity: 0.4 },
       { color: 0xffcc88, intensity: 0.4 },
       { color: 0xffcc88, intensity: 0.4 },
-
       { color: 0xffcc88, intensity: 0.4 },
       { color: 0xffcc88, intensity: 0.4 },
       { color: 0xffcc88, intensity: 0.4 },
@@ -94,7 +85,6 @@ const CARRIAGE_02_PRESETS = [
     ],
   },
   {
-    // Instance 1: Cold / Dim — uneasy atmosphere
     label: 'Cold/Dim',
     lights: [
       { color: 0x8899bb, intensity: 0.2 },
@@ -116,7 +106,6 @@ const CARRIAGE_02_PRESETS = [
       { color: 0x8899bb, intensity: 0.15 },
       { color: 0x8899bb, intensity: 0.15 },
       { color: 0x8899bb, intensity: 0.15 },
-
       { color: 0x8899bb, intensity: 0.18 },
       { color: 0x8899bb, intensity: 0.15 },
       { color: 0x8899bb, intensity: 0.15 },
@@ -130,7 +119,6 @@ const CARRIAGE_02_PRESETS = [
     ],
   },
   {
-    // Instance 2: Flickering — unstable lighting
     label: 'Flickering',
     lights: [
       { color: 0xffaa66, intensity: 0.35 },
@@ -152,7 +140,6 @@ const CARRIAGE_02_PRESETS = [
       { color: 0xffaa66, intensity: 0.3 },
       { color: 0xffaa66, intensity: 0.25 },
       { color: 0xffaa66, intensity: 0.3 },
-
       { color: 0xffaa66, intensity: 0.35 },
       { color: 0xffaa66, intensity: 0.25 },
       { color: 0xffaa66, intensity: 0.3 },
@@ -184,7 +171,6 @@ const CARRIAGE_02_PRESETS = [
       { speed: 7, minIntensity: 0.08, maxIntensity: 0.4 },
       { speed: 12, minIntensity: 0.0, maxIntensity: 0.35 },
       { speed: 7, minIntensity: 0.08, maxIntensity: 0.4 },
-
       null,
       { speed: 12, minIntensity: 0.0, maxIntensity: 0.35 },
       { speed: 7, minIntensity: 0.08, maxIntensity: 0.4 },
@@ -198,45 +184,40 @@ const CARRIAGE_02_PRESETS = [
     ],
   },
   {
-    // Instance 3: Dark / Broken — 2 lights dead from start
     label: 'Dark/Broken',
     lights: [
       { color: 0x554433, intensity: 0.12 },
       { color: 0x554433, intensity: 0.1 },
       { color: 0x554433, intensity: 0.12 },
       { color: 0x554433, intensity: 0.1 },
-      null, // broken
+      null,
       { color: 0x554433, intensity: 0.08 },
-      null, // broken
+      null,
       { color: 0x554433, intensity: 0.12 },
       { color: 0x554433, intensity: 0.1 },
-      null, // broken
+      null,
       { color: 0x554433, intensity: 0.08 },
-      null, // broken
+      null,
       { color: 0x554433, intensity: 0.12 },
       { color: 0x554433, intensity: 0.1 },
-      null, // broken
+      null,
       { color: 0x554433, intensity: 0.08 },
-      null, // broken
+      null,
       { color: 0x554433, intensity: 0.08 },
-      null, // broken
-
-      null, // broken
+      null,
+      null,
       { color: 0x554433, intensity: 0.08 },
-      null, // broken
+      null,
       { color: 0x554433, intensity: 0.12 },
       { color: 0x554433, intensity: 0.1 },
-      null, // broken
+      null,
       { color: 0x554433, intensity: 0.08 },
-      null, // broken
+      null,
       { color: 0x554433, intensity: 0.08 },
-      null, // broken
+      null,
     ],
   },
 ]
-
-
-// ── CarriageLightController ─────────────────────────────
 
 class CarriageLightController {
   constructor(carriageGroup, lights, helpers, presets) {
@@ -245,16 +226,12 @@ class CarriageLightController {
     this.helpers = helpers
     this.presets = presets
 
-    // Per-light state
-    this.states = lights.map((light, i) => {
-      const p = presets[i]
-      return {
-        baseColor: light.color.clone(),
-        baseIntensity: light.intensity,
-        flicker: null,
-        broken: light.intensity === 0,
-      }
-    })
+    this.states = lights.map(light => ({
+      baseColor: light.color.clone(),
+      baseIntensity: light.intensity,
+      flicker: null,
+      broken: light.intensity === 0,
+    }))
 
     this.cutOut = false
     this._time = 0
@@ -262,25 +239,27 @@ class CarriageLightController {
 
   update(dt) {
     this._time += dt
+
     for (let i = 0; i < this.lights.length; i++) {
       const state = this.states[i]
       if (state.broken) continue
+
       if (state.flicker) {
         const f = state.flicker
         const t = this._time * f.speed
         const range = f.maxIntensity - f.minIntensity
         const flick = Math.sin(t) * 0.5 + 0.5
         const noise = Math.random() * 0.1
-        this.lights[i].intensity = f.minIntensity + (flick + noise) * range
+
+        this.lights[i].intensity =
+          f.minIntensity + (flick + noise) * range
       }
     }
   }
 
-  // Switch every light off for good. `visible = false` makes the renderer
-  // skip these point lights entirely, so they leave the GPU light list and
-  // the shaders recompile with fewer lights.
   cut() {
     this.cutOut = true
+
     for (let i = 0; i < this.lights.length; i++) {
       this.lights[i].visible = false
       this.lights[i].intensity = 0
@@ -304,6 +283,7 @@ class CarriageLightController {
 
   repairLight(lightIndex) {
     if (lightIndex < 0 || lightIndex >= this.lights.length) return
+
     const state = this.states[lightIndex]
     state.broken = false
     this.lights[lightIndex].intensity = state.baseIntensity
@@ -336,10 +316,12 @@ class CarriageLightController {
       this.group.remove(light)
       if (light.dispose) light.dispose()
     }
+
     for (const helper of this.helpers) {
       this.group.remove(helper)
       if (helper.dispose) helper.dispose()
     }
+
     for (const label of this._debugLabels || []) {
       this.group.remove(label)
       label.material.map?.dispose()
@@ -348,13 +330,11 @@ class CarriageLightController {
   }
 }
 
-
-// ── Debug helpers ───────────────────────────────────────
-
 function createDebugLabel(light, text) {
   const canvas = document.createElement('canvas')
   canvas.width = 256
   canvas.height = 64
+
   const ctx = canvas.getContext('2d')
   ctx.fillStyle = 'rgba(0,0,0,0.7)'
   ctx.fillRect(0, 0, 256, 64)
@@ -363,119 +343,266 @@ function createDebugLabel(light, text) {
   ctx.fillText(text, 8, 24)
 
   const texture = new THREE.CanvasTexture(canvas)
-  const material = new THREE.SpriteMaterial({ map: texture, depthTest: false })
+
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    depthTest: false,
+  })
+
   const sprite = new THREE.Sprite(material)
   sprite.scale.set(2, 0.5, 1)
   sprite.position.copy(light.position)
   sprite.position.y += 0.4
   sprite.renderOrder = 999
+
   return sprite
 }
 
-
-// ── Procedural night sky ────────────────────────────────
-
 const SKY_RADIUS = 200
-const STAR_COUNT = 600
-
-function seededRandom(seed) {
-  const value = Math.sin(seed * 12.9898) * 43758.5453
-  return value - Math.floor(value)
-}
 
 function addTrainNightSky(level) {
   const sky = new THREE.Group()
   sky.name = 'train-night-sky'
 
+  const material = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    fog: false,
+    toneMapped: false,
+
+    uniforms: {
+      zenith: {
+        value: new THREE.Color(0x070c16),
+      },
+      horizon: {
+        value: new THREE.Color(0x1b222b),
+      },
+      moonDirection: {
+        value: new THREE.Vector3(50, 60, -80).normalize(),
+      },
+    },
+
+    vertexShader: `
+      varying vec3 vDirection;
+
+      void main() {
+        vDirection = position;
+
+        gl_Position =
+          projectionMatrix *
+          modelViewMatrix *
+          vec4(position, 1.0);
+      }
+    `,
+
+    fragmentShader: `
+      uniform vec3 zenith;
+      uniform vec3 horizon;
+      uniform vec3 moonDirection;
+
+      varying vec3 vDirection;
+
+      float hash(vec3 p) {
+        p = fract(p * 0.1031);
+        p += dot(p, p.yzx + 33.33);
+        return fract((p.x + p.y) * p.z);
+      }
+
+      float noise(vec3 p) {
+        vec3 i = floor(p);
+        vec3 f = fract(p);
+
+        f = f * f * (3.0 - 2.0 * f);
+
+        return mix(
+          mix(
+            mix(
+              hash(i),
+              hash(i + vec3(1.0, 0.0, 0.0)),
+              f.x
+            ),
+            mix(
+              hash(i + vec3(0.0, 1.0, 0.0)),
+              hash(i + vec3(1.0, 1.0, 0.0)),
+              f.x
+            ),
+            f.y
+          ),
+          mix(
+            mix(
+              hash(i + vec3(0.0, 0.0, 1.0)),
+              hash(i + vec3(1.0, 0.0, 1.0)),
+              f.x
+            ),
+            mix(
+              hash(i + vec3(0.0, 1.0, 1.0)),
+              hash(i + vec3(1.0, 1.0, 1.0)),
+              f.x
+            ),
+            f.y
+          ),
+          f.z
+        );
+      }
+
+      float fbm(vec3 p) {
+        float n = 0.0;
+        float a = 0.5;
+
+        for (int i = 0; i < 5; i++) {
+          n += a * noise(p);
+          p = p * 2.03 + vec3(7.1, 3.7, 1.9);
+          a *= 0.5;
+        }
+
+        return n;
+      }
+
+      void main() {
+        vec3 d = normalize(vDirection);
+        float elevation = max(d.y, 0.0);
+
+        vec3 color = mix(
+          horizon,
+          zenith,
+          pow(smoothstep(0.0, 0.85, elevation), 0.55)
+        );
+
+        float moonDot = clamp(
+          dot(d, moonDirection),
+          -1.0,
+          1.0
+        );
+
+        float halo = exp(-(1.0 - moonDot) * 240.0);
+        color += vec3(0.011, 0.013, 0.017) * halo;
+
+        vec3 grid = d * 390.0;
+        vec3 cell = floor(grid);
+
+        vec3 offset = vec3(
+          hash(cell + 3.0),
+          hash(cell + 17.0),
+          hash(cell + 41.0)
+        );
+
+        float star = exp(
+          -dot(
+            fract(grid) - offset,
+            fract(grid) - offset
+          ) * 150.0
+        );
+
+        star *=
+          step(0.986, hash(cell)) *
+          smoothstep(0.06, 0.4, elevation);
+
+        color +=
+          vec3(0.46, 0.50, 0.57) *
+          star *
+          (0.25 + 0.75 * hash(cell + 8.0));
+
+        vec3 right = normalize(
+          cross(moonDirection, vec3(0.0, 1.0, 0.0))
+        );
+
+        vec3 up = cross(right, moonDirection);
+
+        vec2 m = vec2(
+          dot(d, right),
+          dot(d, up)
+        ) / 0.012;
+
+        float r2 = dot(m, m);
+        float disc = 1.0 - smoothstep(0.94, 1.0, r2);
+
+        if (moonDot > 0.0 && r2 < 1.0) {
+          vec3 normal = vec3(
+            m,
+            sqrt(max(0.0, 1.0 - r2))
+          );
+
+          float shade = max(
+            0.0,
+            dot(
+              normal,
+              normalize(vec3(-0.35, 0.2, 0.92))
+            )
+          );
+
+          float maria = smoothstep(
+            0.35,
+            0.62,
+            fbm(vec3(m * 4.2, 6.1))
+          );
+
+          float relief = fbm(vec3(m * 38.0, 9.0));
+
+          vec3 lunar =
+            vec3(0.53, 0.55, 0.57) *
+            (0.55 + maria * 0.25 + relief * 0.2) *
+            (0.12 + shade * 0.88);
+
+          color = mix(color, lunar, disc);
+        }
+
+        vec3 cloudP =
+          d * vec3(5.0, 15.0, 5.0) +
+          vec3(12.0, 3.0, 7.0);
+
+        float clouds = smoothstep(
+          0.40,
+          0.72,
+          fbm(cloudP)
+        );
+
+        clouds *= smoothstep(-0.05, 0.18, d.y);
+
+        vec3 cloudColor = mix(
+          horizon * 0.58,
+          vec3(0.023, 0.027, 0.033),
+          halo * 0.6
+        );
+
+        color = mix(color, cloudColor, clouds * 0.88);
+
+        gl_FragColor = vec4(color, 1.0);
+
+        #include <colorspace_fragment>
+      }
+    `,
+  })
+
   const dome = new THREE.Mesh(
-    new THREE.SphereGeometry(SKY_RADIUS, 32, 20),
-    new THREE.MeshBasicMaterial({
-      color: 0x040810,
-      side: THREE.BackSide,
-      fog: false,
-    }),
+    new THREE.SphereGeometry(SKY_RADIUS, 48, 32),
+    material,
   )
+
   dome.name = 'sky-dome'
+  dome.renderOrder = -100
+
   sky.add(dome)
-
-  const starPositions = []
-  const starColors = []
-
-  for (let i = 0; i < STAR_COUNT; i++) {
-    const theta = seededRandom(i * 5 + 1) * Math.PI * 2
-    const y = 0.2 + seededRandom(i * 5 + 2) * 0.8
-    const horizontal = Math.sqrt(1 - y * y)
-    const r = SKY_RADIUS - 2 - seededRandom(i * 5 + 3) * 8
-    const brightness = 0.4 + seededRandom(i * 5 + 4) * 0.6
-
-    starPositions.push(
-      Math.cos(theta) * horizontal * r,
-      y * r,
-      Math.sin(theta) * horizontal * r,
-    )
-    starColors.push(
-      brightness * 0.6,
-      brightness * 0.75,
-      brightness,
-    )
-  }
-
-  const stars = new THREE.Points(
-    new THREE.BufferGeometry()
-      .setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3))
-      .setAttribute('color', new THREE.Float32BufferAttribute(starColors, 3)),
-    new THREE.PointsMaterial({
-      size: 0.8,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.85,
-      depthWrite: false,
-      fog: false,
-    }),
-  )
-  stars.name = 'star-field'
-  sky.add(stars)
-
-  const moonTexture = new THREE.TextureLoader().load(assetUrl('/levels/house/textures/moon.png'))
-  moonTexture.colorSpace = THREE.SRGBColorSpace
-
-  const moon = new THREE.Sprite(
-    new THREE.SpriteMaterial({
-      map: moonTexture,
-      color: 0xb7c0d1,
-      transparent: true,
-      opacity: 0.7,
-      depthWrite: false,
-      fog: false,
-    }),
-  )
-  moon.name = 'moon'
-  moon.position.set(50, 60, -80)
-  moon.scale.set(18, 18, 1)
-  sky.add(moon)
-
   level.add(sky)
+
   return sky
 }
 
-
-// ── Public API ──────────────────────────────────────────
-
-/**
- * Create lights for a carriage.
- * @param {THREE.Group} carriageGroup
- * @param {'01'|'02'} carriageType
- * @param {number} instanceIndex  - 0-3, only used for type '02'
- * @param {object} [options]
- * @param {boolean} [options.lit] - false for carriages that must stay dark
- * @param {number} [options.presetIndex] - preset to apply, defaults to instanceIndex
- * @returns {CarriageLightController}
- */
-export function createCarriageLights(carriageGroup, carriageType = '02', instanceIndex = 0, { lit = true, presetIndex = instanceIndex } = {}) {
+export function createCarriageLights(
+  carriageGroup,
+  carriageType = '02',
+  instanceIndex = 0,
+  { lit = true, presetIndex = instanceIndex } = {},
+) {
   const lights = []
   const helpers = []
 
-  let color, intensity, distance, decay, positions, presetOverrides, flickerOverrides
+  let color
+  let intensity
+  let distance
+  let decay
+  let positions
+  let presetOverrides
+  let flickerOverrides
 
   if (carriageType === '01') {
     const cfg = CARRIAGE_01_CONFIG
@@ -488,7 +615,11 @@ export function createCarriageLights(carriageGroup, carriageType = '02', instanc
     flickerOverrides = null
   } else {
     const base = CARRIAGE_02_BASE
-    const preset = CARRIAGE_02_PRESETS[presetIndex % CARRIAGE_02_PRESETS.length]
+
+    const preset = CARRIAGE_02_PRESETS[
+      presetIndex % CARRIAGE_02_PRESETS.length
+    ]
+
     distance = base.distance
     decay = base.decay
     positions = base.positions
@@ -498,87 +629,123 @@ export function createCarriageLights(carriageGroup, carriageType = '02', instanc
 
   const presets = []
 
-  // Every other authored fixture becomes a light: positions are ~2 units
-  // apart, so half of them still overlap into even coverage at half the
-  // shader cost. Fixtures the preset marks as broken are skipped, and dark
-  // carriages get no lights at all so they never reach the GPU light list.
-  const selected = !lit ? []
-    : positions.map((_, index) => index)
-      .filter(index => index % 2 === 0 && (!presetOverrides || presetOverrides[index] !== null))
+  const selected = !lit
+    ? []
+    : positions
+      .map((_, index) => index)
+      .filter(index =>
+        index % 2 === 0 &&
+        (!presetOverrides || presetOverrides[index] !== null),
+      )
 
   for (const i of selected) {
     const cfg = positions[i]
     const override = presetOverrides?.[i]
     const lightColor = override?.color ?? color ?? 0xffcc88
-    const lightIntensity = (override?.intensity ?? intensity) * (carriageType === '01' ? 1 : 1.35)
+
+    const lightIntensity =
+      (override?.intensity ?? intensity) *
+      (carriageType === '01' ? 1 : 1.35)
 
     const light = new THREE.PointLight(
-      lightColor, lightIntensity,
+      lightColor,
+      lightIntensity,
       carriageType === '01' ? 16 : 26,
       carriageType === '01' ? decay : 1.4,
     )
+
     light.position.set(cfg.x, cfg.y, cfg.z)
     light.castShadow = false
     light.name = `carriage_light_${i}`
+
     carriageGroup.add(light)
     lights.push(light)
-    presets.push({ color: lightColor, intensity: lightIntensity })
 
+    presets.push({
+      color: lightColor,
+      intensity: lightIntensity,
+    })
   }
 
-  const controller = new CarriageLightController(carriageGroup, lights, helpers, presets)
+  const controller = new CarriageLightController(
+    carriageGroup,
+    lights,
+    helpers,
+    presets,
+  )
 
-  // Apply flicker overrides from preset
-  if (flickerOverrides) selected.forEach((sourceIndex, lightIndex) => {
-    if (flickerOverrides[sourceIndex]) controller.setFlicker(lightIndex, flickerOverrides[sourceIndex])
-  })
+  if (flickerOverrides) {
+    selected.forEach((sourceIndex, lightIndex) => {
+      if (flickerOverrides[sourceIndex]) {
+        controller.setFlicker(
+          lightIndex,
+          flickerOverrides[sourceIndex],
+        )
+      }
+    })
+  }
 
-  // The labels and helpers are only built if the player turns debug mode on.
   controller._debugLabels = []
-  controller._debugInfo = { carriageGroup, carriageType, instanceIndex, positions, selected }
+
+  controller._debugInfo = {
+    carriageGroup,
+    carriageType,
+    instanceIndex,
+    positions,
+    selected,
+  }
 
   return controller
 }
 
-
 export function disposeCarriageLights(carriageGroup) {
   const toRemove = []
-  carriageGroup.traverse((child) => {
+
+  carriageGroup.traverse(child => {
     if (child.isLight || child.isSprite) {
       toRemove.push(child)
     }
   })
+
   for (const obj of toRemove) {
     carriageGroup.remove(obj)
     if (obj.dispose) obj.dispose()
   }
 }
 
-
-/**
- * Toggle debug visibility for all carriage light helpers and labels.
- * @param {CarriageLightController[]} controllers
- * @param {boolean} visible
- */
 export function toggleCarriageLightDebug(controllers, visible) {
   for (const ctrl of controllers) {
     if (visible && ctrl.helpers.length === 0) {
-      const { carriageGroup, carriageType, instanceIndex, positions, selected } = ctrl._debugInfo
+      const {
+        carriageGroup,
+        carriageType,
+        instanceIndex,
+        positions,
+        selected,
+      } = ctrl._debugInfo
+
       ctrl.lights.forEach((light, index) => {
         const helper = new THREE.PointLightHelper(light, 0.3)
         carriageGroup.add(helper)
         ctrl.helpers.push(helper)
+
         const sourceIndex = selected[index]
         const pos = positions[sourceIndex]
-        const label = createDebugLabel(light,
-          `C${carriageType}-${instanceIndex} L${sourceIndex}\n${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}`)
+
+        const label = createDebugLabel(
+          light,
+          `C${carriageType}-${instanceIndex} L${sourceIndex}\n${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}`,
+        )
+
         carriageGroup.add(label)
         ctrl._debugLabels.push(label)
       })
     }
+
     for (const helper of ctrl.helpers) {
       helper.visible = visible
     }
+
     for (const label of ctrl._debugLabels) {
       label.visible = visible
     }
@@ -628,10 +795,14 @@ export async function prewarmTrainLightStates({ controllers = [], glowGroup = nu
   }
 }
 
-
 export function setupTrainLighting(level, model, size) {
   const { moon } = addLevelLights(level, size)
   moon.castShadow = false
+
   const sky = addTrainNightSky(level)
-  return { lightHelpers: [], sky }
+
+  return {
+    lightHelpers: [],
+    sky,
+  }
 }
