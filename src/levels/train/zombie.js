@@ -17,7 +17,9 @@ const CORRIDOR_BINARY_STEPS = 6
 const PATROL_SPEED = 1.2
 const HUNT_SPEED = 2.6
 const SENSE_RADIUS = 5.5
-const SENSE_MOVE_SPEED = 2
+// The bar starts filling at twice the sensing range, so danger rises on the
+// approach and reaches full exactly where the stalker can see you.
+const DETECTION_WARNING_RANGE = SENSE_RADIUS * 2
 const PATH_MARGIN = 0.2
 const CATCH_RADIUS = 0.75
 const CONTACT_RADIUS = 0.45
@@ -332,6 +334,21 @@ function clearLane(world, z, lane) {
   return min <= max ? { min, max } : lane
 }
 
+// 0..1 for the detection meter. 0 means the stalker cannot sense the player
+// right now: it is still asleep, already banished, standing as the apparition,
+// or the player is hiding (crouched, torch off, off the corridor lane). 1 means
+// it can see the player — inside the sense radius, or already hunting them from
+// memory. Between the two radii the bar climbs with the approach, reaching full
+// on the boundary instead of jumping, so a full bar is never a surprise.
+export function detectionAwareness({ state, hidden, distance }) {
+  if (state === 'dormant' || state === 'banished' || state === 'apparition') return 0
+  if (state === 'hunt') return 1
+  if (hidden) return 0
+
+  const closing = (distance - SENSE_RADIUS) / (DETECTION_WARNING_RANGE - SENSE_RADIUS)
+  return 1 - THREE.MathUtils.clamp(closing, 0, 1)
+}
+
 export class TrainZombie {
   constructor({ group, mixer, footOffset = 0, carriages = [], colliders = [] } = {}) {
     this.group = group || null
@@ -343,6 +360,7 @@ export class TrainZombie {
     this.direction = -1
     this.pause = 0
     this.memory = 0
+    this.detection = 0
     this.facing = Math.PI
     this.prowling = false
     this.prowl = -1
@@ -407,6 +425,7 @@ export class TrainZombie {
     this.state = 'banished'
     this.prowling = false
     this.memory = 0
+    this.detection = 0
     this.group.visible = false
     return true
   }
@@ -420,6 +439,7 @@ export class TrainZombie {
     this.prowling = false
     this.pause = 0
     this.memory = 0
+    this.detection = 0
     this.hidden = false
     const depth = THREE.MathUtils.clamp(z, this.minZ, this.maxZ)
     const lane = this.laneAt(depth)
@@ -434,6 +454,7 @@ export class TrainZombie {
     if (!this.group || this.banished || this.state === 'apparition') return false
     this.state = 'hunt'
     this.memory = MEMORY_TIME
+    this.detection = 1
     this.pause = 0
     this.prowling = false
     this.target.set(x, z)
@@ -455,6 +476,7 @@ export class TrainZombie {
 
     if (this.state === 'apparition') {
       this.hidden = false
+      this.detection = 0
       this.group.visible = true
       this.orientToward(player)
       this.group.rotation.y = rotateToward(
@@ -470,7 +492,10 @@ export class TrainZombie {
     this.group.visible = Math.abs(player.position.z - this.group.position.z) < VISIBLE_RANGE
 
     if (this.state === 'dormant') {
-      if (player.position.z <= this.triggerZ) return null
+      if (player.position.z <= this.triggerZ) {
+        this.detection = 0
+        return null
+      }
       this.state = 'patrol'
       this.pause = 0.5
     }
@@ -484,10 +509,11 @@ export class TrainZombie {
     const dx = player.position.x - this.group.position.x
     const dz = player.position.z - this.group.position.z
     const distance = Math.hypot(dx, dz)
-    const playerSpeed = Math.hypot(player.velocity.x, player.velocity.z)
-    const noticed = !this.hidden &&
-      distance <= SENSE_RADIUS &&
-      (playerSpeed >= SENSE_MOVE_SPEED || player.flashlightOn)
+    // Anything it could grab, it can already see: only the hiding rule keeps a
+    // player out of its senses. Crouching in its own lane is standing in the
+    // open — the old speed/torch gate let it walk into a player it never once
+    // reacted to, and kill them without ever having sensed them.
+    const noticed = !this.hidden && distance <= SENSE_RADIUS
 
     if (noticed) {
       this.state = 'hunt'
@@ -502,6 +528,12 @@ export class TrainZombie {
         this.target.set(AISLE_X, this.group.position.z)
       }
     }
+
+    this.detection = detectionAwareness({
+      state: this.state,
+      hidden: this.hidden,
+      distance,
+    })
 
     const moved = this.state === 'hunt' ? this.hunt(dt) : this.patrol(dt)
 

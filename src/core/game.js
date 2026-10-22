@@ -257,6 +257,16 @@ export class Game {
 
     this.holdProgressFill = document.getElementById('holdProgressFill')
 
+    this.detectionMeterEl = document.getElementById('detectionMeter')
+
+    this.detectionFillEl = document.getElementById('detectionFill')
+
+    this.detectionStateEl = document.getElementById('detectionState')
+
+    this.detectionMeterValue = null
+
+    this.detectionMeterState = null
+
     this.carriageLightControllers = null
 
 
@@ -990,7 +1000,6 @@ if (this.loaded) {
       // A standing apparition returns null and can never catch the player.
       const outcome = this.trainZombie.update(dt, {
         position: this.player.position,
-        velocity: this.player.velocity,
         crouching: this.player.crouching,
         flashlightOn: (this.flashlight ? this.flashlight.intensity : 0) > 0,
       })
@@ -1976,6 +1985,9 @@ if (this.loaded) {
     this.levelCaptionRemaining = 0
     this.levelCaptionEl?.classList.add('hidden')
     this.holdProgressEl?.classList.add('hidden')
+    this.detectionMeterEl?.classList.add('hidden')
+    this.detectionMeterValue = null
+    this.detectionMeterState = null
 
     this.carriageLightControllers = null
 
@@ -2258,6 +2270,45 @@ if (this.loaded) {
         'hidden',
         this.currentLevel !== 'house' && this.currentLevel !== 'train'
       )
+    }
+
+    this.updateDetectionMeter()
+  }
+
+  // The train's detection meter: the bar is how close the stalker is to
+  // sensing the player, the label is the verdict — SPOTTED means it can detect
+  // them right now, HIDDEN means the crouch + torch + off-lane rule holds.
+  updateDetectionMeter() {
+    const meter = this.detectionMeterEl
+    if (!meter) return
+
+    const zombie = this.currentLevel === 'train' ? this.trainZombie : null
+    const active = Boolean(zombie) && !this.trainCaught &&
+      (zombie.state === 'dormant' || zombie.state === 'patrol' || zombie.state === 'hunt')
+
+    if (!active) {
+      meter.classList.add('hidden')
+      this.detectionMeterValue = null
+      this.detectionMeterState = null
+      return
+    }
+
+    meter.classList.remove('hidden')
+
+    const value = THREE.MathUtils.clamp(zombie.detection || 0, 0, 1)
+    const state = value >= 1 ? 'SPOTTED' : zombie.hidden ? 'HIDDEN' : 'UNSEEN'
+
+    if (value !== this.detectionMeterValue) {
+      if (this.detectionFillEl) this.detectionFillEl.style.width = `${(value * 100).toFixed(1)}%`
+      this.detectionMeterValue = value
+    }
+
+    if (state !== this.detectionMeterState) {
+      meter.classList.toggle('is-hidden', state === 'HIDDEN')
+      meter.classList.toggle('is-unseen', state === 'UNSEEN')
+      meter.classList.toggle('is-spotted', state === 'SPOTTED')
+      if (this.detectionStateEl) this.detectionStateEl.textContent = state
+      this.detectionMeterState = state
     }
   }
 

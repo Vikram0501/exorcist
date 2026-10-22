@@ -69,11 +69,13 @@ per frame and shows the retry screen when it reports a catch.
   re-trimmed with a handful of probes at the zombie's exact depth, so edges
   that fall between two samples cannot be stepped into. The zombie has no
   collision of its own; the lane is the fence.
-- **Hunt** whenever the player is exposed and within `5.5` units. Exposure
-  means not meeting the hiding rule below: standing, moving faster than a
-  crouch, or shining the torch anywhere in the carriage. Moving and lit are
-  tracked separately, so a brief torch beam holds its interest for `4.5`
-  seconds after the beam leaves. It closes both axes at once at a constant
+- **Hunt** whenever the player is not hidden and within `5.5` units. There is
+  no movement or torch gate on the rule: anything it could catch, it can already
+  see, so standing still in its lane is enough to be spotted — the old speed
+  and light conditions let it walk straight into a crouched player and kill
+  them without ever once reacting. Once it has seen the player it keeps hunting
+  from memory for `4.5` seconds, so breaking away or ducking out of sight does
+  not immediately shake it. It closes both axes at once at a constant
   `2.6` speed, aiming at the player clamped into the corridor lane, and stops
   `0.4` units out. When the seat backs keep it from reaching that point it
   keeps moving: it paces the aisle `1.5` units past the target and back,
@@ -82,8 +84,23 @@ per frame and shows the retry screen when it reports a catch.
 - **Hidden** when crouched, torch off, and anywhere the zombie does not walk:
   outside the corridor lane at the player's depth (`lane ± 0.2`), which covers
   the seat backs and every other spot off the patrol line. Hidden players are
-  undetectable regardless of distance; a stationary player in the aisle is only
-  found by touch.
+  undetectable regardless of distance; the only way the stalker finds them is
+  by walking into them (see Caught).
+- **Detection meter.** `detectionAwareness` (`zombie.js`) grades the sensing
+  rule into a `0..1` reading kept on `zombie.detection` every frame: `0` while
+  the stalker is dormant, banished, or standing as the apparition, and whenever
+  the hiding rule holds; `1` on the exact frame `noticed` fires and for the
+  whole `MEMORY_TIME` it then hunts from memory; a partial band in between is
+  the approach — `0` at twice the sense radius, climbing steadily with the
+  closing distance to `1` on the sense-radius boundary, so the bar is a
+  distance reading that reaches full exactly where the hunt rule fires instead
+  of jumping there. `#hud` carries `#detectionMeter` with
+  `#detectionFill` and `#detectionState`: the bar is the reading, the label is
+  the verdict (`SPOTTED`, `HIDDEN`, `UNSEEN`), the widget is train-only, pulses
+  red while spotted, and drops out for the apparition, the retry screen, and
+  every other level. `Game.updateDetectionMeter` only writes the DOM when the
+  reading or verdict changes, and `tests/train/detection.test.js` covers both
+  the formula and the widget.
 - **Caught** when a hidden player is within `0.45` units or an exposed player
   within `0.75` of its grip, which reaches `0.6` units past the corridor lane
   into the seats. Contact ends the run and `game.js` reuses the shared retry

@@ -131,20 +131,48 @@ test('it hunts a moving player nearby and catches them', () => {
   assert.equal(step(zombie, runner, 300), 'caught')
 })
 
-test('a stationary player is found by touch, not by sight', () => {
+test('a stationary player standing in the aisle is seen, not walked into blind', () => {
   const { zombie, group } = harness()
   const still = playerAt(AISLE_X, 2)
 
   step(zombie, playerAt(AISLE_X, 6), 1)
+  assert.equal(zombie.state, 'patrol', 'eight units away there is nothing to react to')
+
+  assert.equal(zombie.update(0.05, still), null, 'four units is inside its senses')
+  assert.equal(zombie.state, 'hunt', 'standing in its lane gives the player away without a step')
+  assert.equal(zombie.detection, 1, 'the meter reads spotted, never unseen')
+
+  const gap = Math.abs(group.position.z - still.position.z)
+  step(zombie, still, 20)
+  assert.ok(Math.abs(group.position.z - still.position.z) < gap, 'it closes on what it can see')
+})
+
+test('a crouched player on the lane with the torch off is seen as well', () => {
+  const { zombie, group } = harness()
+  step(zombie, playerAt(AISLE_X, 6), 1)
   assert.equal(zombie.state, 'patrol')
 
-  step(zombie, still, 60)
-  assert.equal(zombie.state, 'patrol')
-  assert.ok(Math.abs(group.position.z - still.position.z) > 1.5, 'it walks past without noticing')
+  const crouched = playerAt(AISLE_X, group.position.z + 4, { crouching: true })
+  assert.equal(zombie.update(0.05, crouched), null)
+  assert.equal(zombie.hidden, false, 'its own lane is the one spot a crouch cannot hide you')
+  assert.equal(zombie.state, 'hunt', 'it reacts to the player instead of bumping into them')
+  assert.equal(zombie.detection, 1, 'no more killing a player it never noticed')
+  assert.equal(step(zombie, crouched, 300), 'caught', 'it only catches up after coming for them')
+})
 
-  group.position.z = still.position.z
-  group.position.x = AISLE_X
-  assert.equal(zombie.update(0.05, still), 'caught')
+test('a hidden player is the one still found by touch alone', () => {
+  const { zombie, group } = seatedHarness()
+  step(zombie, playerAt(AISLE_X, 6), 1)
+  assert.equal(zombie.state, 'patrol')
+
+  const hidden = playerAt(2.1, 2, { crouching: true })
+  assert.equal(zombie.update(0.05, hidden), null, 'crouched off the lane, torch off')
+  assert.equal(zombie.hidden, true)
+  assert.equal(zombie.state, 'patrol', 'it cannot see through the seat backs')
+  assert.equal(zombie.detection, 0, 'the meter stays at zero for a hidden player')
+
+  group.position.set(2.5, group.position.y, hidden.position.z)
+  assert.equal(zombie.update(0.05, hidden), 'caught', 'walking into them is how they are found')
 })
 
 test('a player in the upstairs cabin is out of reach even overhead', () => {
@@ -210,9 +238,9 @@ test('it follows the corridor around the furniture at the carriage end', async (
     return !world.capsuleIntersect(capsule)
   }
 
-  const watcher = playerAt(AISLE_X, 9)
+  const watcher = playerAt(AISLE_X, 14)
   assert.equal(step(zombie, watcher, 1), null)
-  assert.equal(zombie.state, 'patrol')
+  assert.equal(zombie.state, 'patrol', 'woken from outside its senses it only prowls')
 
   let blocked = 0
   let insideFurniture = 0
@@ -240,8 +268,8 @@ test('it keeps moving toward a player it cannot reach', async () => {
   const zombie = new TrainZombie({ group, carriages: [{ bounds }], colliders })
 
   const seated = playerAt(0.8, -15, { flashlightOn: true })
-  step(zombie, playerAt(AISLE_X, 9), 1)
-  assert.equal(zombie.state, 'patrol')
+  step(zombie, playerAt(AISLE_X, 14), 1)
+  assert.equal(zombie.state, 'patrol', 'woken from outside its senses it only prowls')
   group.position.set(AISLE_X, group.position.y, -11)
 
   let outcome = null

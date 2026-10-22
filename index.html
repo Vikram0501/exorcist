@@ -425,6 +425,23 @@
       #holdProgress { position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%); z-index: 16; width: 220px; height: 6px; border: 1px solid #7a4038; background: rgba(8, 6, 4, .8); pointer-events: none; }
       #holdProgress.hidden { display: none; }
       #holdProgressFill { width: 0; height: 100%; background: linear-gradient(90deg, #7a1f18, #c42a20); }
+      #detectionMeter { margin-top: 15px; padding-top: 12px; border-top: 1px solid rgba(154, 79, 74, .28); }
+      #detectionMeter.hidden { display: none; }
+      .detection-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
+      .detection-label { color: #bd7770; font: 700 10px system-ui, sans-serif; letter-spacing: .22em; }
+      #detectionState { color: #8d8577; font: 700 10px system-ui, sans-serif; letter-spacing: .18em; transition: color 140ms ease; }
+      .detection-track { height: 6px; border: 1px solid rgba(146, 111, 104, .35); background: rgba(8, 6, 4, .72); }
+      #detectionFill { width: 0; height: 100%; background: linear-gradient(90deg, #6f7a4e, #a9b163); transition: width 130ms linear, background 140ms ease; }
+      #detectionMeter.is-hidden #detectionState { color: #6faf86; }
+      #detectionMeter.is-hidden #detectionFill { background: linear-gradient(90deg, #2f6b4a, #4f9a70); }
+      #detectionMeter.is-unseen #detectionState { color: #c9973f; }
+      #detectionMeter.is-unseen #detectionFill { background: linear-gradient(90deg, #8a5f1f, #d19a3a); }
+      #detectionMeter.is-spotted #detectionState { color: #ff6a5a; }
+      #detectionMeter.is-spotted #detectionFill { background: linear-gradient(90deg, #7a1f18, #d8392b); }
+      #detectionMeter.is-spotted .detection-track { border-color: rgba(200, 72, 62, .8); }
+      #detectionMeter.is-spotted { animation: detection-pulse .7s ease-in-out infinite alternate; }
+      @keyframes detection-pulse { from { opacity: .72; } to { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) { #detectionMeter.is-spotted { animation: none; } }
       .rite-panel { width: min(590px, 100%); padding: clamp(24px, 5vw, 46px); border: 1px solid #796e58; background: radial-gradient(ellipse at top, #252c2b, #101517); color: #e6dcc9; box-shadow: 0 25px 100px #000; }
       .rite-panel .evidence-label { margin-bottom: 18px; color: #b8ab8e; }
       .rite-panel h2 { font: 30px/1.2 Georgia, serif; margin-bottom: 16px; }
@@ -465,6 +482,10 @@
     <div id="hud">
       <div class="hud-title">CURRENT OBJECTIVE</div>
       <div id="hudObjective">FIND THE NEWSPAPER ON THE PORCH</div>
+      <div id="detectionMeter" class="hidden" aria-hidden="true">
+        <div class="detection-head"><span class="detection-label">DETECTION</span><span id="detectionState">HIDDEN</span></div>
+        <div class="detection-track"><div id="detectionFill"></div></div>
+      </div>
     </div>
     <div id="hudControls">
       <span><kbd>WASD</kbd> MOVE</span><span><kbd>E</kbd> INTERACT</span>
